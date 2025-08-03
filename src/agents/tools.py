@@ -2,9 +2,10 @@ import math
 import re
 
 import numexpr
-from langchain_chroma import Chroma
 from langchain_core.tools import BaseTool, tool
-from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
+from langchain_openai.embeddings import AzureOpenAIEmbeddings
+from core import settings
 
 
 def calculator_func(expression: str) -> str:
@@ -47,25 +48,48 @@ def format_contexts(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-def load_chroma_db():
-    # Create the embedding function for our project description database
+def load_pgvector_db(collection_name: str = "acme", k: int = 5):
+    # Create the connection string
+    connection_string = f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD.get_secret_value()}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+
+    # Create the embedding function using Azure OpenAI
     try:
-        embeddings = OpenAIEmbeddings()
+        embeddings = AzureOpenAIEmbeddings(
+            api_key=settings.AZURE_OPENAI_API_KEY.get_secret_value(),
+            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
+            azure_deployment="text-embedding-3-large",
+            api_version="2025-02-01-preview",
+        )
     except Exception as e:
         raise RuntimeError(
-            "Failed to initialize OpenAIEmbeddings. Ensure the OpenAI API key is set."
+            "Failed to initialize Embeddings. Ensure Azure OpenAI credentials are set correctly."
         ) from e
 
-    # Load the stored vector database
-    chroma_db = Chroma(persist_directory="./chroma_db", embedding_function=embeddings)
-    retriever = chroma_db.as_retriever(search_kwargs={"k": 5})
+    # Load the PGVector database
+    pg_vector = PGVector(
+        embeddings=embeddings,
+        collection_name=collection_name,  # Use the same collection name as in create_pgvector_db
+        connection=connection_string,
+        use_jsonb=True,
+    )
+
+    retriever = pg_vector.as_retriever(search_kwargs={"k": k})
     return retriever
 
+@tool
+def database_search(query: str, collection_name: str = "richard-projects") -> str:
+    """
+    Searches the specified database collection for relevant documents.
 
-def database_search_func(query: str) -> str:
-    """Searches chroma_db for information in the company's handbook."""
-    # Get the chroma retriever
-    retriever = load_chroma_db()
+    Args:
+        query (str): The search query.
+        collection_name (str): ['richard-projects']
+        
+    Returns:
+        str: The formatted search results.
+    """
+    # Get the PGVector retriever
+    retriever = load_pgvector_db(collection_name=collection_name, k=5)
 
     # Search the database for relevant documents
     documents = retriever.invoke(query)
@@ -74,7 +98,3 @@ def database_search_func(query: str) -> str:
     context_str = format_contexts(documents)
 
     return context_str
-
-
-database_search: BaseTool = tool(database_search_func)
-database_search.name = "Database_Search"  # Update name with the purpose of your database

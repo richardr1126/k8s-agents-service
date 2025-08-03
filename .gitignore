@@ -3,6 +3,9 @@
 checkpoints.db
 checkpoints.db-*
 
+# RAG data
+data/richard-projects
+
 # Langgraph
 .langgraph_api/
 

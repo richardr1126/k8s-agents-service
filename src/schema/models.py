@@ -20,15 +20,15 @@ class Provider(StrEnum):
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
 
-    GPT_4O_MINI = "gpt-4o-mini"
-    GPT_4O = "gpt-4o"
+    GPT_4O_MINI = "openai-gpt-4o-mini"
+    GPT_4O = "openai-gpt-4o"
 
 
 class AzureOpenAIModelName(StrEnum):
     """Azure OpenAI model names"""
 
-    AZURE_GPT_4O = "azure-gpt-4o"
-    AZURE_GPT_4O_MINI = "azure-gpt-4o-mini"
+    AZURE_GPT_4O = "gpt-4o"
+    AZURE_GPT_4O_MINI = "gpt-4o-mini"
 
 
 class DeepseekModelName(StrEnum):
@@ -91,7 +91,13 @@ class OpenRouterModelName(StrEnum):
     """https://openrouter.ai/models"""
 
     GEMINI_25_FLASH = "google/gemini-2.5-flash"
-
+    QWEN_3_CODER_FREE = "qwen/qwen3-coder:free"
+    QWEN_3_CODER = "qwen/qwen3-coder"
+    KIMI_K2 = "moonshotai/kimi-k2"
+    KIMI_K2_FREE = "moonshotai/kimi-k2:parasail/fp8"
+    HORIZON_BETA = "openrouter/horizon-beta"
+    CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4"
+    GPT_41 = "openai/gpt-4.1"
 
 class OpenAICompatibleName(StrEnum):
     """https://platform.openai.com/docs/guides/text-generation"""
