@@ -70,6 +70,7 @@ def load_pgvector_db(collection_name: str = "acme", k: int = 5):
         embeddings=embeddings,
         collection_name=collection_name,  # Use the same collection name as in create_pgvector_db
         connection=connection_string,
+        create_extension=False,
         use_jsonb=True,
     )
 
