@@ -32,6 +32,7 @@ dependencies = [
     "langchain-groq ~=0.2.1",
     "langchain-ollama ~=0.2.3",
     "langchain-openai ~=0.3.0",
+    "langchain-postgres ~=0.0.15",
     "langfuse ~=2.60.5",
     "langgraph ~=0.5.0",
     "langgraph-checkpoint-mongodb ~=0.1.3",
