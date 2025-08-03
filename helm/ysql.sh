@@ -1,0 +1,1 @@
+kubectl exec --namespace yugabyte -it yb-tserver-0 -- /home/yugabyte/bin/ysqlsh -h yb-tserver-0.yb-tservers.yugabyte -U ysqladmin -d yugabyte
