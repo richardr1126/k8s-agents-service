@@ -1,4 +1,4 @@
-name: Build and Publish Docker Image
+name: Build and Publish Docker Images
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: richardr1126/k8s-agents-service
+  BASE_IMAGE_NAME: richardr1126/k8s-agents
 
 jobs:
   build:
@@ -17,6 +17,15 @@ jobs:
     permissions:
       contents: read
       packages: write
+    strategy:
+      matrix:
+        include:
+          - name: service
+            dockerfile: docker/Dockerfile.service
+            image_suffix: -service
+          - name: streamlit
+            dockerfile: docker/Dockerfile.app
+            image_suffix: -streamlit
 
     steps:
       - name: Checkout repository
@@ -39,23 +48,23 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.BASE_IMAGE_NAME }}${{ matrix.image_suffix }}
           tags: |
             type=raw,value=latest,enable=${{ !contains(github.ref, '-pre') }}
             type=semver,pattern={{version}}
           labels: |
             org.opencontainers.image.source=https://github.com/richardr1126/k8s-agents-service
-            org.opencontainers.image.description=Kubernetes Agents Service
+            org.opencontainers.image.description=Kubernetes Agents ${{ matrix.name }}
             org.opencontainers.image.licenses=MIT
 
-      - name: Build and push Docker image
+      - name: Build and push ${{ matrix.name }} Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: docker/Dockerfile.service
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

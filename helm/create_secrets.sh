@@ -25,7 +25,7 @@ source "$ENV_FILE"
 set +a  # stop automatically exporting
 
 # Validate that required variables are set
-required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY")
+required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY" "AUTH_SECRET")
 for var in "${required_vars[@]}"; do
   if [ -z "${!var}" ]; then
     echo "Error: $var is not set in .env file"
@@ -36,11 +36,14 @@ done
 # Delete existing secrets and create new ones
 echo "Deleting existing app-secrets..."
 kubectl delete secret app-secrets --ignore-not-found
+echo "Deleting existing streamlit-secrets..."
+kubectl delete secret streamlit-secrets --ignore-not-found
 
 # Create application secrets
 echo "Creating app-secrets..."
 kubectl create secret generic app-secrets \
   --from-literal=USE_FAKE_MODEL=false \
+  --from-literal=AUTH_SECRET="${AUTH_SECRET}" \
   --from-literal=HOST=0.0.0.0 \
   --from-literal=PORT=8080 \
   --from-literal=DATABASE_TYPE=postgres \
@@ -51,7 +54,6 @@ kubectl create secret generic app-secrets \
   --from-literal=POSTGRES_DB=agentsservice \
   --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
   --from-literal=DEFAULT_MODEL="google/gemini-2.5-flash" \
-  --from-literal=AUTH_SECRET="" \
   --from-literal=LANGSMITH_TRACING=true \
   --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY}" \
   --from-literal=LANGSMITH_PROJECT=default \
@@ -59,5 +61,10 @@ kubectl create secret generic app-secrets \
   --from-literal=AZURE_OPENAI_ENDPOINT="https://openai-research-pod.openai.azure.com/" \
   --from-literal=AZURE_OPENAI_API_VERSION="2025-02-01-preview" \
   --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4o-mini": "gpt-4o-mini"}'
+
+echo "Creating streamlit-secrets..."
+kubectl create secret generic streamlit-secrets \
+  --from-literal=AGENT_URL="https://agents.richardr.dev" \
+  --from-literal=AUTH_SECRET="${AUTH_SECRET}"
 
 echo "Secrets created successfully!"

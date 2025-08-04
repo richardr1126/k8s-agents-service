@@ -37,13 +37,14 @@ done
 echo $GITHUB_PAT | docker login ghcr.io -u richardr1126 --password-stdin
 
 REGISTRY="ghcr.io"
-IMAGE_NAME="richardr1126/k8s-agents-service"
-AGENTS_SERVICE_IMAGE="${REGISTRY}/${IMAGE_NAME}"
+BASE_IMAGE_NAME="richardr1126/k8s-agents"
 
 # Generate timestamp tag
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 IMAGE_TAG="${TIMESTAMP}"
 
+# Build and push agents-service image
+AGENTS_SERVICE_IMAGE="${REGISTRY}/${BASE_IMAGE_NAME}-service"
 echo "Building and pushing agents-service image with tag: ${IMAGE_TAG}..."
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
@@ -53,6 +54,20 @@ docker buildx build \
   --file "../docker/Dockerfile.service" \
   --label "org.opencontainers.image.source=https://github.com/richardr1126/k8s-agents-service" \
   --label "org.opencontainers.image.description=Kubernetes Agents Service" \
+  --label "org.opencontainers.image.licenses=MIT" \
+  ../.
+
+# Build and push agents-streamlit image
+AGENTS_STREAMLIT_IMAGE="${REGISTRY}/${BASE_IMAGE_NAME}-streamlit"
+echo "Building and pushing agents-streamlit image with tag: ${IMAGE_TAG}..."
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t $AGENTS_STREAMLIT_IMAGE:$IMAGE_TAG \
+  -t $AGENTS_STREAMLIT_IMAGE:latest \
+  --push \
+  --file "../docker/Dockerfile.app" \
+  --label "org.opencontainers.image.source=https://github.com/richardr1126/k8s-agents-service" \
+  --label "org.opencontainers.image.description=Kubernetes Agents Streamlit" \
   --label "org.opencontainers.image.licenses=MIT" \
   ../. 
 
@@ -69,7 +84,9 @@ kubectl exec --namespace yugabyte -it yb-tserver-0 -- /bin/bash -c "export PGPAS
 
 # Upgrade or install the Helm chart
 helm upgrade --install agents-service ./agents-service \
-  --set image.repository="${REGISTRY}/${IMAGE_NAME}" \
-  --set image.tag="${IMAGE_TAG}"
+  --set image.repository="${REGISTRY}/${BASE_IMAGE_NAME}-service" \
+  --set image.tag="${IMAGE_TAG}" \
+  --set agents-streamlit.image.repository="${REGISTRY}/${BASE_IMAGE_NAME}-streamlit" \
+  --set agents-streamlit.image.tag="${IMAGE_TAG}"
 
 echo "Platform deployment completed successfully with image tag: ${IMAGE_TAG}!"
