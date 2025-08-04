@@ -1,0 +1,6 @@
+dependencies:
+- name: agents-streamlit
+  repository: file://../agents-streamlit
+  version: 0.0.1
+digest: sha256:ae41474f870fb8e40af9fe41b4080245eeeb16c699718909398bdc26084a1fda
+generated: "2025-08-04T09:23:05.708657-06:00"

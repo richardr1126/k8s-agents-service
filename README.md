@@ -2,9 +2,11 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts and GitOps integration.
+A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration.
 
-This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with enterprise-grade Kubernetes deployment capabilities, including Helm charts, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
+This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including dual Helm charts for service/UI separation, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
+
+> **⚠️ Important Notice**: This project is currently in development and is **not fully featured for production** use. While it provides a solid foundation for Kubernetes deployment of AI agents, additional hardening, monitoring, and operational considerations may be needed for production environments.
 
 ## 🙏 Acknowledgments
 
@@ -12,14 +14,14 @@ This project is built upon the excellent foundation provided by [JoshuaC215's AI
 
 ## ✨ What's New in k8s-agents-service
 
-This fork adds production-ready Kubernetes deployment capabilities on top of the original toolkit:
+This fork adds Kubernetes deployment capabilities on top of the original toolkit:
 
-- **🎯 Kubernetes-Native**: Complete Helm chart for production Kubernetes deployments
+- **🎯 Kubernetes-Native**: Dual Helm charts with subchart architecture for service and UI components
 - **🔄 GitOps Ready**: ArgoCD application manifests for automated deployments  
-- **🗄️ YugabyteDB Integration**: Production-scale distributed SQL database with pgvector extensions for RAG capabilities
-- **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures
-- **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry
-- **🔧 Production Scripts**: Comprehensive deployment and management scripts
+- **🗄️ YugabyteDB Integration**: Distributed SQL database with pgvector extensions for RAG capabilities
+- **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures across service and streamlit containers
+- **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry with separate image streams
+- **🔧 Deployment Scripts**: Comprehensive deployment automation with database setup, secrets management, and dependency updates
 
 ## Overview
 
@@ -32,19 +34,19 @@ This fork adds production-ready Kubernetes deployment capabilities on top of the
 1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
-1. **RAG Agent**: Production-ready RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
+1. **RAG Agent**: RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
 1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
 1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
 1. **Testing**: Includes robust unit and integration tests for the full repo.
 
 ### New Kubernetes Features
 
-1. **Production Helm Chart**: Complete Kubernetes deployment with configurable resources, ingress, and persistence
+1. **Dual Helm Charts**: Separate charts for service (`agents-service`) and UI (`agents-streamlit`) with subchart architecture
 1. **ArgoCD Integration**: GitOps-ready application manifests for automated deployments
 1. **YugabyteDB Support**: Enterprise-grade distributed SQL database with pgvector extension support for RAG capabilities
-1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images published to GitHub Container Registry
-1. **Automated Deployment Scripts**: Production deployment automation with database setup
-1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials
+1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images for both service and streamlit components published to GitHub Container Registry
+1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
+1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
 
 ### Architecture Diagram
 
@@ -78,7 +80,7 @@ source .venv/bin/activate
 streamlit run src/streamlit_app.py
 ```
 
-### Production Kubernetes Deployment
+### Kubernetes Deployment
 
 ```sh
 # Clone the repository
@@ -110,11 +112,13 @@ The repository is structured as follows:
 - `tests/`: Unit and integration tests
 
 **Kubernetes Deployment:**
-- `helm/agents-service/`: Complete Helm chart for Kubernetes deployment
+- `helm/agents-service/`: Complete Helm chart for the backend service
+- `helm/agents-streamlit/`: Dedicated Helm chart for the Streamlit UI (deployed as subchart)
 - `helm/argocd.yaml`: ArgoCD application manifest for GitOps
-- `helm/manual_deploy.sh`: Production deployment script with YugabyteDB setup
-- `helm/create_secret.sh`: Kubernetes secrets management script
-- `docker/`: Multi-architecture Dockerfiles for production builds
+- `helm/manual_deploy.sh`: Deployment script with YugabyteDB setup
+- `helm/create_secrets.sh`: Kubernetes secrets management script for both service and streamlit components
+- `helm/update_dependencies.sh`: Helm chart dependency management script for subchart updates
+- `docker/`: Multi-architecture Dockerfiles for both service and streamlit builds
 
 ## Setup and Usage
 
@@ -153,7 +157,7 @@ This fork uses **YugabyteDB with pgvector** instead of the original PostgreSQL/C
 - **Distributed SQL**: Horizontal scaling and high availability out of the box
 - **PostgreSQL Compatibility**: Full SQL compliance with familiar PostgreSQL interfaces  
 - **Built-in pgvector**: Native vector similarity search for RAG applications
-- **Production Ready**: Enterprise-grade reliability and performance
+- **Enterprise-Grade**: Reliability and performance features
 
 **RAG Implementation:**
 - **PGVector Integration**: Uses `langchain-postgres` with PGVector for vector storage and retrieval
@@ -162,7 +166,7 @@ This fork uses **YugabyteDB with pgvector** instead of the original PostgreSQL/C
 - **Automatic Setup**: Database schema and vector extensions are automatically configured
 
 The system supports three database options:
-- **YugabyteDB**: Production-ready distributed SQL with pgvector extensions (recommended)
+- **YugabyteDB**: Distributed SQL with pgvector extensions (recommended)
 - **PostgreSQL**: Traditional PostgreSQL with pgvector extension  
 - **SQLite**: Local development and testing
 
@@ -171,7 +175,7 @@ The system supports three database options:
 If your agents or chosen LLM require file-based credential files or certificates, the `privatecredentials/` has been provided for your development convenience. All contents, excluding the `.gitkeep` files, are ignored by git and docker's build process. See [Working with File-based Credentials](docs/File_Based_Credentials.md) for suggested use.
 
 
-### Kubernetes Production Deployment
+### Kubernetes Deployment
 
 This repository includes comprehensive Kubernetes deployment capabilities using Helm charts and GitOps with ArgoCD.
 
@@ -181,6 +185,23 @@ This repository includes comprehensive Kubernetes deployment capabilities using 
 - Helm 3.x
 - YugabyteDB or PostgreSQL database
 - Docker registry access (GitHub Container Registry)
+
+#### Environment Configuration
+
+The deployment uses an enhanced environment configuration with separate secrets for different components:
+
+```bash
+# Core authentication and database
+AUTH_SECRET=your-secret-for-streamlit-auth
+ADMIN_POSTGRES_PASSWORD=admin-database-password  
+APP_POSTGRES_PASSWORD=application-database-password
+
+# API Keys
+OPENROUTER_API_KEY=your-openrouter-key
+LANGSMITH_API_KEY=your-langsmith-key  
+AZURE_OPENAI_API_KEY=your-azure-openai-key
+GITHUB_PAT=your-github-token-for-container-registry
+```
 
 #### Quick Deploy with Helm
 
@@ -197,10 +218,10 @@ cp .env.example .env
 ```
 
 This script will:
-- Build and push multi-architecture Docker images to GitHub Container Registry
+- Build and push multi-architecture Docker images for both service and streamlit to GitHub Container Registry
 - Set up YugabyteDB user and database with vector extensions
-- Create Kubernetes secrets with your API keys
-- Deploy the application using Helm
+- Create Kubernetes secrets with your API keys and configuration
+- Deploy both agents-service and agents-streamlit applications using Helm with subchart architecture
 
 #### GitOps with ArgoCD
 
@@ -208,7 +229,7 @@ For GitOps deployments, use the included ArgoCD application manifest:
 
 ```sh
 # Create secrets manually
-./create_secret.sh
+./create_secrets.sh
 
 kubectl apply -f helm/argocd.yaml
 ```
@@ -217,17 +238,35 @@ kubectl apply -f helm/argocd.yaml
 
 ```sh
 # Create secrets manually
-./create_secret.sh
+./create_secrets.sh
+
+# Update chart dependencies (includes agents-streamlit subchart)
+./update_dependencies.sh
 
 # Install with Helm
 helm install agents-service ./agents-service \
   --set image.repository=ghcr.io/richardr1126/k8s-agents-service \
-  --set image.tag=latest
+  --set image.tag=latest \
+  --set agents-streamlit.image.repository=ghcr.io/richardr1126/k8s-agents-streamlit \
+  --set agents-streamlit.image.tag=latest
 ```
+
+#### Dual-Chart Architecture
+
+The Kubernetes deployment uses a dual-chart architecture:
+
+- **`agents-service`**: Main Helm chart that deploys the FastAPI backend service
+- **`agents-streamlit`**: Subchart that deploys the Streamlit UI application as a separate pod
+
+This architecture provides:
+- **Independent Scaling**: Scale UI and backend independently based on demand
+- **Separation of Concerns**: UI and backend can be managed, updated, and troubleshot independently  
+- **Deployment Flexibility**: Deploy only the backend for API-only deployments using `--set agents-streamlit.enabled=false`
+- **Enhanced Security**: Different ingress rules and network policies can be applied to each component
 
 #### Database Support
 
-- **YugabyteDB**: Production-ready distributed SQL with vector extensions (recommended)
+- **YugabyteDB**: Distributed SQL with vector extensions (recommended)
 - **PostgreSQL**: Traditional PostgreSQL with pgvector extension
 - **SQLite**: For development only
 
@@ -322,7 +361,7 @@ You can also run the agent service and the Streamlit app locally without Docker,
 
 The following are projects that drew code or inspiration from [JoshuaC215's original agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit):
 
-- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Production Kubernetes deployment with Helm charts and YugabyteDB integration
+- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Kubernetes deployment with Helm charts and YugabyteDB integration
 - **[PolyRAG](https://github.com/QuentinFuxa/PolyRAG)** - Extends agent-service-toolkit with RAG capabilities over both PostgreSQL databases and PDF documents
 - **[alexrisch/agent-web-kit](https://github.com/alexrisch/agent-web-kit)** - A Next.JS frontend for agent-service-toolkit
 - **[raushan-in/dapa](https://github.com/raushan-in/dapa)** - Digital Arrest Protection App (DAPA) enables users to report financial scams and frauds efficiently via a user-friendly platform
