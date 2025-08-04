@@ -1,35 +1,74 @@
-# 🧰 AI Agent Service Toolkit
+# 🧰 Kubernetes AI Agents Service
 
-[![build status](https://github.com/JoshuaC215/agent-service-toolkit/actions/workflows/test.yml/badge.svg)](https://github.com/JoshuaC215/agent-service-toolkit/actions/workflows/test.yml) [![codecov](https://codecov.io/github/JoshuaC215/agent-service-toolkit/graph/badge.svg?token=5MTJSYWD05)](https://codecov.io/github/JoshuaC215/agent-service-toolkit) [![Python Version](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2FJoshuaC215%2Fagent-service-toolkit%2Frefs%2Fheads%2Fmain%2Fpyproject.toml)](https://github.com/JoshuaC215/agent-service-toolkit/blob/main/pyproject.toml)
-[![GitHub License](https://img.shields.io/github/license/JoshuaC215/agent-service-toolkit)](https://github.com/JoshuaC215/agent-service-toolkit/blob/main/LICENSE) [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_red.svg)](https://agent-service-toolkit.streamlit.app/)
+[![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A full toolkit for running an AI agent service built with LangGraph, FastAPI and Streamlit.
+A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts and GitOps integration.
 
-It includes a [LangGraph](https://langchain-ai.github.io/langgraph/) agent, a [FastAPI](https://fastapi.tiangolo.com/) service to serve it, a client to interact with the service, and a [Streamlit](https://streamlit.io/) app that uses the client to provide a chat interface. Data structures and settings are built with [Pydantic](https://github.com/pydantic/pydantic).
+This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with enterprise-grade Kubernetes deployment capabilities, including Helm charts, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
 
-This project offers a template for you to easily build and run your own agents using the LangGraph framework. It demonstrates a complete setup from agent definition to user interface, making it easier to get started with LangGraph-based projects by providing a full, robust toolkit.
+## 🙏 Acknowledgments
 
-**[🎥 Watch a video walkthrough of the repo and app](https://www.youtube.com/watch?v=pdYVHw_YCNY)**
+This project is built upon the excellent foundation provided by [JoshuaC215's AI Agent Service Toolkit](https://github.com/JoshuaC215/agent-service-toolkit). Special thanks to @JoshuaC215 for creating the original comprehensive toolkit that demonstrates best practices for LangGraph-based agent development.
+
+## ✨ What's New in k8s-agents-service
+
+This fork adds production-ready Kubernetes deployment capabilities on top of the original toolkit:
+
+- **🎯 Kubernetes-Native**: Complete Helm chart for production Kubernetes deployments
+- **🔄 GitOps Ready**: ArgoCD application manifests for automated deployments  
+- **🗄️ YugabyteDB Integration**: Production-scale distributed SQL database with pgvector extensions for RAG capabilities
+- **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures
+- **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry
+- **🔧 Production Scripts**: Comprehensive deployment and management scripts
 
 ## Overview
 
-### [Try the app!](https://agent-service-toolkit.streamlit.app/)
+### Core Features (from original toolkit)
 
-<a href="https://agent-service-toolkit.streamlit.app/"><img src="media/app_screenshot.png" width="600"></a>
+1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.3 features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor`.
+1. **FastAPI Service**: Serves the agent with both streaming and non-streaming endpoints.
+1. **Advanced Streaming**: A novel approach to support both token-based and message-based streaming.
+1. **Streamlit Interface**: Provides a user-friendly chat interface for interacting with the agent.
+1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
+1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
+1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
+1. **RAG Agent**: Production-ready RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
+1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
+1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
+1. **Testing**: Includes robust unit and integration tests for the full repo.
 
-### Quickstart
+### New Kubernetes Features
 
-Run directly in python
+1. **Production Helm Chart**: Complete Kubernetes deployment with configurable resources, ingress, and persistence
+1. **ArgoCD Integration**: GitOps-ready application manifests for automated deployments
+1. **YugabyteDB Support**: Enterprise-grade distributed SQL database with pgvector extension support for RAG capabilities
+1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images published to GitHub Container Registry
+1. **Automated Deployment Scripts**: Production deployment automation with database setup
+1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials
+
+### Architecture Diagram
+
+<img src="media/agent_architecture.png" width="600">
+
+## 🚀 Quickstart
+
+### Local Development (Docker)
 
 ```sh
 # At least one LLM API key is required
 echo 'OPENAI_API_KEY=your_openai_api_key' >> .env
 
-# uv is the recommended way to install agent-service toolkit, but "pip install ." also works
-# uv install options: https://docs.astral.sh/uv/getting-started/installation/
+# Run with docker compose watch for live reloading
+docker compose watch
+```
+
+### Local Development (Python)
+
+```sh
+# uv is the recommended way to install dependencies
 curl -LsSf https://astral.sh/uv/0.7.19/install.sh | sh
 
-# Install dependencies. "uv sync" creates .venv automatically
+# Install dependencies and run
 uv sync --frozen
 source .venv/bin/activate
 python src/run_service.py
@@ -39,50 +78,51 @@ source .venv/bin/activate
 streamlit run src/streamlit_app.py
 ```
 
-Run with docker
+### Production Kubernetes Deployment
 
 ```sh
-echo 'OPENAI_API_KEY=your_openai_api_key' >> .env
-docker compose watch
+# Clone the repository
+git clone https://github.com/richardr1126/k8s-agents-service.git
+cd k8s-agents-service
+
+# Configure environment variables
+cp helm/.env.example helm/.env
+# Edit helm/.env with your API keys and secrets
+
+# Deploy to Kubernetes with YugabyteDB
+cd helm
+./manual_deploy.sh
 ```
 
-### Architecture Diagram
-
-<img src="media/agent_architecture.png" width="600">
-
-### Key Features
-
-1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.3 features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor`.
-1. **FastAPI Service**: Serves the agent with both streaming and non-streaming endpoints.
-1. **Advanced Streaming**: A novel approach to support both token-based and message-based streaming.
-1. **Streamlit Interface**: Provides a user-friendly chat interface for interacting with the agent.
-1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
-1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
-1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
-1. **RAG Agent**: A basic RAG agent implementation using ChromaDB - see [docs](docs/RAG_Assistant.md).
-1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
-1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
-1. **Testing**: Includes robust unit and integration tests for the full repo.
+For ArgoCD deployments, see the `helm/argocd.yaml` manifest.
 
 ### Key Files
 
 The repository is structured as follows:
 
+**Core Application:**
 - `src/agents/`: Defines several agents with different capabilities
-- `src/schema/`: Defines the protocol schema
+- `src/schema/`: Defines the protocol schema  
 - `src/core/`: Core modules including LLM definition and settings
 - `src/service/service.py`: FastAPI service to serve the agents
 - `src/client/client.py`: Client to interact with the agent service
 - `src/streamlit_app.py`: Streamlit app providing a chat interface
 - `tests/`: Unit and integration tests
 
+**Kubernetes Deployment:**
+- `helm/agents-service/`: Complete Helm chart for Kubernetes deployment
+- `helm/argocd.yaml`: ArgoCD application manifest for GitOps
+- `helm/manual_deploy.sh`: Production deployment script with YugabyteDB setup
+- `helm/create_secret.sh`: Kubernetes secrets management script
+- `docker/`: Multi-architecture Dockerfiles for production builds
+
 ## Setup and Usage
 
 1. Clone the repository:
 
    ```sh
-   git clone https://github.com/JoshuaC215/agent-service-toolkit.git
-   cd agent-service-toolkit
+   git clone https://github.com/richardr1126/k8s-agents-service.git
+   cd k8s-agents-service
    ```
 
 2. Set up environment variables:
@@ -94,7 +134,7 @@ The repository is structured as follows:
 
 - [Setting up Ollama](docs/Ollama.md)
 - [Setting up VertexAI](docs/VertexAI.md)
-- [Setting up RAG with ChromaDB](docs/RAG_Assistant.md)
+- [Setting up RAG with PGVector](docs/RAG_Assistant.md)
 
 ### Building or customizing your own agent
 
@@ -105,10 +145,91 @@ To customize the agent for your own use case:
 1. Adjust the Streamlit interface in `src/streamlit_app.py` to match your agent's capabilities.
 
 
+### Database Configuration
+
+This fork uses **YugabyteDB with pgvector** instead of the original PostgreSQL/ChromaDB setup, providing several advantages:
+
+**YugabyteDB Benefits:**
+- **Distributed SQL**: Horizontal scaling and high availability out of the box
+- **PostgreSQL Compatibility**: Full SQL compliance with familiar PostgreSQL interfaces  
+- **Built-in pgvector**: Native vector similarity search for RAG applications
+- **Production Ready**: Enterprise-grade reliability and performance
+
+**RAG Implementation:**
+- **PGVector Integration**: Uses `langchain-postgres` with PGVector for vector storage and retrieval
+- **Multiple Collections**: Supports multiple knowledge bases (e.g., "richard-projects" collection)
+- **Azure OpenAI Embeddings**: Integration with Azure OpenAI's text-embedding-3-large model
+- **Automatic Setup**: Database schema and vector extensions are automatically configured
+
+The system supports three database options:
+- **YugabyteDB**: Production-ready distributed SQL with pgvector extensions (recommended)
+- **PostgreSQL**: Traditional PostgreSQL with pgvector extension  
+- **SQLite**: Local development and testing
+
 ### Handling Private Credential files
 
 If your agents or chosen LLM require file-based credential files or certificates, the `privatecredentials/` has been provided for your development convenience. All contents, excluding the `.gitkeep` files, are ignored by git and docker's build process. See [Working with File-based Credentials](docs/File_Based_Credentials.md) for suggested use.
 
+
+### Kubernetes Production Deployment
+
+This repository includes comprehensive Kubernetes deployment capabilities using Helm charts and GitOps with ArgoCD.
+
+#### Prerequisites
+
+- Kubernetes cluster (1.19+)
+- Helm 3.x
+- YugabyteDB or PostgreSQL database
+- Docker registry access (GitHub Container Registry)
+
+#### Quick Deploy with Helm
+
+```sh
+# Navigate to helm directory
+cd helm
+
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your API keys, database passwords, and GitHub PAT
+
+# Run the deployment script (includes YugabyteDB setup)
+./manual_deploy.sh
+```
+
+This script will:
+- Build and push multi-architecture Docker images to GitHub Container Registry
+- Set up YugabyteDB user and database with vector extensions
+- Create Kubernetes secrets with your API keys
+- Deploy the application using Helm
+
+#### GitOps with ArgoCD
+
+For GitOps deployments, use the included ArgoCD application manifest:
+
+```sh
+# Create secrets manually
+./create_secret.sh
+
+kubectl apply -f helm/argocd.yaml
+```
+
+#### Manual Helm Deployment
+
+```sh
+# Create secrets manually
+./create_secret.sh
+
+# Install with Helm
+helm install agents-service ./agents-service \
+  --set image.repository=ghcr.io/richardr1126/k8s-agents-service \
+  --set image.tag=latest
+```
+
+#### Database Support
+
+- **YugabyteDB**: Production-ready distributed SQL with vector extensions (recommended)
+- **PostgreSQL**: Traditional PostgreSQL with pgvector extension
+- **SQLite**: For development only
 
 ### Docker Setup
 
@@ -197,15 +318,16 @@ You can also run the agent service and the Streamlit app locally without Docker,
 
 4. Open your browser and navigate to the URL provided by Streamlit (usually `http://localhost:8501`).
 
-## Projects built with or inspired by agent-service-toolkit
+## Projects built with or inspired by the original agent-service-toolkit
 
-The following are a few of the public projects that drew code or inspiration from this repo.
+The following are projects that drew code or inspiration from [JoshuaC215's original agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit):
 
-- **[PolyRAG](https://github.com/QuentinFuxa/PolyRAG)** - Extends agent-service-toolkit with RAG capabilities over both PostgreSQL databases and PDF documents.
+- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Production Kubernetes deployment with Helm charts and YugabyteDB integration
+- **[PolyRAG](https://github.com/QuentinFuxa/PolyRAG)** - Extends agent-service-toolkit with RAG capabilities over both PostgreSQL databases and PDF documents
 - **[alexrisch/agent-web-kit](https://github.com/alexrisch/agent-web-kit)** - A Next.JS frontend for agent-service-toolkit
-- **[raushan-in/dapa](https://github.com/raushan-in/dapa)** - Digital Arrest Protection App (DAPA) enables users to report financial scams and frauds efficiently via a user-friendly platform.
+- **[raushan-in/dapa](https://github.com/raushan-in/dapa)** - Digital Arrest Protection App (DAPA) enables users to report financial scams and frauds efficiently via a user-friendly platform
 
-**Please create a pull request editing the README or open a discussion with any new ones to be added!** Would love to include more projects.
+If you've built something using this template, please create a pull request or open a discussion to be added to the list!
 
 ## Contributing
 
