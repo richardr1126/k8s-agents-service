@@ -175,8 +175,8 @@ async def main() -> None:
             case "research-assistant":
                 WELCOME = "Hello! I'm an AI-powered research assistant with web search and a calculator. Ask me anything!"
             case "rag-assistant":
-                WELCOME = """Hello! I'm an AI-powered RAG assistant with access to Richard's project documentation.
-                I can help you search through README files and project documentation to find information about his work, projects, and code. Ask me anything!"""
+                WELCOME = """Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
+                I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!"""
             case _:
                 WELCOME = "Hello! I'm an AI agent. Ask me anything!"
 
