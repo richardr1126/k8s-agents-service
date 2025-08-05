@@ -78,24 +78,35 @@ def load_pgvector_db(collection_name: str = "acme", k: int = 5):
     return retriever
 
 @tool
-def database_search(query: str, collection_name: str = "richard-projects") -> str:
+def projects_search(query: str) -> str:
     """
-    Searches the specified database collection for relevant documents.
+    Searches Richard's projects for relevant documents.
+    The contents are the README files from his repos.
 
     Args:
         query (str): The search query.
-        collection_name (str): ['richard-projects']
         
     Returns:
         str: The formatted search results.
     """
-    # Get the PGVector retriever
-    retriever = load_pgvector_db(collection_name=collection_name, k=5)
-
-    # Search the database for relevant documents
+    retriever = load_pgvector_db(collection_name="richard-projects", k=5)
     documents = retriever.invoke(query)
-
-    # Format the documents into a string
     context_str = format_contexts(documents)
+    return context_str
 
+@tool
+def resume_search(query: str) -> str:
+    """
+    Searches Richard's resume for relevant documents.
+    This contains educational and professional experience information as well as technical skills.
+
+    Args:
+        query (str): The search query.
+        
+    Returns:
+        str: The formatted search results.
+    """
+    retriever = load_pgvector_db(collection_name="richard-resume", k=5)
+    documents = retriever.invoke(query)
+    context_str = format_contexts(documents)
     return context_str
