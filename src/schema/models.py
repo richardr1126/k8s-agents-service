@@ -92,13 +92,12 @@ class OpenRouterModelName(StrEnum):
 
     GEMINI_25_FLASH_LITE = "google/gemini-2.5-flash-lite"
     GEMINI_25_FLASH = "google/gemini-2.5-flash"
-    QWEN_3_CODER_FREE = "qwen/qwen3-coder:free"
     QWEN_3_CODER = "qwen/qwen3-coder"
     KIMI_K2 = "moonshotai/kimi-k2"
-    KIMI_K2_FREE = "moonshotai/kimi-k2:parasail/fp8"
     HORIZON_BETA = "openrouter/horizon-beta"
     CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4"
     GPT_41 = "openai/gpt-4.1"
+    GPT_OSS = "openai/gpt-oss-120b"
 
 class OpenAICompatibleName(StrEnum):
     """https://platform.openai.com/docs/guides/text-generation"""
