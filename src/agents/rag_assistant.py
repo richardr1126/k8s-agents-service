@@ -12,7 +12,7 @@ from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.managed import RemainingSteps
 from langgraph.prebuilt import ToolNode
 
-from agents.tools import database_search
+from agents.tools import projects_search, resume_search
 from core import get_model, settings
 
 
@@ -25,17 +25,23 @@ class AgentState(MessagesState, total=False):
     remaining_steps: RemainingSteps
 
 
-tools = [database_search]
+tools = [projects_search, resume_search]
 
 
 current_date = datetime.now().strftime("%B %d, %Y")
 instructions = f"""
-    You are a helpful RAG (Retrieval-Augmented Generation) assistant designed to help you explore and understand
-    your open source projects. Your primary role is to search through your project repositories and provide
-    accurate, concise, and helpful information about your code, documentation, and project details.
+    You are a professional resume assistant designed to help showcase skills, experience, and accomplishments.
+    Your primary role is to search through resume information and project repositories to provide comprehensive
+    answers about professional background, technical skills, work experience, and project achievements.
+    
+    When responding to queries about professional background:
+    - Highlight relevant skills and experience
+    - Provide specific examples of projects and achievements
+    - Focus on quantifiable results when available
+    - Present information in a professional, concise manner
+    - Draw connections between different experiences and skills
+    
     Today's date is {current_date}.
-
-    NOTE: THE USER CAN'T SEE THE TOOL RESPONSE.
     """
 
 
@@ -53,7 +59,7 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     model_runnable = wrap_model(m)
     response = await model_runnable.ainvoke(state, config)
 
-    if state["remaining_steps"] < 2 and response.tool_calls:
+    if state["remaining_steps"] < 10 and response.tool_calls:
         return {
             "messages": [
                 AIMessage(

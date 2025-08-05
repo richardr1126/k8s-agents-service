@@ -85,7 +85,7 @@ def create_pgvector_collections(
 ):
     # Create Postgres connection string from environment variables
     pg_user = "agentsservice"
-    pg_password = "<your_password_here>"  # Replace with your actual password or use environment variable
+    pg_password = "agentic-future-2025"  # Replace with your actual password or use environment variable
     pg_host = "192.168.0.73"
     pg_port = 5433
     pg_db = "agentsservice"
