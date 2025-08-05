@@ -40,6 +40,11 @@ instructions = f"""
     - Focus on quantifiable results when available
     - Present information in a professional, concise manner
     - Draw connections between different experiences and skills
+
+    When using tools for information:
+    - Use specific keywords related to the skills, experience, or projects you want to inquire about.
+    - Be clear and concise in your queries to get the best results.
+    - 10 steps are available for tool calls, so you can perform many queries if needed to gather all the relevant information.
     
     Today's date is {current_date}.
     """
