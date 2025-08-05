@@ -98,6 +98,7 @@ class OpenRouterModelName(StrEnum):
     CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4"
     GPT_41 = "openai/gpt-4.1"
     GPT_OSS = "openai/gpt-oss-120b"
+    GPT_OSS_20B = "openai/gpt-oss-20b"
 
 class OpenAICompatibleName(StrEnum):
     """https://platform.openai.com/docs/guides/text-generation"""
