@@ -48,9 +48,9 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
 
-### Architecture Diagram
+### ArgoCD Diagram
 
-<img src="media/agent_architecture.png" width="600">
+<img src="media/argocd.png" width="full">
 
 ## 🚀 Quickstart
 
