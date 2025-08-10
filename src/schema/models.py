@@ -97,7 +97,7 @@ class OpenRouterModelName(StrEnum):
     GPT_41 = "openai/gpt-4.1"
     GPT_OSS = "openai/gpt-oss-120b"
     GPT_OSS_20B = "openai/gpt-oss-20b"
-    GPT_5 = "openai/gpt-5"
+    GPT_5 = "openai/gpt-5-chat"
     GLM_4_5 = "z-ai/glm-4.5"
 
 class OpenAICompatibleName(StrEnum):
