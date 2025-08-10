@@ -167,21 +167,29 @@ async def main() -> None:
     messages: list[ChatMessage] = st.session_state.messages
 
     if len(messages) == 0:
-        match agent_client.agent:
-            case "chatbot":
-                WELCOME = "Hello! I'm a simple chatbot. Ask me anything!"
-            case "interrupt-agent":
-                WELCOME = "Hello! I'm an interrupt agent. Tell me your birthday and I will predict your personality!"
-            case "research-assistant":
-                WELCOME = "Hello! I'm an AI-powered research assistant with web search and a calculator. Ask me anything!"
-            case "rag-assistant":
-                WELCOME = """Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
-                I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!"""
-            case _:
-                WELCOME = "Hello! I'm an AI agent. Ask me anything!"
+        # match agent_client.agent:
+        #     case "chatbot":
+        #         WELCOME = "Hello! I'm a simple chatbot. Ask me anything!"
+        #     case "interrupt-agent":
+        #         WELCOME = "Hello! I'm an interrupt agent. Tell me your birthday and I will predict your personality!"
+        #     case "research-assistant":
+        #         WELCOME = "Hello! I'm an AI-powered research assistant with web search and a calculator. Ask me anything!"
+        #     case "rag-assistant":
+        #         WELCOME = """Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
+        #         I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!"""
+        #     case _:
+        #         WELCOME = "Hello! I'm an AI agent. Ask me anything!"
 
         with st.chat_message("ai"):
-            st.write(WELCOME)
+            # Find the agent by key instead of using it as a list index
+            agent_info = next(
+                (agent for agent in agent_client.info.agents if agent.key == agent_client.agent), 
+                None
+            )
+            if agent_info:
+                st.write(agent_info.description)
+            else:
+                st.write("Welcome! I'm an AI agent. Ask me anything!")
 
     # draw_messages() expects an async iterator over messages
     async def amessage_iter() -> AsyncGenerator[ChatMessage, None]:
