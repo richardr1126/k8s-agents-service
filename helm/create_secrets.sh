@@ -15,6 +15,7 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "OPENROUTER_API_KEY=your_openrouter_api_key"
   echo "LANGSMITH_API_KEY=your_langsmith_api_key"
   echo "AZURE_OPENAI_API_KEY=your_azure_openai_api_key"
+  echo "TAVILY_API_KEY=your_tavily_api_key"
   exit 1
 fi
 
@@ -25,7 +26,7 @@ source "$ENV_FILE"
 set +a  # stop automatically exporting
 
 # Validate that required variables are set
-required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY" "AUTH_SECRET")
+required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY" "AUTH_SECRET" "TAVILY_API_KEY")
 for var in "${required_vars[@]}"; do
   if [ -z "${!var}" ]; then
     echo "Error: $var is not set in .env file"
@@ -53,10 +54,11 @@ kubectl create secret generic app-secrets \
   --from-literal=POSTGRES_PORT=5433 \
   --from-literal=POSTGRES_DB=agentsservice \
   --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
-  --from-literal=DEFAULT_MODEL="z-ai/glm-4.5" \
+  --from-literal=DEFAULT_MODEL="gpt-4o" \
   --from-literal=LANGSMITH_TRACING=true \
   --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY}" \
   --from-literal=LANGSMITH_PROJECT=default \
+  --from-literal=TAVILY_API_KEY="${TAVILY_API_KEY}" \
   --from-literal=AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
   --from-literal=AZURE_OPENAI_ENDPOINT="https://openai-research-pod.openai.azure.com/" \
   --from-literal=AZURE_OPENAI_API_VERSION="2025-02-01-preview" \

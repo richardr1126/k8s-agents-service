@@ -57,9 +57,19 @@ class TaskDataStatus:
         status.write(status_str)
         status.write(task_data.data)
         status.write("---")
+        
+        # Update the status label with the current status message if available
+        label = f"Task: {task_data.name}"
+        if "status" in task_data.data and task_data.data["status"]:
+            label = f"Task: {task_data.data['status']}"
+        
         if task_data.run_id not in self.current_task_data:
             # Status label always shows the last newly started task
-            status.update(label=f"""Task: {task_data.name}""")
+            status.update(label=label)
+        else:
+            # Update the label even for existing tasks to show current status
+            status.update(label=label)
+            
         self.current_task_data[task_data.run_id] = task_data
         if all(entry.completed() for entry in self.current_task_data.values()):
             # Status is "error" if any task has errored

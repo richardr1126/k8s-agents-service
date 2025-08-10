@@ -79,6 +79,7 @@ class Settings(BaseSettings):
     COMPATIBLE_BASE_URL: str | None = None
 
     OPENWEATHERMAP_API_KEY: SecretStr | None = None
+    TAVILY_API_KEY: SecretStr | None = None
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"

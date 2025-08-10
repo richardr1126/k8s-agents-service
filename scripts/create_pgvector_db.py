@@ -27,7 +27,7 @@ def create_pgvector_db_for_folder(
         collection_name=collection_name,
         connection=connection_string,
         use_jsonb=True,
-        create_extension=False,
+        create_extension=True,
     )
     
     # Reset the collection if requested
@@ -84,11 +84,11 @@ def create_pgvector_collections(
     chunk_overlap: int = 500,
 ):
     # Create Postgres connection string from environment variables
-    pg_user = "agentsservice"
-    pg_password = "agentic-future-2025"  # Replace with your actual password or use environment variable
-    pg_host = "192.168.0.73"
-    pg_port = 5433
-    pg_db = "agentsservice"
+    pg_user = "postgres"
+    pg_password = "postgres"  # Replace with your actual password or use environment variable
+    pg_host = "localhost"
+    pg_port = 5432
+    pg_db = "postgres"
 
     connection_string = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
     
