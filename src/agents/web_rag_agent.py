@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import StreamWriter
 from pydantic import BaseModel, Field
+import logging
 
 from core import get_model, settings
 from agents.tools import (
@@ -16,6 +17,8 @@ from agents.tools import (
 )
 from agents.bg_task_agent.task import Task
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class SearchQuery(BaseModel):
     """Structured output for optimized search query generation."""
@@ -80,8 +83,13 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
     try:
         model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
         
-        # Use structured output for reliable query generation
-        structured_model = model.with_structured_output(SearchQuery)
+        # Use structured output for search query generation
+        model_name = getattr(model, 'deployment_name', getattr(model, 'name', 'unknown'))
+        logger.info(f"Using model: {model_name}")
+        structured_model = model.with_structured_output(
+            SearchQuery, 
+            **({"method": "function_calling"} if model_name == "gpt-5-chat" else {})
+        )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
         
@@ -255,8 +263,15 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
         
         # Use AI model to make intelligent relevance decision
         model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-        structured_model = model.with_structured_output(RelevanceDecision)
-        
+
+        # Use structured output for relevance decision
+        model_name = getattr(model, 'deployment_name', getattr(model, 'name', 'unknown'))
+        logger.info(f"Using model: {model_name}")
+        structured_model = model.with_structured_output(
+            RelevanceDecision, 
+            **({"method": "function_calling"} if model_name == "gpt-5-chat" else {})
+        )
+
         current_date = datetime.now().strftime("%Y-%m-%d")
         
         relevance_prompt = f"""

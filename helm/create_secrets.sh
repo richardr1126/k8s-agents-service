@@ -60,9 +60,9 @@ kubectl create secret generic app-secrets \
   --from-literal=LANGSMITH_PROJECT=default \
   --from-literal=TAVILY_API_KEY="${TAVILY_API_KEY}" \
   --from-literal=AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
-  --from-literal=AZURE_OPENAI_ENDPOINT="https://openai-research-pod.openai.azure.com/" \
-  --from-literal=AZURE_OPENAI_API_VERSION="2025-02-01-preview" \
-  --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4o-mini": "gpt-4o-mini"}'
+  --from-literal=AZURE_OPENAI_ENDPOINT="https://k8s-agents-service.openai.azure.com/" \
+  --from-literal=AZURE_OPENAI_API_VERSION="2025-04-01-preview" \
+  --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4.1": "gpt-4.1", "gpt-5-chat": "gpt-5-chat"}'
 
 echo "Creating streamlit-secrets..."
 kubectl create secret generic streamlit-secrets \
