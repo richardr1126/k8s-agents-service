@@ -20,7 +20,6 @@ class Provider(StrEnum):
 class OpenAIModelName(StrEnum):
     """https://platform.openai.com/docs/models/gpt-4o"""
 
-    GPT_4O_MINI = "openai-gpt-4o-mini"
     GPT_4O = "openai-gpt-4o"
 
 
@@ -28,7 +27,8 @@ class AzureOpenAIModelName(StrEnum):
     """Azure OpenAI model names"""
 
     AZURE_GPT_4O = "gpt-4o"
-    AZURE_GPT_4O_MINI = "gpt-4o-mini"
+    AZURE_GPT_41 = "gpt-4.1"
+    AZURE_GPT_5_CHAT = "gpt-5-chat"
 
 
 class DeepseekModelName(StrEnum):
@@ -94,10 +94,8 @@ class OpenRouterModelName(StrEnum):
     QWEN_3_CODER = "qwen/qwen3-coder"
     KIMI_K2 = "moonshotai/kimi-k2"
     CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4"
-    GPT_41 = "openai/gpt-4.1"
     GPT_OSS = "openai/gpt-oss-120b"
     GPT_OSS_20B = "openai/gpt-oss-20b"
-    GPT_5 = "openai/gpt-5-chat"
     GLM_4_5 = "z-ai/glm-4.5"
 
 class OpenAICompatibleName(StrEnum):

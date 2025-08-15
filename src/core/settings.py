@@ -212,7 +212,7 @@ class Settings(BaseSettings):
                             raise ValueError(f"Invalid AZURE_OPENAI_DEPLOYMENT_MAP JSON: {e}")
 
                     # Validate required deployments exist
-                    required_models = {"gpt-4o", "gpt-4o-mini"}
+                    required_models = {"gpt-4o"}
                     missing_models = required_models - set(self.AZURE_OPENAI_DEPLOYMENT_MAP.keys())
                     if missing_models:
                         raise ValueError(f"Missing required Azure deployments: {missing_models}")
