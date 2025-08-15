@@ -126,12 +126,22 @@ async def main() -> None:
             model_idx = agent_client.info.models.index(agent_client.info.default_model)
             model = st.selectbox("LLM to use", options=agent_client.info.models, index=model_idx)
             agent_list = [a.key for a in agent_client.info.agents]
-            agent_idx = agent_list.index(agent_client.info.default_agent)
-            agent_client.agent = st.selectbox(
+            
+            # Get current agent selection, defaulting to the default agent
+            current_agent = getattr(agent_client, 'agent', agent_client.info.default_agent)
+            if current_agent in agent_list:
+                agent_idx = agent_list.index(current_agent)
+            else:
+                agent_idx = agent_list.index(agent_client.info.default_agent)
+            
+            selected_agent = st.selectbox(
                 "Agent to use",
                 options=agent_list,
                 index=agent_idx,
             )
+            agent_client.agent = selected_agent
+            # Store the selected agent in session state for use in welcome message
+            st.session_state.current_agent = selected_agent
             use_streaming = st.toggle("Stream results", value=True)
 
             # Display user ID (for debugging or user information)
@@ -181,9 +191,10 @@ async def main() -> None:
         #         WELCOME = "Hello! I'm an AI agent. Ask me anything!"
 
         with st.chat_message("ai"):
-            # Find the agent by key instead of using it as a list index
+            # Find the agent by key, using session state if available, otherwise fall back to agent_client.agent
+            current_agent_key = st.session_state.get('current_agent', agent_client.agent)
             agent_info = next(
-                (agent for agent in agent_client.info.agents if agent.key == agent_client.agent), 
+                (agent for agent in agent_client.info.agents if agent.key == current_agent_key), 
                 None
             )
             if agent_info:

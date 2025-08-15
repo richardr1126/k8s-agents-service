@@ -239,7 +239,7 @@ def projects_search(query: str) -> str:
     The contents are the README files from his repos.
 
     Args:
-        query (str): The search query.
+        query (str): Optimized search query for technical projects documentation.
         
     Returns:
         str: The formatted search results.
@@ -257,7 +257,7 @@ def resume_search(query: str) -> str:
     This contains educational and professional experience information as well as technical skills.
 
     Args:
-        query (str): The search query.
+        query (str): Optimized search query for Richard's resume.
         
     Returns:
         str: The formatted search results.
