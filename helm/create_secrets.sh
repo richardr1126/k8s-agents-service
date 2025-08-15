@@ -54,7 +54,7 @@ kubectl create secret generic app-secrets \
   --from-literal=POSTGRES_PORT=5433 \
   --from-literal=POSTGRES_DB=agentsservice \
   --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
-  --from-literal=DEFAULT_MODEL="gpt-4o" \
+  --from-literal=DEFAULT_MODEL="gpt-5-chat" \
   --from-literal=LANGSMITH_TRACING=true \
   --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY}" \
   --from-literal=LANGSMITH_PROJECT=default \
