@@ -1,15 +1,12 @@
 import math
 import re
 from datetime import datetime
-from typing import List
+from typing import Dict, Any, Optional, List
 
 import numexpr
-from langchain_community.tools import TavilySearchResults
-from langchain_core.documents import Document
 from langchain_core.tools import BaseTool, tool
 from langchain_postgres import PGVector
 from langchain_openai.embeddings import AzureOpenAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from core import settings
 
 
@@ -48,9 +45,35 @@ calculator: BaseTool = tool(calculator_func)
 calculator.name = "Calculator"
 
 
-# Format retrieved documents
 def format_contexts(docs):
     return "\n\n".join(doc.page_content for doc in docs)
+
+
+def build_metadata_filter(
+    content_type: Optional[str] = None,
+    section: Optional[str] = None,
+    project_title: Optional[str] = None,
+    tags: Optional[str] = None
+) -> Dict[str, Any]:
+    """Build metadata filter dictionary for PGVector queries."""
+    filter_dict = {}
+    
+    if content_type:
+        filter_dict["content_type"] = {"$eq": content_type}
+    
+    if section:
+        filter_dict["section"] = {"$eq": section}
+    
+    if project_title:
+        filter_dict["title"] = {"$like": f"%{project_title}%"}
+    
+    if tags:
+        # Convert tags to lowercase and split
+        tag_list = [tag.strip().lower() for tag in tags.split(",")]
+        # Use overlap operator for JSONB arrays in PostgreSQL
+        filter_dict["tags"] = {"$overlap": tag_list}
+    
+    return filter_dict
 
 
 def get_embeddings():
@@ -81,98 +104,6 @@ def create_pgvector_instance(collection_name: str, async_mode: bool = False):
         use_jsonb=True,
         async_mode=async_mode,
     )
-
-
-async def perform_web_search(query: str, max_results: int = 5):
-    """Perform web search using Tavily API."""
-    tavily_api_key = settings.TAVILY_API_KEY
-    
-    if not tavily_api_key:
-        raise ValueError("TAVILY_API_KEY is required for web search functionality")
-    
-    try:
-        web_search = TavilySearchResults(
-            api_key=tavily_api_key.get_secret_value(),
-            max_results=max_results,
-            search_depth="advanced",
-            include_answer=True,
-            include_raw_content=True
-        )
-        
-        search_results = await web_search.ainvoke(query)
-        
-        # Extract search result content
-        search_content = []
-        if isinstance(search_results, list):
-            for result in search_results:
-                if isinstance(result, dict):
-                    # Handle Tavily result format
-                    title = result.get("title", "")
-                    content = result.get("content", "")
-                    url = result.get("url", "")
-                    formatted_content = f"Title: {title}\nContent: {content}\nSource: {url}\n"
-                    search_content.append(formatted_content)
-                else:
-                    search_content.append(str(result))
-        else:
-            search_content.append(str(search_results))
-            
-        return search_content
-        
-    except Exception as e:
-        raise RuntimeError(f"Web search failed: {str(e)}")
-
-
-async def store_search_results_in_vector_db(search_results: List[str], collection_name: str) -> int:
-    """Store search results in a vector database collection.
-    
-    Args:
-        search_results: List of search result strings to store
-        collection_name: Name of the collection to store results in
-        
-    Returns:
-        Number of chunks stored in the database
-        
-    Raises:
-        RuntimeError: If storing fails
-    """
-    if not search_results:
-        raise ValueError("No search results to store")
-    
-    try:
-        # Initialize text splitter
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200,
-            length_function=len,
-        )
-        
-        # Initialize PGVector using utility function with async mode
-        pg_vector = create_pgvector_instance(collection_name, async_mode=True)
-        
-        # Convert search results to documents and split them
-        documents = []
-        for i, result in enumerate(search_results):
-            doc = Document(
-                page_content=result,
-                metadata={
-                    "source": f"web_search_result_{i}",
-                    "collection": collection_name,
-                    "timestamp": datetime.now().isoformat(),
-                }
-            )
-            documents.append(doc)
-        
-        # Split documents into chunks
-        chunks = text_splitter.split_documents(documents)
-        
-        # Add chunks to vector database (this is typically sync, but we can run it in executor if needed)
-        await pg_vector.aadd_documents(chunks)
-        
-        return len(chunks)
-        
-    except Exception as e:
-        raise RuntimeError(f"Error storing search results in vector database: {str(e)}")
 
 
 def web_vector_search(query: str, collection_name: str, k: int = 5, score_threshold: float = None) -> str:
@@ -233,37 +164,75 @@ def cleanup_temp_collection(collection_name: str) -> bool:
 
 
 @tool
-def projects_search(query: str) -> str:
+def projects_search(
+    query: str, 
+    tags: Optional[str] = None, 
+    content_type: Optional[str] = None, 
+    project_title: Optional[str] = None,
+    k: int = 5
+) -> str:
     """
     Searches Richard's projects for relevant documents.
     The contents are the README files from his repos.
 
     Args:
         query (str): Optimized search query for technical projects documentation.
+        tags (str, optional): Comma-separated list of technology tags to filter by (e.g., "python,react,typescript").
+        content_type (str, optional): Filter by content type - "description" or "readme".
+        project_title (str, optional): Filter by specific project title (partial match supported).
+        k (int, optional): Number of results to return (default: 5).
         
     Returns:
         str: The formatted search results.
     """
     pg_vector = create_pgvector_instance("richard-projects")
-    retriever = pg_vector.as_retriever(search_kwargs={"k": 5})
+    
+    # Build metadata filter using helper function
+    filter_dict = build_metadata_filter(
+        content_type=content_type,
+        project_title=project_title,
+        tags=tags
+    )
+    
+    # Create search kwargs with filter
+    search_kwargs = {"k": k}
+    if filter_dict:
+        search_kwargs["filter"] = filter_dict
+    
+    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
     documents = retriever.invoke(query)
     context_str = format_contexts(documents)
     return context_str
 
 @tool
-def resume_search(query: str) -> str:
+def resume_search(
+    query: str, 
+    section: Optional[str] = None, 
+    k: int = 5
+) -> str:
     """
     Searches Richard's resume for relevant documents.
     This contains educational and professional experience information as well as technical skills.
 
     Args:
         query (str): Optimized search query for Richard's resume.
+        section (str, optional): Filter by resume section - "Work Experience", "Education", "Skills", etc.
+        k (int, optional): Number of results to return (default: 5).
         
     Returns:
         str: The formatted search results.
     """
     pg_vector = create_pgvector_instance("richard-resume")
-    retriever = pg_vector.as_retriever(search_kwargs={"k": 5})
+    
+    # Build metadata filter using helper function
+    filter_dict = build_metadata_filter(section=section)
+    
+    # Create search kwargs with filter
+    search_kwargs = {"k": k}
+    if filter_dict:
+        search_kwargs["filter"] = filter_dict
+    
+    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
     documents = retriever.invoke(query)
     context_str = format_contexts(documents)
     return context_str

@@ -1,8 +1,13 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, List
 
+from langchain_community.tools import TavilySearchResults
+from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
+from langchain_postgres import PGVector
+from langchain_openai.embeddings import AzureOpenAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import StreamWriter
 from pydantic import BaseModel, Field
@@ -10,15 +15,106 @@ import logging
 
 from core import get_model, settings
 from agents.tools import (
-    perform_web_search, 
-    store_search_results_in_vector_db,
     web_vector_search,
-    cleanup_temp_collection
+    create_pgvector_instance
 )
 from agents.bg_task_agent.task import Task
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def perform_web_search(query: str, max_results: int = 5):
+    """Perform web search using Tavily API."""
+    tavily_api_key = settings.TAVILY_API_KEY
+    
+    if not tavily_api_key:
+        raise ValueError("TAVILY_API_KEY is required for web search functionality")
+    
+    try:
+        web_search = TavilySearchResults(
+            api_key=tavily_api_key.get_secret_value(),
+            max_results=max_results,
+            search_depth="advanced",
+            include_answer=True,
+            include_raw_content=True
+        )
+        
+        search_results = await web_search.ainvoke(query)
+        
+        # Extract search result content
+        search_content = []
+        if isinstance(search_results, list):
+            for result in search_results:
+                if isinstance(result, dict):
+                    # Handle Tavily result format
+                    title = result.get("title", "")
+                    content = result.get("content", "")
+                    url = result.get("url", "")
+                    formatted_content = f"Title: {title}\nContent: {content}\nSource: {url}\n"
+                    search_content.append(formatted_content)
+                else:
+                    search_content.append(str(result))
+        else:
+            search_content.append(str(search_results))
+            
+        return search_content
+        
+    except Exception as e:
+        raise RuntimeError(f"Web search failed: {str(e)}")
+
+
+async def store_search_results_in_vector_db(search_results: List[str], collection_name: str) -> int:
+    """Store search results in a vector database collection.
+    
+    Args:
+        search_results: List of search result strings to store
+        collection_name: Name of the collection to store results in
+        
+    Returns:
+        Number of chunks stored in the database
+        
+    Raises:
+        RuntimeError: If storing fails
+    """
+    if not search_results:
+        raise ValueError("No search results to store")
+    
+    try:
+        # Initialize text splitter
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len,
+        )
+        
+        # Initialize PGVector using utility function with async mode
+        pg_vector = create_pgvector_instance(collection_name, async_mode=True)
+        
+        # Convert search results to documents and split them
+        documents = []
+        for i, result in enumerate(search_results):
+            doc = Document(
+                page_content=result,
+                metadata={
+                    "source": f"web_search_result_{i}",
+                    "collection": collection_name,
+                    "timestamp": datetime.now().isoformat(),
+                }
+            )
+            documents.append(doc)
+        
+        # Split documents into chunks
+        chunks = text_splitter.split_documents(documents)
+        
+        # Add chunks to vector database (this is typically sync, but we can run it in executor if needed)
+        await pg_vector.aadd_documents(chunks)
+        
+        return len(chunks)
+        
+    except Exception as e:
+        raise RuntimeError(f"Error storing search results in vector database: {str(e)}")
+
 
 class SearchQuery(BaseModel):
     """Structured output for optimized search query generation."""

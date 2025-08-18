@@ -49,6 +49,27 @@ instructions = f"""
     - Each search returns only a fraction of the full content inside these tools
     - Search queries need to be optimized to the content expected to be returned. Vector search works this way.
     - Be prepared to iterate and refine your approach based on the responses you receive from these tools
+
+    ADVANCED FILTERING CAPABILITIES:
+    
+    For projects_search tool, use metadata filters to narrow results:
+    - Use 'tags' parameter to filter by technology (e.g., tags="python,react" for Python and React projects)
+    - Use 'content_type' parameter to get either "description" (project overviews) or "readme" (detailed documentation)
+    - Use 'project_title' parameter for specific projects (supports partial matching)
+    - Use 'k' parameter to control number of results (default: 5)
+    
+    For resume_search tool, use metadata filters:
+    - Use 'section' parameter to filter by resume sections: "Work Experience", "Education", "Skills"
+    - Use 'k' parameter to control number of results (default: 5)
+    
+    STRATEGIC TOOL USAGE:
+    - When asked about specific technologies, use tags filtering in projects_search (e.g., tags="python" for Python projects)
+    - When asked about education, use section="Education" in resume_search
+    - When asked about work history, use section="Work Experience" in resume_search
+    - When asked about technical skills, use section="Skills" in resume_search
+    - When asked about project details, try content_type="readme" for technical documentation
+    - When asked for project overviews, try content_type="description" for summaries
+    - Use multiple filtered searches rather than broad searches for more targeted results
     """
 
 
