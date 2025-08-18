@@ -53,7 +53,8 @@ def build_metadata_filter(
     content_type: Optional[str] = None,
     section: Optional[str] = None,
     project_title: Optional[str] = None,
-    tags: Optional[str] = None
+    tags: Optional[str] = None,
+    source: Optional[str] = None
 ) -> Dict[str, Any]:
     """Build metadata filter dictionary for PGVector queries."""
     filter_dict = {}
@@ -72,6 +73,9 @@ def build_metadata_filter(
         tag_list = [tag.strip().lower() for tag in tags.split(",")]
         # Use overlap operator for JSONB arrays in PostgreSQL
         filter_dict["tags"] = {"$overlap": tag_list}
+    
+    if source:
+        filter_dict["source"] = {"$like": f"%{source}%"}
     
     return filter_dict
 
@@ -207,7 +211,9 @@ def projects_search(
 @tool
 def resume_search(
     query: str, 
-    section: Optional[str] = None, 
+    section: Optional[str] = None,
+    source: Optional[str] = None,
+    include_pdf: bool = True,
     k: int = 5
 ) -> str:
     """
@@ -216,7 +222,10 @@ def resume_search(
 
     Args:
         query (str): Optimized search query for Richard's resume.
-        section (str, optional): Filter by resume section - "Work Experience", "Education", "Skills", etc.
+        section (str, optional): Filter by resume section - "Work Experience", "Education", "Skills", etc. 
+                                Note: PDF content doesn't have sections, only web content does.
+        source (str, optional): Filter by source - "richardr.dev" for web content or "drive.google.com" for PDF content.
+        include_pdf (bool, optional): Whether to include PDF resume content when using section filter (default: True).
         k (int, optional): Number of results to return (default: 5).
         
     Returns:
@@ -224,15 +233,44 @@ def resume_search(
     """
     pg_vector = create_pgvector_instance("richard-resume")
     
-    # Build metadata filter using helper function
-    filter_dict = build_metadata_filter(section=section)
+    if section and include_pdf:
+        # When filtering by section but wanting to include PDF content,
+        # we need to do two separate searches and combine results
+        
+        # Search 1: Web content with section filter
+        web_filter = build_metadata_filter(section=section, source="richardr.dev")
+        web_search_kwargs = {"k": max(1, k // 2)}  # Reserve half the results for web content
+        if web_filter:
+            web_search_kwargs["filter"] = web_filter
+        
+        web_retriever = pg_vector.as_retriever(search_kwargs=web_search_kwargs)
+        web_documents = web_retriever.invoke(query)
+        
+        # Search 2: PDF content without section filter
+        pdf_filter = build_metadata_filter(source="drive.google.com")
+        pdf_search_kwargs = {"k": k - len(web_documents)}  # Use remaining slots for PDF content
+        if pdf_filter and pdf_search_kwargs["k"] > 0:
+            pdf_search_kwargs["filter"] = pdf_filter
+            pdf_retriever = pg_vector.as_retriever(search_kwargs=pdf_search_kwargs)
+            pdf_documents = pdf_retriever.invoke(query)
+        else:
+            pdf_documents = []
+        
+        # Combine and format results
+        all_documents = web_documents + pdf_documents
+        context_str = format_contexts(all_documents)
+        
+    else:
+        # Standard single search with filters
+        filter_dict = build_metadata_filter(section=section, source=source)
+        
+        # Create search kwargs with filter
+        search_kwargs = {"k": k}
+        if filter_dict:
+            search_kwargs["filter"] = filter_dict
+        
+        retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
+        documents = retriever.invoke(query)
+        context_str = format_contexts(documents)
     
-    # Create search kwargs with filter
-    search_kwargs = {"k": k}
-    if filter_dict:
-        search_kwargs["filter"] = filter_dict
-    
-    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = retriever.invoke(query)
-    context_str = format_contexts(documents)
     return context_str
