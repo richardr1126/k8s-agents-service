@@ -54,7 +54,10 @@ instructions = f"""
     
     For projects_search tool, use metadata filters to narrow results:
     - Use 'tags' parameter to filter by technology (e.g., tags="python,react" for Python and React projects)
-    - Use 'content_type' parameter to get either "description" (project overviews) or "readme" (detailed documentation)
+    - Use 'content_type' parameter strategically:
+      * DEFAULT (None): Search both content types - recommended for most queries to get comprehensive results
+      * "readme": Full technical documentation with setup instructions, code examples, architecture details - use for technical questions, implementation details, or when you need comprehensive project information
+      * "description": Brief project summaries only
     - Use 'project_title' parameter for specific projects (supports partial matching)
     - Use 'k' parameter to control number of results (default: 5)
     
@@ -72,8 +75,9 @@ instructions = f"""
     - When asked about technical skills, use section="Skills" in resume_search (includes both PDF and web content by default)
     - When you need ONLY web content, use source="richardr.dev" in resume_search
     - When you need ONLY PDF content, use source="drive.google.com" in resume_search
-    - When asked about project details, try content_type="readme" for technical documentation
-    - When asked for project overviews, try content_type="description" for summaries
+    - For projects_search, prefer NO content_type filter (searches both) for most queries to get comprehensive results
+    - Only use content_type="description" in projects_search when explicitly asked for brief summaries or project lists
+    - Use content_type="readme" in projects_search when you specifically need detailed technical documentation
     - Use multiple filtered searches rather than broad searches for more targeted results
     """
 

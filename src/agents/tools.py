@@ -71,8 +71,8 @@ def build_metadata_filter(
     if tags:
         # Convert tags to lowercase and split
         tag_list = [tag.strip().lower() for tag in tags.split(",")]
-        # Use overlap operator for JSONB arrays in PostgreSQL
-        filter_dict["tags"] = {"$overlap": tag_list}
+        # Use 'in' operator to check if any of the tags match
+        filter_dict["tags"] = {"$in": tag_list}
     
     if source:
         filter_dict["source"] = {"$like": f"%{source}%"}
@@ -182,7 +182,10 @@ def projects_search(
     Args:
         query (str): Optimized search query for technical projects documentation.
         tags (str, optional): Comma-separated list of technology tags to filter by (e.g., "python,react,typescript").
-        content_type (str, optional): Filter by content type - "description" or "readme".
+        content_type (str, optional): Filter by content type:
+            - "readme": Full technical documentation, code examples, setup instructions, detailed project info
+            - "description": Short project summaries and overviews
+            - None (default): Searches both content types, generally recommended for comprehensive results
         project_title (str, optional): Filter by specific project title (partial match supported).
         k (int, optional): Number of results to return (default: 5).
         
