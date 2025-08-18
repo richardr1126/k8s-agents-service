@@ -60,13 +60,18 @@ instructions = f"""
     
     For resume_search tool, use metadata filters:
     - Use 'section' parameter to filter by resume sections: "Work Experience", "Education", "Skills"
+      (Note: PDF content doesn't have sections, but include_pdf=True by default includes both web and PDF content)
+    - Use 'source' parameter to filter by source: "richardr.dev" for web content, "drive.google.com" for PDF content
+    - Use 'include_pdf' parameter (True/False) to control whether PDF content is included when using section filters
     - Use 'k' parameter to control number of results (default: 5)
     
     STRATEGIC TOOL USAGE:
     - When asked about specific technologies, use tags filtering in projects_search (e.g., tags="python" for Python projects)
-    - When asked about education, use section="Education" in resume_search
-    - When asked about work history, use section="Work Experience" in resume_search
-    - When asked about technical skills, use section="Skills" in resume_search
+    - When asked about education, use section="Education" in resume_search (includes both PDF and web content by default)
+    - When asked about work history, use section="Work Experience" in resume_search (includes both PDF and web content by default)
+    - When asked about technical skills, use section="Skills" in resume_search (includes both PDF and web content by default)
+    - When you need ONLY web content, use source="richardr.dev" in resume_search
+    - When you need ONLY PDF content, use source="drive.google.com" in resume_search
     - When asked about project details, try content_type="readme" for technical documentation
     - When asked for project overviews, try content_type="description" for summaries
     - Use multiple filtered searches rather than broad searches for more targeted results
