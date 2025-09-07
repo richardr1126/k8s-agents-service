@@ -66,10 +66,10 @@ ingress:
   className: "traefik"
   annotations:
     #cert-manager.io/cluster-issuer: letsencrypt-prod
-    external-dns.alpha.kubernetes.io/hostname: chat.richardr.dev
+    external-dns.alpha.kubernetes.io/hostname: streamlit.richardr.dev
     external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
   hosts:
-    - host: chat.richardr.dev
+    - host: streamlit.richardr.dev
       paths:
         - path: /
           pathType: Prefix
