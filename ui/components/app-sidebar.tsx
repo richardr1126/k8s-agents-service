@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Github, MessagesSquare } from "lucide-react"
+import { Github, MessagesSquare, Shield } from "lucide-react"
 import Link from "next/link"
 import {
   Sidebar,
@@ -11,7 +11,8 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { ThreadList } from "./assistant-ui/thread-list"
+import { ThreadList } from "@/components/assistant-ui/thread-list"
+import { showPrivacyPopup } from "@/components/privacy-popup"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
@@ -39,7 +40,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       <SidebarRail />
       <SidebarFooter>
         <SidebarMenu>
-         
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="https://github.com/richardr1126/k8s-agents-service" target="_blank">
@@ -52,7 +52,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
               </Link>
             </SidebarMenuButton>
-            
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" onClick={() => showPrivacyPopup()}>
+              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
+                <Shield className="size-4" />
+              </div>
+              <div className="flex flex-col gap-0.5 leading-none text-left">
+                <span className="font-semibold">Privacy</span>
+                <span className="">View Notice</span>
+              </div>
+            </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>

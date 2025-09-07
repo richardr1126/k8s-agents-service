@@ -14,7 +14,7 @@ from agents.research_assistant import research_assistant
 from agents.web_rag_agent import web_rag_agent
 from schema import AgentInfo
 
-DEFAULT_AGENT = "rag-assistant"
+DEFAULT_AGENT = "resume-agent"
 
 # Type alias to handle LangGraph's different agent patterns
 # - @entrypoint functions return Pregel
@@ -33,7 +33,7 @@ agents: dict[str, Agent] = {
     # "research-assistant": Agent(
     #     description="A research assistant with web search and calculator.", graph=research_assistant
     # ),
-    "rag-assistant": Agent(
+    "resume-agent": Agent(
         description="""Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
         I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!""",
         graph=rag_assistant
