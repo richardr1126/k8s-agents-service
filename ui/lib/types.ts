@@ -1,11 +1,13 @@
 // Backend API types matching your FastAPI service
 
+import { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
+
 export interface BackendUserInput {
   message: string;
   model?: string;
   thread_id?: string;
   user_id?: string;
-  agent_config?: Record<string, unknown>;
+  agent_config?: ReadonlyJSONObject;
 }
 
 export interface BackendStreamInput extends BackendUserInput {
@@ -14,7 +16,7 @@ export interface BackendStreamInput extends BackendUserInput {
 
 export interface BackendToolCall {
   name: string;
-  args: Record<string, unknown>;
+  args: ReadonlyJSONObject;
   id?: string;
   type?: "tool_call";
 }
@@ -25,8 +27,8 @@ export interface BackendMessage {
   tool_calls?: BackendToolCall[];
   tool_call_id?: string;
   run_id?: string;
-  response_metadata?: Record<string, unknown>;
-  custom_data?: Record<string, unknown>;
+  response_metadata?: ReadonlyJSONObject;
+  custom_data?: ReadonlyJSONObject;
 }
 
 export interface BackendStreamEvent {
@@ -34,9 +36,9 @@ export interface BackendStreamEvent {
   content: string | BackendMessage | {
     id?: string;
     name?: string;
-    args?: Record<string, unknown>;
+    args?: ReadonlyJSONObject;
     toolCallId?: string;
-    result?: unknown;
+    result?: ReadonlyJSONValue;
   };
   messageId?: string; // For token events to identify which message they belong to
 }
@@ -70,8 +72,8 @@ export interface ChatRequest {
 export interface ToolCall {
   id: string;
   name: string;
-  args: Record<string, unknown>;
-  result?: unknown;
+  args: ReadonlyJSONObject;
+  result?: ReadonlyJSONValue;
 }
 
 export interface ChatMessage {
@@ -87,7 +89,7 @@ export interface ChatMessage {
       run_id: string;
       state: "new" | "running" | "complete";
       result?: "success" | "error" | null;
-      data: Record<string, any>;
+      data: ReadonlyJSONObject;
     };
   };
 }
