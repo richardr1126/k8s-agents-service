@@ -30,6 +30,12 @@ export default function RootLayout({
       <head>
         {/* Inline, blocking script to set initial color mode before paint */}
         <script id="theme-init" dangerouslySetInnerHTML={{ __html: themeInitCode }} />
+        {/* PWA manifest */}
+        <link rel="manifest" href="/site.webmanifest" />
+        <meta name="theme-color" content="#000000" />
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="apple-mobile-web-app-title" content="Chat AI" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         {children}

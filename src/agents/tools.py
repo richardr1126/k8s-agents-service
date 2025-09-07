@@ -49,33 +49,84 @@ def format_contexts(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-def build_metadata_filter(
-    content_type: Optional[str] = None,
-    section: Optional[str] = None,
-    project_title: Optional[str] = None,
-    tags: Optional[str] = None,
-    source: Optional[str] = None
-) -> Dict[str, Any]:
-    """Build metadata filter dictionary for PGVector queries."""
+def build_keyword_filter(query: str, collection_type: str) -> Dict[str, Any]:
+    """Build metadata filter dictionary based on keywords found in the query.
+    
+    Uses simple keyword matching as recommended for enterprise RAG systems.
+    More reliable than LLM-based metadata extraction.
+    """
     filter_dict = {}
+    query_lower = query.lower()
     
-    if content_type:
-        filter_dict["content_type"] = {"$eq": content_type}
+    if collection_type == "projects":
+        # Technology keywords for tag filtering
+        tech_keywords = {
+            "python": "python",
+            "react": "react", 
+            "typescript": "typescript",
+            "javascript": "javascript",
+            "nextjs": "nextjs",
+            "next.js": "nextjs",
+            "django": "django",
+            "fastapi": "fastapi",
+            "streamlit": "streamlit",
+            "docker": "docker",
+            "kubernetes": "kubernetes",
+            "k8s": "kubernetes",
+            "postgresql": "postgresql",
+            "postgres": "postgresql",
+            "mongodb": "mongodb",
+            "redis": "redis",
+            "tensorflow": "tensorflow",
+            "pytorch": "pytorch",
+            "openai": "openai",
+            "langchain": "langchain",
+            "anthropic": "anthropic",
+            "azure": "azure",
+            "aws": "aws",
+            "gcp": "gcp",
+            "google cloud": "gcp"
+        }
+        
+        # Check for technology tags using $like operator for JSON array search
+        matching_tags = []
+        for keyword, tag in tech_keywords.items():
+            if keyword in query_lower:
+                matching_tags.append(tag)
+        
+        if matching_tags:
+            # Use $like operator to search within JSON arrays
+            # This works by treating the JSON array as a string and searching for the tag value
+            tag_filters = []
+            for tag in matching_tags:
+                tag_filters.append({"tags": {"$like": f"%{tag}%"}})
+            
+            # If multiple tags, use $or to match any of them
+            if len(tag_filters) == 1:
+                filter_dict.update(tag_filters[0])
+            else:
+                filter_dict["$or"] = tag_filters
+        
+        # Content type filtering
+        if "readme" in query_lower or "documentation" in query_lower or "detailed" in query_lower:
+            filter_dict["content_type"] = {"$eq": "readme"}
+        elif "description" in query_lower or "summary" in query_lower or "overview" in query_lower:
+            filter_dict["content_type"] = {"$eq": "description"}
     
-    if section:
-        filter_dict["section"] = {"$eq": section}
-    
-    if project_title:
-        filter_dict["title"] = {"$like": f"%{project_title}%"}
-    
-    if tags:
-        # Convert tags to lowercase and split
-        tag_list = [tag.strip().lower() for tag in tags.split(",")]
-        # Use 'in' operator to check if any of the tags match
-        filter_dict["tags"] = {"$in": tag_list}
-    
-    if source:
-        filter_dict["source"] = {"$like": f"%{source}%"}
+    elif collection_type == "resume":
+        # Section-based filtering for resume
+        if any(keyword in query_lower for keyword in ["work", "experience", "job", "employment", "career"]):
+            filter_dict["section"] = {"$eq": "Work Experience"}
+        elif any(keyword in query_lower for keyword in ["education", "school", "university", "degree", "colorado", "boulder", "cu"]):
+            filter_dict["section"] = {"$eq": "Education"}
+        elif any(keyword in query_lower for keyword in ["skills", "technical", "programming", "languages", "technologies"]):
+            filter_dict["section"] = {"$eq": "Skills"}
+        
+        # Source-based filtering
+        if "pdf" in query_lower:
+            filter_dict["source"] = {"$like": "%drive.google.com%"}
+        elif "web" in query_lower or "website" in query_lower:
+            filter_dict["source"] = {"$like": "%richardr.dev%"}
     
     return filter_dict
 
@@ -109,8 +160,7 @@ def create_pgvector_instance(collection_name: str, async_mode: bool = False):
         async_mode=async_mode,
     )
 
-
-def web_vector_search(query: str, collection_name: str, k: int = 5, score_threshold: float = None) -> str:
+async def web_vector_search(query: str, collection_name: str, k: int = 5, score_threshold: float = None) -> str:
     """Search a temporary web collection for relevant documents.
     
     Args:
@@ -127,7 +177,7 @@ def web_vector_search(query: str, collection_name: str, k: int = 5, score_thresh
     """
     try:
         # Initialize PGVector using utility function
-        pg_vector = create_pgvector_instance(collection_name)
+        pg_vector = create_pgvector_instance(collection_name, async_mode=True)
         
         # Create retriever with score threshold if provided
         search_kwargs = {"k": k}
@@ -143,8 +193,8 @@ def web_vector_search(query: str, collection_name: str, k: int = 5, score_thresh
             retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
         
         # Retrieve relevant documents
-        relevant_docs = retriever.invoke(query)
-        
+        relevant_docs = await retriever.ainvoke(query)
+
         # Format the context from retrieved documents using utility function
         context = format_contexts(relevant_docs)
         
@@ -154,13 +204,13 @@ def web_vector_search(query: str, collection_name: str, k: int = 5, score_thresh
         raise RuntimeError(f"Error performing web vector search: {str(e)}")
 
 
-def cleanup_temp_collection(collection_name: str) -> bool:
+async def cleanup_temp_collection(collection_name: str) -> bool:
     """Clean up temporary collection from the database."""
     try:
-        pg_vector = create_pgvector_instance(collection_name)
+        pg_vector = create_pgvector_instance(collection_name, async_mode=True)
         
         # Delete the collection
-        pg_vector.delete_collection()
+        await pg_vector.adelete_collection()
         return True
     except Exception as e:
         print(f"Warning: Could not cleanup temporary collection {collection_name}: {e}")
@@ -168,112 +218,67 @@ def cleanup_temp_collection(collection_name: str) -> bool:
 
 
 @tool
-def projects_search(
-    query: str, 
-    tags: Optional[str] = None, 
-    content_type: Optional[str] = None, 
-    project_title: Optional[str] = None,
-    k: int = 5
-) -> str:
+async def projects_search(query: str) -> str:
     """
     Searches Richard's projects for relevant documents.
-    The contents are the README files from his repos.
-
+    The contents include project descriptions and README files from his repos.
+    
+    Automatically filters based on keywords in your query:
+    - Technology keywords: python, react, typescript, nextjs, etc.
+    - Content type keywords: "readme" for detailed docs, "description" for summaries
+    - Project keywords: specific project names will be matched
+    
     Args:
-        query (str): Optimized search query for technical projects documentation.
-        tags (str, optional): Comma-separated list of technology tags to filter by (e.g., "python,react,typescript").
-        content_type (str, optional): Filter by content type:
-            - "readme": Full technical documentation, code examples, setup instructions, detailed project info
-            - "description": Short project summaries and overviews
-            - None (default): Searches both content types, generally recommended for comprehensive results
-        project_title (str, optional): Filter by specific project title (partial match supported).
-        k (int, optional): Number of results to return (default: 5).
+        query (str): Search query for technical projects. Include technology names,
+                    project features, or specific project names you're looking for. DO NOT INCLUDE UNRELATED TERMS IN A SINGLE QUERY.
         
     Returns:
         str: The formatted search results.
     """
-    pg_vector = create_pgvector_instance("richard-projects")
+    pg_vector = create_pgvector_instance("richard-projects", async_mode=True)
     
-    # Build metadata filter using helper function
-    filter_dict = build_metadata_filter(
-        content_type=content_type,
-        project_title=project_title,
-        tags=tags
-    )
+    # Build metadata filter based on keywords in query
+    filter_dict = build_keyword_filter(query, collection_type="projects")
     
     # Create search kwargs with filter
-    search_kwargs = {"k": k}
+    search_kwargs = {"k": 5}
     if filter_dict:
         search_kwargs["filter"] = filter_dict
     
     retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = retriever.invoke(query)
+    documents = await retriever.ainvoke(query)
     context_str = format_contexts(documents)
     return context_str
 
 @tool
-def resume_search(
-    query: str, 
-    section: Optional[str] = None,
-    source: Optional[str] = None,
-    include_pdf: bool = True,
-    k: int = 5
-) -> str:
+async def resume_search(query: str) -> str:
     """
     Searches Richard's resume for relevant documents.
     This contains educational and professional experience information as well as technical skills.
-
+    
+    Automatically filters based on keywords in your query:
+    - Section keywords: "work", "experience", "job", "education", "skills", "technical"
+    - Source keywords: "pdf" for PDF resume, "web" for website content
+    - University keywords: "colorado", "boulder", "cu" for education info
+    
     Args:
-        query (str): Optimized search query for Richard's resume.
-        section (str, optional): Filter by resume section - "Work Experience", "Education", "Skills", etc. 
-                                Note: PDF content doesn't have sections, only web content does.
-        source (str, optional): Filter by source - "richardr.dev" for web content or "drive.google.com" for PDF content.
-        include_pdf (bool, optional): Whether to include PDF resume content when using section filter (default: True).
-        k (int, optional): Number of results to return (default: 5).
+        query (str): Search query for resume information. Include terms like
+                    "work experience", "education", "skills", or specific technologies. DO NOT INCLUDE UNRELATED TERMS IN A SINGLE QUERY.
         
     Returns:
         str: The formatted search results.
     """
-    pg_vector = create_pgvector_instance("richard-resume")
+    pg_vector = create_pgvector_instance("richard-resume", async_mode=True)
     
-    if section and include_pdf:
-        # When filtering by section but wanting to include PDF content,
-        # we need to do two separate searches and combine results
-        
-        # Search 1: Web content with section filter
-        web_filter = build_metadata_filter(section=section, source="richardr.dev")
-        web_search_kwargs = {"k": max(1, k // 2)}  # Reserve half the results for web content
-        if web_filter:
-            web_search_kwargs["filter"] = web_filter
-        
-        web_retriever = pg_vector.as_retriever(search_kwargs=web_search_kwargs)
-        web_documents = web_retriever.invoke(query)
-        
-        # Search 2: PDF content without section filter
-        pdf_filter = build_metadata_filter(source="drive.google.com")
-        pdf_search_kwargs = {"k": k - len(web_documents)}  # Use remaining slots for PDF content
-        if pdf_filter and pdf_search_kwargs["k"] > 0:
-            pdf_search_kwargs["filter"] = pdf_filter
-            pdf_retriever = pg_vector.as_retriever(search_kwargs=pdf_search_kwargs)
-            pdf_documents = pdf_retriever.invoke(query)
-        else:
-            pdf_documents = []
-        
-        # Combine and format results
-        all_documents = web_documents + pdf_documents
-        context_str = format_contexts(all_documents)
-        
-    else:
-        # Standard single search with filters
-        filter_dict = build_metadata_filter(section=section, source=source)
-        
-        # Create search kwargs with filter
-        search_kwargs = {"k": k}
-        if filter_dict:
-            search_kwargs["filter"] = filter_dict
-        
-        retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-        documents = retriever.invoke(query)
-        context_str = format_contexts(documents)
+    # Build metadata filter based on keywords in query
+    filter_dict = build_keyword_filter(query, collection_type="resume")
     
+    # Create search kwargs with filter
+    search_kwargs = {"k": 5}
+    if filter_dict:
+        search_kwargs["filter"] = filter_dict
+    
+    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
+    documents = await retriever.ainvoke(query)
+    context_str = format_contexts(documents)
     return context_str

@@ -205,6 +205,21 @@ async def message_generator(
     agent: AgentGraph = get_agent(agent_id)
     kwargs, run_id = await _handle_input(user_input, agent)
 
+    # Track messages that have already been streamed to avoid re-streaming conversation history
+    streamed_message_ids = set()
+    
+    # Get initial state to track existing messages
+    try:
+        initial_state = await agent.aget_state(config=kwargs["config"])
+        initial_messages = initial_state.values.get("messages", [])
+        # Track IDs of existing messages to avoid re-streaming them
+        for msg in initial_messages:
+            if hasattr(msg, 'id') and msg.id:
+                streamed_message_ids.add(msg.id)
+    except Exception:
+        # If we can't get initial state, continue without filtering
+        pass
+
     try:
         # Process streamed events from the graph and yield messages over the SSE stream.
         async for stream_event in agent.astream(
@@ -232,12 +247,33 @@ async def message_generator(
                         continue
                     updates = updates or {}
                     update_messages = updates.get("messages", [])
+                    
+                    # Filter out messages that have already been streamed (conversation history)
+                    filtered_messages = []
+                    for msg in update_messages:
+                        # Check if this message has already been streamed
+                        msg_id = getattr(msg, 'id', None)
+                        if msg_id and msg_id in streamed_message_ids:
+                            continue  # Skip already streamed messages
+                        
+                        # For messages without IDs, use content-based filtering to avoid re-streaming
+                        # Skip human messages that match the current user input (will be filtered later anyway)
+                        if isinstance(msg, HumanMessage) and msg.content == user_input.message:
+                            continue
+                            
+                        # Add message to filtered list and track it
+                        filtered_messages.append(msg)
+                        if msg_id:
+                            streamed_message_ids.add(msg_id)
+                    
+                    update_messages = filtered_messages
+                    
                     # special cases for using langgraph-supervisor library
                     if node == "supervisor":
                         # Get only the last ToolMessage since is it added by the
                         # langgraph lib and not actual AI output so it won't be an
                         # independent event
-                        if isinstance(update_messages[-1], ToolMessage):
+                        if update_messages and isinstance(update_messages[-1], ToolMessage):
                             update_messages = [update_messages[-1]]
                         else:
                             update_messages = []

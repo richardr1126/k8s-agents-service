@@ -316,7 +316,7 @@ async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRa
         
         try:
             # Use utility function to perform web vector search
-            context = web_vector_search(user_query, collection_name, k=5)
+            context = await web_vector_search(user_query, collection_name, k=5)
             
             # Create prompt for the model
             current_date = datetime.now().strftime("%B %d, %Y")
@@ -443,6 +443,7 @@ async def check_first_run_search_need_node(state: WebRagState, config: RunnableC
 
         return {
             "is_search_relevant": not decision.needs_web_search,  # If web search not needed, we have "relevant" context (general knowledge)
+            "is_first_run": False,  # Always mark as no longer first run after this check
         }
         
     except Exception as e:
@@ -450,6 +451,7 @@ async def check_first_run_search_need_node(state: WebRagState, config: RunnableC
         logger.warning(f"First run search analysis failed: {e}")
         return {
             "is_search_relevant": False,  # Default to searching
+            "is_first_run": False,  # Always mark as no longer first run after this check
         }
 
 
@@ -469,7 +471,7 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
     
     try:
         # Try to get existing context from vector database
-        existing_context = web_vector_search(optimized_query, collection_name, k=5, score_threshold=0.3)
+        existing_context = await web_vector_search(optimized_query, collection_name, k=5, score_threshold=0.3)
         context_length = len(existing_context.strip()) if existing_context else 0
         
         # Use AI model to make intelligent relevance decision

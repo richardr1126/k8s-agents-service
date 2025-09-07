@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { AgentSelect } from "@/components/agent-select";
 import { ModelSelect } from "@/components/model-select";
 import { CustomRuntimeProvider, useThreadContext } from "@/components/custom-runtime-provider";
+import { TaskToolUI } from "@/components/task-ui";
 import { Suspense } from "react";
 
 function AssistantHeader() {
@@ -53,6 +54,7 @@ function AssistantContent() {
             <AssistantHeader />
             <div className="flex-1 overflow-hidden">
               <Thread />
+              <TaskToolUI />
             </div>
           </SidebarInset>
         </div>

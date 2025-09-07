@@ -20,8 +20,20 @@ import { UserProvider, useUser } from "@/components/user-provider";
 const convertMessage = (message: ChatMessage): ThreadMessageLike => {
   let content: ThreadMessageLike['content'];
 
+  // Handle custom data (task updates) as tool calls
+  if (message.customData?.taskData) {
+    content = [
+      {
+        type: "tool-call" as const,
+        toolCallId: message.customData.taskData.run_id,
+        toolName: "task_update",
+        args: { taskData: message.customData.taskData },
+        result: undefined, // Task updates don't have results
+      }
+    ];
+  }
   // Add tool calls if they exist
-  if (message.toolCalls && message.toolCalls.length > 0) {
+  else if (message.toolCalls && message.toolCalls.length > 0) {
     content = [
       ...message.toolCalls.map(toolCall => ({
         type: "tool-call" as const,
@@ -57,6 +69,8 @@ interface ThreadContextType {
   setSelectedAgentId: (agentId: string) => void;
   selectedModelId: string | null;
   setSelectedModelId: (modelId: string) => void;
+  runningThreads: Set<string>;
+  setRunningThreads: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
 const ThreadContext = createContext<ThreadContextType>({
@@ -70,6 +84,8 @@ const ThreadContext = createContext<ThreadContextType>({
   setSelectedAgentId: () => {},
   selectedModelId: null,
   setSelectedModelId: () => {},
+  runningThreads: new Set(),
+  setRunningThreads: () => {},
 });
 
 export const useThreadContext = () => {
@@ -91,6 +107,7 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   const [threads, setThreads] = useState<Map<string, ChatMessage[]>>(new Map());
   const [loadedThreads, setLoadedThreads] = useState<Set<string>>(new Set());
   const [serviceInfo, setServiceInfo] = useState<BackendServiceMetadata | null>(null);
+  const [runningThreads, setRunningThreads] = useState<Set<string>>(new Set());
 
   // Determine current thread ID from URL or user data
   const currentThreadId = urlThreadId || userData?.currentThreadId || null;
@@ -174,7 +191,9 @@ function ThreadProvider({ children }: ThreadProviderProps) {
         selectedAgentId,
         setSelectedAgentId,
         selectedModelId,
-        setSelectedModelId
+        setSelectedModelId,
+        runningThreads,
+        setRunningThreads
       }}
     >
       {children}
@@ -197,7 +216,9 @@ function ChatWithThreads({
     serviceInfo,
     userId,
     selectedAgentId,
-    selectedModelId
+    selectedModelId,
+    runningThreads,
+    setRunningThreads
   } = useThreadContext();
   
   const { 
@@ -212,7 +233,8 @@ function ChatWithThreads({
     archivedThreads
   } = useUser();
   
-  const [isRunning, setIsRunning] = useState(false);
+  // Check if current thread is running
+  const isRunning = currentThreadId ? runningThreads.has(currentThreadId) : false;
 
   // Get messages for current thread
   const currentMessages = useMemo(
@@ -220,17 +242,19 @@ function ChatWithThreads({
     [currentThreadId, threads]
   );
 
-  // Convert user threads to thread list format
+  // Convert user threads to thread list format with loading state
   const threadList = activeThreads.map(thread => ({
     threadId: thread.id,
     status: "regular" as const,
     title: thread.title,
+    isLoading: runningThreads.has(thread.id),
   }));
 
   const archivedThreadList = archivedThreads.map(thread => ({
     threadId: thread.id,
     status: "archived" as const,
     title: thread.title,
+    isLoading: runningThreads.has(thread.id),
   }));
 
   const onAddToolResult = useCallback((options: AddToolResultOptions) => {
@@ -278,7 +302,7 @@ function ChatWithThreads({
 
     const updatedMessages = [...currentMessages, userMessage];
     setThreads(prev => new Map(prev).set(currentThreadId, updatedMessages));
-    setIsRunning(true);
+    setRunningThreads(prev => new Set(prev).add(currentThreadId));
 
     // Update thread activity
     updateThreadActivity(currentThreadId, userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : ''));
@@ -326,8 +350,44 @@ function ChatWithThreads({
             return new Map(prev).set(currentThreadId, updatedThreadMessages);
           });
         } else if (event.type === 'message') {
-          // Handle complete message (assistant text messages)
-          const message = event.content as ChatMessage;
+          // Handle complete message (assistant text messages and custom messages)
+          const messageData = event.content as any;
+          
+          // Check if this is a custom message (task update)
+          if (messageData.type === 'custom' && messageData.custom_data) {
+            const taskData = messageData.custom_data;
+            
+            const taskMessage: ChatMessage = {
+              id: `task-${taskData.run_id}`,
+              role: 'assistant',
+              content: '', // Empty content for custom messages
+              timestamp: Date.now(),
+              customData: { taskData }
+            };
+
+            setThreads(prev => {
+              const threadMessages = prev.get(currentThreadId) || [];
+              // Check if we already have this task update, replace if so
+              const existingIndex = threadMessages.findIndex(msg => 
+                msg.customData?.taskData?.run_id === taskData.run_id
+              );
+              
+              let updatedThreadMessages;
+              if (existingIndex !== -1) {
+                updatedThreadMessages = threadMessages.map((msg, idx) => 
+                  idx === existingIndex ? taskMessage : msg
+                );
+              } else {
+                updatedThreadMessages = [...threadMessages, taskMessage];
+              }
+              
+              return new Map(prev).set(currentThreadId, updatedThreadMessages);
+            });
+            
+            continue; // Continue processing the stream
+          }
+          
+          const message = messageData as ChatMessage;
           
           // If this is a new streaming message placeholder, reset content
           if (message.content === '') {
@@ -425,9 +485,13 @@ function ChatWithThreads({
         return new Map(prev).set(currentThreadId, errorMessages);
       });
     } finally {
-      setIsRunning(false);
+      setRunningThreads(prev => {
+        const next = new Set(prev);
+        next.delete(currentThreadId);
+        return next;
+      });
     }
-  }, [currentThreadId, currentMessages, userId, selectedAgentId, selectedModelId, serviceInfo, setThreads, updateThreadActivity, updateThreadTitle, userData]);
+  }, [currentThreadId, currentMessages, userId, selectedAgentId, selectedModelId, serviceInfo, setThreads, setRunningThreads, updateThreadActivity, updateThreadTitle, userData]);
 
   const threadListAdapter: ExternalStoreThreadListAdapter = {
     threadId: currentThreadId || '',

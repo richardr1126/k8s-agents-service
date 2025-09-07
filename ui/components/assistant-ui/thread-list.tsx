@@ -2,11 +2,13 @@ import type { FC } from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
+  useThreadListItem,
 } from "@assistant-ui/react";
-import { ArchiveIcon, PlusIcon } from "lucide-react";
+import { ArchiveIcon, PlusIcon, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { useThreadContext } from "@/components/custom-runtime-provider";
 
 export const ThreadList: FC = () => {
   return (
@@ -36,7 +38,10 @@ const ThreadListItem: FC = () => {
   return (
     <ThreadListItemPrimitive.Root className="data-active:bg-muted hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring flex items-center gap-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2">
       <ThreadListItemPrimitive.Trigger className="flex-grow px-3 py-2 text-start">
-        <ThreadListItemTitle />
+        <div className="flex items-center gap-2">
+          <ThreadListItemTitle />
+          <ThreadListItemLoading />
+        </div>
       </ThreadListItemPrimitive.Trigger>
       <ThreadListItemArchive />
     </ThreadListItemPrimitive.Root>
@@ -48,6 +53,21 @@ const ThreadListItemTitle: FC = () => {
     <p className="text-sm">
       <ThreadListItemPrimitive.Title fallback="New Chat" />
     </p>
+  );
+};
+
+const ThreadListItemLoading: FC = () => {
+  const { runningThreads } = useThreadContext();
+  const threadListItem = useThreadListItem();
+  
+  if (!threadListItem || !runningThreads.has(threadListItem.threadId)) {
+    return null;
+  }
+  
+  return (
+    <div className="flex items-center">
+      <Loader2 className="h-3 w-3 animate-spin" />
+    </div>
   );
 };
 
