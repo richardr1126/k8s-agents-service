@@ -7,11 +7,13 @@ import {
   AssistantRuntimeProvider,
   ExternalStoreAdapter,
   ExternalStoreThreadListAdapter,
-  AddToolResultOptions
+  AddToolResultOptions,
+  ToolCallMessagePart
 } from "@assistant-ui/react";
 import { ReactNode, useState, useCallback, useEffect, createContext, useContext, useMemo } from "react";
 import { apiClient } from "@/lib/frontend-api-client";
-import { ChatMessage, BackendServiceMetadata } from "@/lib/types";
+import { ChatMessage, BackendServiceMetadata, BackendMessage } from "@/lib/types";
+import { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
 import { useUrlState } from "@/hooks/use-url-state";
 import { generateThreadTitle } from "@/lib/thread-utils";
 import { UserProvider, useUser } from "@/components/user-provider";
@@ -27,7 +29,7 @@ const convertMessage = (message: ChatMessage): ThreadMessageLike => {
         type: "tool-call" as const,
         toolCallId: message.customData.taskData.run_id,
         toolName: "task_update",
-        args: { taskData: message.customData.taskData },
+        args: { taskData: message.customData.taskData } as ToolCallMessagePart["args"],
         result: undefined, // Task updates don't have results
       }
     ];
@@ -39,8 +41,7 @@ const convertMessage = (message: ChatMessage): ThreadMessageLike => {
         type: "tool-call" as const,
         toolCallId: toolCall.id,
         toolName: toolCall.name,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        args: toolCall.args as any, // AssistantUI expects ReadonlyJSONObject but our type is Record<string, unknown>
+        args: toolCall.args as ToolCallMessagePart["args"],
         result: toolCall.result,
       })),
       // Only add text content if it exists and is not empty
@@ -351,11 +352,17 @@ function ChatWithThreads({
           });
         } else if (event.type === 'message') {
           // Handle complete message (assistant text messages and custom messages)
-          const messageData = event.content as any;
+          const messageData = event.content as BackendMessage;
           
           // Check if this is a custom message (task update)
           if (messageData.type === 'custom' && messageData.custom_data) {
-            const taskData = messageData.custom_data;
+            const taskData = messageData.custom_data as {
+              name: string;
+              run_id: string;
+              state: "new" | "running" | "complete";
+              result?: "success" | "error" | null;
+              data: ReadonlyJSONObject;
+            };
             
             const taskMessage: ChatMessage = {
               id: `task-${taskData.run_id}`,
@@ -387,7 +394,7 @@ function ChatWithThreads({
             continue; // Continue processing the stream
           }
           
-          const message = messageData as ChatMessage;
+          const message = messageData as unknown as ChatMessage;
           
           // If this is a new streaming message placeholder, reset content
           if (message.content === '') {
@@ -417,7 +424,7 @@ function ChatWithThreads({
           }
         } else if (event.type === 'tool_call') {
           // Handle tool call - create a new "message" for the tool call
-          const toolCall = event.content as { id: string; name: string; args: Record<string, unknown> };
+          const toolCall = event.content as { id: string; name: string; args: ReadonlyJSONObject };
           const toolMessage: ChatMessage = {
             id: `tool-${toolCall.id}`,
             role: 'assistant',
@@ -426,7 +433,7 @@ function ChatWithThreads({
             toolCalls: [{
               id: toolCall.id,
               name: toolCall.name,
-              args: toolCall.args,
+              args: toolCall.args as ReadonlyJSONObject,
             }],
           };
 
@@ -437,7 +444,7 @@ function ChatWithThreads({
           });
         } else if (event.type === 'tool_result') {
           // Handle tool result - update the corresponding tool call message
-          const result = event.content as { toolCallId: string; result: unknown };
+          const result = event.content as { toolCallId: string; result: ReadonlyJSONValue };
           
           setThreads(prev => {
             const threadMessages = prev.get(currentThreadId) || [];
@@ -447,7 +454,7 @@ function ChatWithThreads({
                 return {
                   ...msg,
                   content: '', // Keep empty - let the ToolFallback component handle display
-                  toolCalls: msg.toolCalls?.map(tc => ({ ...tc, result: result.result })),
+                  toolCalls: msg.toolCalls?.map(tc => ({ ...tc, result: result.result as ReadonlyJSONValue })),
                 };
               }
               return msg;
