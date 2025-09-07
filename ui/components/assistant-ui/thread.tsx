@@ -99,7 +99,7 @@ const ThreadWelcome: FC = () => {
               exit={{ opacity: 0, y: 10 }}
               transition={{ delay: 0.5 }}
               // aui-thread-welcome-message-motion-1
-              className="text-2xl font-semibold"
+              className="text-lg md:text-2xl font-semibold"
             >
               Welcome
             </motion.div>
@@ -109,7 +109,7 @@ const ThreadWelcome: FC = () => {
               exit={{ opacity: 0, y: 10 }}
               transition={{ delay: 0.6 }}
               // aui-thread-welcome-message-motion-2
-              className="text-muted-foreground/65 text-2xl"
+              className="text-muted-foreground/65 text-lg md:text-2xl"
             >
               {welcomeMessage}
             </motion.div>
