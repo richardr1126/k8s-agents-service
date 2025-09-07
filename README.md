@@ -2,7 +2,7 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration.
+A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance.
 
 This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including dual Helm charts for service/UI separation, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
 
@@ -48,6 +48,14 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images for both service and streamlit components published to GitHub Container Registry
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
+
+### Resume & Portfolio Features
+
+1. **Resume Agent**: Default AI assistant that showcases professional background, skills, and project experience using RAG
+1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content for comprehensive information gathering
+1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, and responsive design
+1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
+1. **Smart Search**: Intelligent filtering and source attribution in resume and project searches
 
 ### ArgoCD Diagram
 
@@ -146,9 +154,16 @@ The repository is structured as follows:
 
 To customize the agent for your own use case:
 
-1. Add your new agent to the `src/agents` directory. You can copy `research_assistant.py` or `chatbot.py` and modify it to change the agent's behavior and tools.
+1. Add your new agent to the `src/agents` directory. You can copy `rag_assistant.py` (resume agent) or `web_rag_agent.py` and modify it to change the agent's behavior and tools.
 1. Import and add your new agent to the `agents` dictionary in `src/agents/agents.py`. Your agent can be called by `/<your_agent_name>/invoke` or `/<your_agent_name>/stream`.
-1. Adjust the Streamlit interface in `src/streamlit_app.py` to match your agent's capabilities.
+1. Adjust the Streamlit interface in `src/streamlit_app.py` and the Next.js UI in `ui/` to match your agent's capabilities.
+1. Update the `DEFAULT_AGENT` constant in `src/agents/agents.py` to set your preferred default agent.
+
+### Current Available Agents
+
+- **resume-agent** (default): Professional resume assistant that searches through resume information and project repositories
+- **web-rag-agent**: Web research assistant that can browse the internet and summarize articles
+- **chatbot**: Simple conversational agent for general purpose chat
 
 
 ### Database Configuration
@@ -171,6 +186,20 @@ The system supports three database options:
 - **YugabyteDB**: Distributed SQL with pgvector extensions (recommended)
 - **PostgreSQL**: Traditional PostgreSQL with pgvector extension  
 - **SQLite**: Local development and testing
+
+### Resume & Portfolio Data Setup
+
+The current implementation includes automated scripts for creating vector databases from resume and project data:
+
+- `scripts/create_resume_vectors.py`: Creates vector embeddings from resume data in `data/richard-resume/`
+- `data/richard-projects/`: Contains markdown files describing various projects
+- `data/richard-resume/`: Contains structured resume information (education, skills, experience)
+
+To adapt this for your own portfolio:
+
+1. Replace the content in `data/` directories with your own resume and project information
+2. Run the vector creation scripts to populate your knowledge base
+3. Update agent descriptions in `src/agents/agents.py` to reflect your professional background
 
 ### Handling Private Credential files
 

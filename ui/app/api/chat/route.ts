@@ -30,6 +30,14 @@ export async function POST(req: NextRequest) {
               if (event.type === 'message' && typeof event.content === 'object') {
                 const backendMessage = event.content as BackendMessage;
                 
+                // Handle custom messages (task updates)
+                if (backendMessage.type === 'custom' && backendMessage.custom_data) {
+                  // Forward custom messages directly - they'll be handled by the frontend
+                  const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'message', content: backendMessage })}\n\n`);
+                  controller.enqueue(chunk);
+                  continue;
+                }
+                
                 // Handle tool result messages - emit as separate tool result events
                 if (backendMessage.type === 'tool' && backendMessage.tool_call_id) {
                   const chunk = encoder.encode(`data: ${JSON.stringify({ 

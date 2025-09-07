@@ -81,6 +81,15 @@ export interface ChatMessage {
   timestamp: number;
   runId?: string;
   toolCalls?: ToolCall[];
+  customData?: {
+    taskData?: {
+      name: string;
+      run_id: string;
+      state: "new" | "running" | "complete";
+      result?: "success" | "error" | null;
+      data: Record<string, any>;
+    };
+  };
 }
 
 export interface ThreadInfo {

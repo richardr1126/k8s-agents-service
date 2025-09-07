@@ -59,7 +59,7 @@ def fetch_projects_from_json():
             
             # Add tags if available
             if project.get('tags'):
-                description_parts.append(f"Technologies: {', '.join(project['tags'])}")
+                description_parts.append(f"Technologies: {', '.join(tag.lower() for tag in project.get('tags', []))}")
             
             # Add links if available
             if project.get('link'):
@@ -79,7 +79,7 @@ def fetch_projects_from_json():
                     "collection": "projects",
                     "title": project.get('title', 'Unknown Project'),
                     "source": "https://richardr.dev/projects.json",
-                    "tags": project.get('tags', []),
+                    "tags": [tag.lower() for tag in project.get('tags', [])],
                     "link": project.get('link', ''),
                     "repo": project.get('repo', ''),
                     "demo": project.get('demo', ''),
@@ -122,7 +122,7 @@ def fetch_projects_from_json():
                                 "collection": "projects",
                                 "title": project.get('title', 'Unknown Project'),
                                 "source": "https://richardr.dev/projects.json",
-                                "tags": project.get('tags', []),
+                                "tags": [tag.lower() for tag in project.get('tags', [])],
                                 "link": project.get('link', ''),
                                 "repo": project.get('repo', ''),
                                 "demo": project.get('demo', ''),
