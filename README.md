@@ -48,6 +48,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images for both service and streamlit components published to GitHub Container Registry
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
+1. **Automated Cron Jobs**: Kubernetes CronJob support for scheduled tasks like vector database updates and maintenance
 
 ### Resume & Portfolio Features
 
@@ -56,6 +57,15 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, and responsive design
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
 1. **Smart Search**: Intelligent filtering and source attribution in resume and project searches
+
+### Automated Tasks & Cron Jobs
+
+1. **Scheduled Vector Updates**: Automated cron job that refreshes vector databases with latest resume and project data
+1. **Google Drive Integration**: Automatically syncs resume data from public Google Drive documents
+1. **GitHub Repository Scanning**: Fetches and processes README files from project repositories for up-to-date documentation
+1. **Configurable Scheduling**: Flexible cron schedule configuration (default: daily at 7 AM UTC)
+1. **Dedicated Cron Container**: Purpose-built Docker image with Chromium and Playwright for web scraping tasks
+1. **Kubernetes CronJob Management**: Full Kubernetes CronJob lifecycle with history limits, concurrency policies, and failure handling
 
 ### ArgoCD Diagram
 
@@ -128,7 +138,8 @@ The repository is structured as follows:
 - `helm/manual_deploy.sh`: Deployment script with YugabyteDB setup
 - `helm/create_secrets.sh`: Kubernetes secrets management script for both service and streamlit components
 - `helm/update_dependencies.sh`: Helm chart dependency management script for subchart updates
-- `docker/`: Multi-architecture Dockerfiles for both service and streamlit builds
+- `docker/`: Multi-architecture Dockerfiles for service, streamlit, and cron job builds
+- `scripts/create_resume_vectors_cron.py`: Automated vector database update script for scheduled execution
 
 ## Setup and Usage
 
@@ -294,6 +305,33 @@ This architecture provides:
 - **Separation of Concerns**: UI and backend can be managed, updated, and troubleshot independently  
 - **Deployment Flexibility**: Deploy only the backend for API-only deployments using `--set agents-streamlit.enabled=false`
 - **Enhanced Security**: Different ingress rules and network policies can be applied to each component
+
+#### Automated Tasks with CronJobs
+
+The deployment includes a Kubernetes CronJob for automated maintenance tasks:
+
+**Cron Job Features:**
+- **Automated Vector Database Updates**: Scheduled refresh of resume and project data
+- **Google Drive Integration**: Syncs data from public Google Drive documents using `GDRIVE_DOC_ID`
+- **Web Scraping**: Uses Chromium and Playwright to extract data from portfolio websites
+- **GitHub Repository Processing**: Automatically fetches and processes README files from project repositories
+
+**Configuration:**
+```yaml
+# helm/agents-service/values.yaml
+cronjob:
+  enabled: true
+  schedule: "0 7 * * *"  # Daily at 7 AM UTC
+  concurrencyPolicy: Forbid
+  image:
+    repository: ghcr.io/richardr1126/k8s-agents-cron
+    tag: "latest"
+```
+
+**Required Environment Variables:**
+- `GDRIVE_DOC_ID`: Google Drive document ID for resume data
+- All database connection variables for vector storage
+- `AZURE_OPENAI_API_KEY`: For generating embeddings
 
 #### Database Support
 
