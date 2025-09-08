@@ -1,0 +1,64 @@
+FROM python:3.13-slim
+
+WORKDIR /app
+
+ENV UV_PROJECT_ENVIRONMENT="/usr/local/"
+ENV UV_COMPILE_BYTECODE=1
+
+# Install system dependencies for Chromium (Debian 13 Trixie compatible)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core GLib libraries (includes libgobject and libgio)
+    libglib2.0-0t64 \
+    # NSS and related
+    libnspr4 \
+    libnss3 \
+    # D-Bus
+    libdbus-1-3 \
+    # ATK accessibility
+    libatk1.0-0t64 \
+    libatk-bridge2.0-0t64 \
+    libatspi2.0-0t64 \
+    # System libraries
+    libexpat1 \
+    # X11 libraries
+    libx11-6 \
+    libxcomposite1 \
+    libxdamage1 \
+    libxext6 \
+    libxfixes3 \
+    libxrandr2 \
+    libxcb1 \
+    libxkbcommon0 \
+    # Graphics
+    libgbm1 \
+    # Audio
+    libasound2t64 \
+    # Additional for Chromium
+    libdrm2 \
+    libxss1 \
+    # Missing libraries for Chromium (Debian 13 names)
+    libcups2t64 \
+    libcairo2 \
+    libpango-1.0-0 \
+    # Cleanup
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# Copy Python dependencies
+COPY pyproject.toml .
+COPY uv.lock .
+RUN pip install --no-cache-dir uv
+RUN uv sync --frozen --no-install-project
+
+# Install Playwright browsers only (system deps already installed)
+RUN python -m playwright install chromium
+
+# Copy application code
+COPY src/agents/ ./agents/
+COPY src/core/ ./core/
+COPY src/memory/ ./memory/
+COPY src/schema/ ./schema/
+COPY scripts/ ./scripts/
+
+# Default command for cron job
+CMD ["python", "scripts/create_resume_vectors_cron.py"]

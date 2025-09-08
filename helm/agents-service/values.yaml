@@ -2,7 +2,7 @@
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
 
-# This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+# more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 2
 
 envFrom:
@@ -22,6 +22,36 @@ imagePullSecrets: []
 # This is to override the chart name.
 nameOverride: ""
 fullnameOverride: ""
+
+# This will set the configuration for CronJob
+cronjob:
+  enabled: true
+  # Test schedule - run every 2 minutes for debugging
+  # schedule: "*/2 * * * *"
+  # Run every day at 1:30 AM UTC (original schedule)
+  # schedule: "53 1 * * *"
+  # Run every day at 7 AM UTC
+  schedule: "0 7 * * *"
+  timeZone: "UTC"
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 3
+  restartPolicy: OnFailure
+  # Add starting deadline to help with timing issues
+  startingDeadlineSeconds: 300
+  # Use the cron-specific image
+  image:
+    repository: ghcr.io/richardr1126/k8s-agents-cron
+    tag: "latest"
+    pullPolicy: Always
+  # No need to override command/args - Dockerfile sets the correct CMD
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
 
 # This section builds out the service account more information can be found here: https://kubernetes.io/docs/concepts/security/service-accounts/
 serviceAccount:
@@ -140,6 +170,8 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+
 
 # Configuration for the agents-streamlit subchart
 agents-streamlit:
