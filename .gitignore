@@ -239,4 +239,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# K8s specific files (but allow cron scripts)
 *__k8s__*

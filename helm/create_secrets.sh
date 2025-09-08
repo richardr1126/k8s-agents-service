@@ -26,7 +26,7 @@ source "$ENV_FILE"
 set +a  # stop automatically exporting
 
 # Validate that required variables are set
-required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY" "AUTH_SECRET" "TAVILY_API_KEY")
+required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY" "AUTH_SECRET" "TAVILY_API_KEY" "GDRIVE_DOC_ID")
 for var in "${required_vars[@]}"; do
   if [ -z "${!var}" ]; then
     echo "Error: $var is not set in .env file"
@@ -62,7 +62,8 @@ kubectl create secret generic app-secrets \
   --from-literal=AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
   --from-literal=AZURE_OPENAI_ENDPOINT="https://k8s-agents-service.openai.azure.com/" \
   --from-literal=AZURE_OPENAI_API_VERSION="2025-04-01-preview" \
-  --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4.1": "gpt-4.1", "gpt-5-chat": "gpt-5-chat"}'
+  --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4.1": "gpt-4.1", "gpt-5-chat": "gpt-5-chat"}' \
+  --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}"
 
 echo "Creating streamlit-secrets..."
 kubectl create secret generic streamlit-secrets \
