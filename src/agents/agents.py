@@ -14,7 +14,7 @@ from agents.research_assistant import research_assistant
 from agents.web_rag_agent import web_rag_agent
 from schema import AgentInfo
 
-DEFAULT_AGENT = "resume-agent"
+DEFAULT_AGENT = "auto-router"
 
 # Type alias to handle LangGraph's different agent patterns
 # - @entrypoint functions return Pregel
@@ -33,6 +33,10 @@ agents: dict[str, Agent] = {
     # "research-assistant": Agent(
     #     description="A research assistant with web search and calculator.", graph=research_assistant
     # ),
+    "auto-router": Agent(
+        description="Hello! I'm an agent that routes between Richard's resume assistant or a web research agent.",
+        graph=langgraph_supervisor_agent
+    ),
     "resume-agent": Agent(
         description="""Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
         I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!""",
@@ -45,9 +49,6 @@ agents: dict[str, Agent] = {
     ),
     # "command-agent": Agent(description="A command agent.", graph=command_agent),
     # "bg-task-agent": Agent(description="A background task agent.", graph=bg_task_agent),
-    # "langgraph-supervisor-agent": Agent(
-    #     description="A langgraph supervisor agent", graph=langgraph_supervisor_agent
-    # ),
     # "interrupt-agent": Agent(description="An agent the uses interrupts.", graph=interrupt_agent),
     # "knowledge-base-agent": Agent(
     #     description="A retrieval-augmented generation agent using Amazon Bedrock Knowledge Base",

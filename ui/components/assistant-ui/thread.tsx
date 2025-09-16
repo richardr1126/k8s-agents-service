@@ -5,6 +5,7 @@ import {
   ActionBarPrimitive,
   BranchPickerPrimitive,
   ErrorPrimitive,
+  useMessage,
 } from "@assistant-ui/react";
 import type { FC } from "react";
 import {
@@ -13,7 +14,6 @@ import {
   CopyIcon,
   CheckIcon,
   PencilIcon,
-  RefreshCwIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   Square,
@@ -38,7 +38,7 @@ export const Thread: FC = () => {
       }}
     >
       {/* aui-thread-viewport */}
-      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-6 overflow-y-scroll">
+      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-1 overflow-y-scroll">
         <ThreadWelcome />
 
         <ThreadPrimitive.Messages
@@ -302,13 +302,25 @@ const AssistantMessage: FC = () => {
 };
 
 const AssistantActionBar: FC = () => {
+  const message = useMessage();
+  
+  // Check if message has any text content (not just tool calls)
+  const hasTextContent = message.content.some(part => 
+    part.type === 'text' && part.text.trim().length > 0
+  );
+  
+  // Don't show action bar if message only contains tool calls
+  if (!hasTextContent) {
+    return null;
+  }
+
   return (
     <ActionBarPrimitive.Root
       hideWhenRunning
       autohide="not-last"
       autohideFloat="single-branch"
       // aui-assistant-action-bar-root
-      className="text-muted-foreground data-floating:bg-background col-start-3 row-start-2 mt-3 ml-3 flex gap-1 data-floating:absolute data-floating:mt-2 data-floating:rounded-md data-floating:border data-floating:p-1 data-floating:shadow-sm"
+      className="text-muted-foreground data-floating:bg-background col-start-3 row-start-2 mt-2 ml-3 flex gap-1 data-floating:absolute data-floating:mt-1 data-floating:rounded-md data-floating:border data-floating:p-1 data-floating:shadow-sm"
     >
       <ActionBarPrimitive.Copy asChild>
         <TooltipIconButton tooltip="Copy">
@@ -320,11 +332,6 @@ const AssistantActionBar: FC = () => {
           </MessagePrimitive.If>
         </TooltipIconButton>
       </ActionBarPrimitive.Copy>
-      <ActionBarPrimitive.Reload asChild>
-        <TooltipIconButton tooltip="Refresh">
-          <RefreshCwIcon />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Reload>
     </ActionBarPrimitive.Root>
   );
 };

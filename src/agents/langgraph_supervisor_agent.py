@@ -1,57 +1,34 @@
-from langgraph.prebuilt import create_react_agent
 from langgraph_supervisor import create_supervisor
 
 from core import get_model, settings
+from agents.rag_assistant import rag_assistant
+from agents.web_rag_agent import web_rag_agent
 
 model = get_model(settings.DEFAULT_MODEL)
 
+# Configure the resume agent (rag_assistant) with appropriate settings
+# Note: Don't pre-configure here, let the supervisor pass through the config
+resume_agent = rag_assistant
 
-def add(a: float, b: float) -> float:
-    """Add two numbers."""
-    return a + b
-
-
-def multiply(a: float, b: float) -> float:
-    """Multiply two numbers."""
-    return a * b
-
-
-def web_search(query: str) -> str:
-    """Search the web for information."""
-    return (
-        "Here are the headcounts for each of the FAANG companies in 2024:\n"
-        "1. **Facebook (Meta)**: 67,317 employees.\n"
-        "2. **Apple**: 164,000 employees.\n"
-        "3. **Amazon**: 1,551,000 employees.\n"
-        "4. **Netflix**: 14,000 employees.\n"
-        "5. **Google (Alphabet)**: 181,269 employees."
-    )
-
-
-math_agent = create_react_agent(
-    model=model,
-    tools=[add, multiply],
-    name="math_expert",
-    prompt="You are a math expert. Always use one tool at a time.",
-).with_config(tags=["skip_stream"])
-
-research_agent = create_react_agent(
-    model=model,
-    tools=[web_search],
-    name="research_expert",
-    prompt="You are a world class researcher with access to web search. Do not do any math.",
-).with_config(tags=["skip_stream"])
+# Configure the web RAG agent with appropriate settings  
+# Note: Don't pre-configure here, let the supervisor pass through the config
+web_research_agent = web_rag_agent
 
 # Create supervisor workflow
 workflow = create_supervisor(
-    [research_agent, math_agent],
+    [resume_agent, web_research_agent],
     model=model,
     prompt=(
-        "You are a team supervisor managing a research expert and a math expert. "
-        "For current events, use research_agent. "
-        "For math problems, use math_agent."
+        "You are a team supervisor managing a resume agent and a web research agent. "
+        "Use the resume agent for questions about Richard's professional background, skills, "
+        "experience, projects, education, or career-related information. "
+        "Use the web research agent for questions that require current information from the web, "
+        "recent news, current events, real-time data, or any information that needs to be searched online. "
+        "Choose the most appropriate agent based on the nature of the user's question. Don't add messages when agents hand back."
     ),
-    add_handoff_back_messages=False,
+    add_handoff_back_messages=False,  # Don't add messages when agents hand back
+    output_mode='last_message',  # Only return the last message, not full history
+    supervisor_name="auto-router",  # Explicit name for the supervisor
 )
 
 langgraph_supervisor_agent = workflow.compile()

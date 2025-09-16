@@ -160,7 +160,37 @@ class WebRagState(MessagesState, total=False):
 
 def get_collection_name_from_thread(config: RunnableConfig) -> str:
     """Create a collection name based on the thread_id for persistence."""
-    thread_id = config["configurable"].get("thread_id", "default")
+    # Try multiple ways to get thread_id for better supervisor compatibility
+    thread_id = None
+    
+    # First try the standard configurable location
+    if config.get("configurable"):
+        thread_id = config["configurable"].get("thread_id")
+    
+    # If not found, try other possible locations in the config
+    if not thread_id:
+        # Check if thread_id is in the top level of config
+        thread_id = config.get("thread_id")
+    
+    # Check if there's a parent thread_id (in case supervisor wraps it)
+    if not thread_id and config.get("configurable"):
+        thread_id = config["configurable"].get("parent_thread_id")
+    
+    # Check run_id as a fallback for session consistency
+    if not thread_id:
+        run_id = config.get("run_id")
+        if run_id:
+            # Use a hash of run_id to create a consistent thread-like identifier
+            import hashlib
+            thread_id = hashlib.md5(str(run_id).encode()).hexdigest()[:8]
+    
+    # Final fallback
+    if not thread_id:
+        thread_id = "default"
+    
+    # Debug logging to help identify thread_id issues
+    logger.info(f"Web RAG Agent - Thread ID: {thread_id}, Full Config: {config}")
+    
     return f"web_search_{thread_id}"
 
 
@@ -627,4 +657,4 @@ agent.add_edge("web_search_and_store", "rag_response")
 agent.add_edge("rag_response", END)
 
 # Compile the graph
-web_rag_agent = agent.compile()
+web_rag_agent = agent.compile(name="web-rag-agent")
