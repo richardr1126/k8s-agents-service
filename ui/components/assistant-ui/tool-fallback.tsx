@@ -47,7 +47,7 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   
   // Check if this is a transfer tool and use the custom component
-  if (toolName.startsWith("transfer_to_")) {
+  if (toolName.startsWith("call_")) {
     return <TransferToolFallback {...props} />;
   }
   

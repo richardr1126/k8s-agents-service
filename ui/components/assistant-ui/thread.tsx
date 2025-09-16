@@ -38,7 +38,7 @@ export const Thread: FC = () => {
       }}
     >
       {/* aui-thread-viewport */}
-      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-1 overflow-y-scroll">
+      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll">
         <ThreadWelcome />
 
         <ThreadPrimitive.Messages
@@ -266,12 +266,37 @@ const MessageError: FC = () => {
   );
 };
 
+const ToolFallbackWrapper: FC<React.ComponentProps<typeof ToolFallback>> = (props) => {
+  const message = useMessage();
+  
+  // Check if message has text content (to add margin below tools)
+  const hasTextContent = message.content.some(part => 
+    part.type === 'text' && part.text.trim().length > 0
+  );
+
+  return (
+    <div className={cn(hasTextContent && "mb-6")}>
+      <ToolFallback {...props} />
+    </div>
+  );
+};
+
 const AssistantMessage: FC = () => {
+  const message = useMessage();
+  
+  // Check if message has text content to add margin to the message
+  const hasTextContent = message.content.some(part => 
+    part.type === 'text' && part.text.trim().length > 0
+  );
+
   return (
     <MessagePrimitive.Root asChild>
       <motion.div
         // aui-assistant-message-root
-        className="relative mx-auto grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] px-[var(--thread-padding-x)] py-4"
+        className={cn(
+          "relative mx-auto grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] px-[var(--thread-padding-x)] py-4",
+          hasTextContent && "mb-4"
+        )}
         initial={{ y: 5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         data-role="assistant"
@@ -282,11 +307,11 @@ const AssistantMessage: FC = () => {
         </div>
 
         {/* aui-assistant-message-content */}
-        <div className="text-foreground col-span-2 col-start-2 row-start-1 ml-4 leading-7 break-words">
+        <div className="text-foreground col-span-2 col-start-2 row-start-1 ml-4 leading-5 break-words">
           <MessagePrimitive.Content
             components={{
               Text: MarkdownText,
-              tools: { Fallback: ToolFallback },
+              tools: { Fallback: ToolFallbackWrapper },
             }}
           />
           <MessageError />

@@ -22,10 +22,17 @@ workflow = create_supervisor(
         "You are a team supervisor managing a resume agent and a web research agent. "
         "Use the resume agent for questions about Richard's professional background, skills, "
         "experience, projects, education, or career-related information. "
-        "Use the web research agent for questions that require current information from the web, "
+        "Use the web rag agent for questions that require current information from the web, "
         "recent news, current events, real-time data, or any information that needs to be searched online. "
-        "Choose the most appropriate agent based on the nature of the user's question. Don't add messages when agents hand back."
+        "Choose the most appropriate agent based on the nature of the user's question."
+        "\n\n"
+        "Use these available tools:\n"
+        "- call_resume-agent: For questions about Richard's resume, skills, experience, projects, and career.\n"
+        "- call_web-rag-agent: For questions that require up-to-date information from the web or current events.\n\n"
+        "When a user query is broad or ambiguous, decompose it into specific sub-questions and assign them to the appropriate agents. "
+        "Ensure that each sub-question is clear and can be effectively addressed by the selected agent."
     ),
+    handoff_tool_prefix="call_",
     add_handoff_back_messages=False,  # Don't add messages when agents hand back
     output_mode='last_message',  # Only return the last message, not full history
     supervisor_name="auto-router",  # Explicit name for the supervisor
