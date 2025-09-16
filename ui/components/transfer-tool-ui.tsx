@@ -42,9 +42,9 @@ const getAgentDescription = (agentName: string) => {
 export const TransferToolFallback: ToolCallContentPartComponent = ({
   toolName,
 }) => {
-  // Extract agent name from tool name (e.g., "transfer_to_web-rag-agent" -> "web-rag-agent")
-  const agentName = toolName.startsWith("transfer_to_") 
-    ? toolName.replace("transfer_to_", "")
+  // Extract agent name from tool name (e.g., "call_web-rag-agent" -> "web-rag-agent")
+  const agentName = toolName.startsWith("call_") 
+    ? toolName.replace("call_", "")
     : toolName;
   
   return (
