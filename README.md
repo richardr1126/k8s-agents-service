@@ -2,7 +2,9 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance.
+A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase s### Next.js Chat UI (`ui/`)
+
+The repository now contains a second, production-focused chat interface built with **Next.js 15**, **React 19**, **assistant-ui**, and **Tailwind CSS 4**. This UI features enhanced tool visualization with contextual icons, transfer tool components for agent handoffs, and improved user experience with intelligent routing feedback. The interface is designed to be the primary deployable frontend, while the existing **Streamlit app remains a lightweight reference interface for local development and quick experimentation**.em with intelligent RAG-based assistance.
 
 This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including dual Helm charts for service/UI separation, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
 
@@ -27,11 +29,11 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 
 ### Core Features (from original toolkit)
 
-1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.3 features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor`.
+1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.3 features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor` with intelligent auto-routing capabilities.
 1. **FastAPI Service**: Serves the agent with both streaming and non-streaming endpoints.
 1. **Advanced Streaming**: A novel approach to support both token-based and message-based streaming.
 1. **Streamlit Interface (Local Dev UI)**: Simple reference UI for local testing & debugging (kept intentionally lightweight).
-1. **Next.js Chat UI (Production-Focused)**: A modern React/Next.js application in `ui/` designed for deployment (assistant-ui based, theming, better UX, persistent threads coming soon).
+1. **Next.js Chat UI (Production-Focused)**: A modern React/Next.js application in `ui/` designed for deployment
 1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
@@ -52,9 +54,11 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 
 ### Resume & Portfolio Features
 
-1. **Resume Agent**: Default AI assistant that showcases professional background, skills, and project experience using RAG
+1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between specialized agents based on context
+1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
 1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content for comprehensive information gathering
-1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, and responsive design
+1. **Enhanced Tool Communication**: Improved agent handoff system with visual UI components and contextual routing
+1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, and enhanced tool visualization
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
 1. **Smart Search**: Intelligent filtering and source attribution in resume and project searches
 
@@ -168,11 +172,13 @@ To customize the agent for your own use case:
 1. Add your new agent to the `src/agents` directory. You can copy `rag_assistant.py` (resume agent) or `web_rag_agent.py` and modify it to change the agent's behavior and tools.
 1. Import and add your new agent to the `agents` dictionary in `src/agents/agents.py`. Your agent can be called by `/<your_agent_name>/invoke` or `/<your_agent_name>/stream`.
 1. Adjust the Streamlit interface in `src/streamlit_app.py` and the Next.js UI in `ui/` to match your agent's capabilities.
-1. Update the `DEFAULT_AGENT` constant in `src/agents/agents.py` to set your preferred default agent.
+1. Update the `DEFAULT_AGENT` constant in `src/agents/agents.py` to set your preferred default agent (currently set to "auto-router" for intelligent routing).
+1. For supervisor agents, configure the routing logic in `langgraph_supervisor_agent.py` to define how queries should be distributed between your specialized agents.
 
 ### Current Available Agents
 
-- **resume-agent** (default): Professional resume assistant that searches through resume information and project repositories
+- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent and web research agent based on question context
+- **resume-agent**: Professional resume assistant that searches through resume information and project repositories
 - **web-rag-agent**: Web research assistant that can browse the internet and summarize articles
 - **chatbot**: Simple conversational agent for general purpose chat
 
@@ -480,21 +486,6 @@ OPENAI_API_KEY=sk-...               # Optional: only needed for fallback client-
 ```
 
 If you're running the Docker composition, the default `BACKEND_URL` may be `http://localhost:8080` (FastAPI inside compose is published to host). Adjust if reverse proxies / ingress paths are in front of the service.
-
-### Planned (Upcoming) Enhancements
-
-Planned roadmap items for the Next.js UI integration:
-- Helm subchart for Next.js UI (parallel to current `agents-streamlit` chart)
-- Environment variable wiring + optional OAuth / header auth passthrough
-- Persistent thread storage adapter (cloud / Postgres / pgvector-backed)
-- Observability hooks (LangSmith events surfaced in UI)
-- Light/dark theme customization surface
-
-### Migration Notes
-
-Until the Next.js Helm chart lands, deployments that need a web UI via the provided charts should continue using Streamlit. You can still run the Next.js UI independently (e.g., Vercel / container / static export + edge runtime) so long as it can reach the FastAPI service endpoint.
-
-If you do not need Streamlit at all, you can simply omit launching it locally and rely solely on the Next.js interface.
 
 ---
 
