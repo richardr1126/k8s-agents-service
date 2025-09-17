@@ -12,7 +12,10 @@ import { AgentSelect } from "@/components/agent-select";
 import { ModelSelect } from "@/components/model-select";
 import { CustomRuntimeProvider, useThreadContext } from "@/components/custom-runtime-provider";
 import { TaskToolUI } from "@/components/task-ui";
-import { Suspense } from "react";
+import { UserProvider } from "@/components/auth-user-provider";
+import { useSession } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
+import { Suspense, useEffect } from "react";
 
 function AssistantHeader() {
   const {
@@ -44,23 +47,52 @@ function AssistantHeader() {
   );
 }
 
-function AssistantContent() {
+function AuthenticatedContent() {
   return (
-    <CustomRuntimeProvider>
-      <SidebarProvider>
-        <div className="flex h-dvh w-full pr-0.5">
-          <AppSidebar />
-          <SidebarInset>
-            <AssistantHeader />
-            <div className="flex-1 overflow-hidden">
-              <Thread />
-              <TaskToolUI />
-            </div>
-          </SidebarInset>
-        </div>
-      </SidebarProvider>
-    </CustomRuntimeProvider>
+    <UserProvider>
+      <CustomRuntimeProvider>
+        <SidebarProvider>
+          <div className="flex h-dvh w-full pr-0.5">
+            <AppSidebar />
+            <SidebarInset>
+              <AssistantHeader />
+              <div className="flex-1 overflow-hidden">
+                <Thread />
+                <TaskToolUI />
+              </div>
+            </SidebarInset>
+          </div>
+        </SidebarProvider>
+      </CustomRuntimeProvider>
+    </UserProvider>
   );
+}
+
+function AssistantContent() {
+  const { data: session, isPending } = useSession();
+  const router = useRouter();
+
+  // Clear URL parameters when not authenticated
+  useEffect(() => {
+    if (!isPending && !session) {
+      // Clear any thread parameters from URL and redirect to signin
+      router.push('/signin');
+    }
+  }, [session, isPending, router]);
+
+  if (isPending) {
+    return (
+      <div className="flex h-dvh w-full items-center justify-center">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return null; // Will redirect to signin via useEffect
+  }
+
+  return <AuthenticatedContent />;
 }
 
 export const Assistant = () => {
