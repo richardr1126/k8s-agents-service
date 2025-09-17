@@ -369,7 +369,7 @@ export function UserProvider({ children }: UserProviderProps) {
         isCreatingDefaultThreadRef.current = false;
       };
     }
-  }, [isLoading, session?.user?.id, userData?.threads.length, createNewThread]);
+  }, [isLoading, session?.user?.id, userData, createNewThread]);
 
   // Switch to a different thread
   const switchToThread = useCallback((threadId: string) => {
@@ -443,8 +443,9 @@ export function UserProvider({ children }: UserProviderProps) {
 
   // Update thread activity with optimistic updates
   const updateThreadActivity = useCallback(async (threadId: string, lastMessage?: string) => {
-    // Store original lastMessage for rollback
-    const originalMessage = userDataRef.current?.threads.find(t => t.id === threadId)?.lastMessage;
+    // Store original data for rollback
+    const originalThread = userDataRef.current?.threads.find(t => t.id === threadId);
+    const newTimestamp = Date.now();
     
     // Optimistically update local state
     setUserData(prev => {
@@ -452,7 +453,7 @@ export function UserProvider({ children }: UserProviderProps) {
       return {
         ...prev,
         threads: prev.threads.map(t => 
-          t.id === threadId ? { ...t, lastMessage, timestamp: Date.now() } : t
+          t.id === threadId ? { ...t, lastMessage, timestamp: newTimestamp } : t
         ),
       };
     });
@@ -460,36 +461,40 @@ export function UserProvider({ children }: UserProviderProps) {
     pendingOperationsRef.current.set(threadId, 'update');
 
     try {
-      const result = await apiCall('update', { id: threadId, lastMessage });
+      const result = await apiCall('update', { id: threadId, lastMessage, timestamp: newTimestamp });
       if (result?.success) {
         pendingOperationsRef.current.delete(threadId);
         return true;
       } else {
         // Rollback on failure
-        setUserData(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            threads: prev.threads.map(t => 
-              t.id === threadId ? { ...t, lastMessage: originalMessage } : t
-            ),
-          };
-        });
+        if (originalThread) {
+          setUserData(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              threads: prev.threads.map(t => 
+                t.id === threadId ? originalThread : t
+              ),
+            };
+          });
+        }
         pendingOperationsRef.current.delete(threadId);
         return false;
       }
     } catch (error) {
       console.error('Error updating thread activity:', error);
       // Rollback on error
-      setUserData(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          threads: prev.threads.map(t => 
-            t.id === threadId ? { ...t, lastMessage: originalMessage } : t
-          ),
-        };
-      });
+      if (originalThread) {
+        setUserData(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            threads: prev.threads.map(t => 
+              t.id === threadId ? originalThread : t
+            ),
+          };
+        });
+      }
       pendingOperationsRef.current.delete(threadId);
       return false;
     }
@@ -669,7 +674,7 @@ export function UserProvider({ children }: UserProviderProps) {
       pendingOperationsRef.current.delete(threadId);
       return false;
     }
-  }, [apiCall, userData?.currentThreadId, createNewThread]);
+  }, [apiCall]);
 
 
 
@@ -694,7 +699,7 @@ export function UserProvider({ children }: UserProviderProps) {
     }, SYNC_INTERVAL);
     
     return () => clearInterval(interval);
-  }, [session?.user?.id, userData?.threads?.length, fetchThreads]);
+  }, [session?.user?.id, userData, fetchThreads]);
 
   // Computed values
   const activeThreads = userData?.threads || [];
