@@ -10,7 +10,7 @@ A modern, production-ready chat interface built with **Next.js 15**, **React 19*
 - **🛠️ Tool Visualization**: Rich tool call displays with contextual icons
 - **📱 Mobile Responsive**: Optimized for desktop, tablet, and mobile devices
 - **🔐 Authentication**: Secure user authentication with session management
-- **💬 Thread Management**: Create, archive, and manage conversation threads
+- **💬 Thread Management**: Create, delete, and manage conversation threads with complete data cleanup
 - **⚡ Optimistic Updates**: Instant UI feedback with background sync
 - **🎯 Agent Routing**: Intelligent supervisor agent with automatic routing
 
@@ -102,7 +102,7 @@ FastAPI Backend Service
 ### State Management
 
 - **Service Info**: Shared context prevents duplicate API calls for agent/model data
-- **User & Threads**: Optimistic updates with background database synchronization
+- **User & Threads**: Optimistic updates with background database synchronization and complete thread deletion
 - **Chat Messages**: Real-time streaming with message history persistence
 - **Authentication**: Session-based auth with automatic token refresh
 
@@ -165,6 +165,14 @@ Tool calls are automatically rendered with contextual icons. To add custom tool 
 
 1. Add tool icons to `components/ui/tool-fallback.tsx`
 2. Implement custom rendering in `components/assistant-ui/thread.tsx`
+
+### Thread Management
+
+The UI implements complete thread deletion functionality:
+
+- **Frontend**: Removes thread metadata from Neon database
+- **Backend**: Deletes conversation memory and long-term storage data
+- **UI**: Provides confirmation dialogs and optimistic updates with rollback on failure
 
 ## 🚀 Deployment
 

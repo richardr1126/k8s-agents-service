@@ -99,7 +99,6 @@ export interface ThreadInfo {
   title: string;
   lastMessage?: string;
   timestamp: number;
-  archived?: boolean;
   agentId?: string;
   modelId?: string;
 }

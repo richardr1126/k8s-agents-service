@@ -25,6 +25,8 @@ from schema import (
     ChatHistory,
     ChatHistoryInput,
     ChatMessage,
+    DeleteThreadInput,
+    DeleteThreadResponse,
     Feedback,
     FeedbackResponse,
     ServiceMetadata,
@@ -424,6 +426,53 @@ def history(input: ChatHistoryInput) -> ChatHistory:
     except Exception as e:
         logger.error(f"An exception occurred: {e}")
         raise HTTPException(status_code=500, detail="Unexpected error")
+
+
+@router.delete("/thread")
+async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
+    """
+    Delete a thread and all its associated data.
+    
+    This deletes the thread from the checkpointer (conversation memory)
+    and store (long-term memory). Frontend should handle UI state cleanup.
+    """
+    try:
+        # Get the default agent to access checkpointer and store
+        agent: AgentGraph = get_agent(DEFAULT_AGENT)
+        
+        if not agent.checkpointer:
+            raise HTTPException(status_code=500, detail="Checkpointer not available")
+        
+        # Delete from checkpointer (conversation memory) using built-in method
+        try:
+            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver, AsyncMongoDBSaver) 
+            # support the adelete_thread method for proper thread deletion
+            await agent.checkpointer.adelete_thread(input.thread_id)
+            logger.info(f"Successfully deleted thread {input.thread_id} from checkpointer")
+        except Exception as e:
+            logger.error(f"Error deleting thread {input.thread_id} from checkpointer: {e}")
+            # Fail the operation if checkpointer deletion fails since this is the primary data
+            raise HTTPException(status_code=500, detail=f"Failed to delete thread from checkpointer: {str(e)}")
+        
+        # Delete from store (long-term memory)
+        try:
+            if agent.store and hasattr(agent.store, 'adelete'):
+                # Delete any store data associated with this thread
+                await agent.store.adelete(namespace=["threads", input.thread_id])
+                logger.info(f"Successfully deleted thread {input.thread_id} from store")
+            elif agent.store:
+                logger.info(f"Store does not support deletion for thread {input.thread_id}")
+        except Exception as e:
+            logger.warning(f"Error deleting thread {input.thread_id} from store: {e}")
+            # Don't fail the entire operation if store deletion fails since store is optional
+        
+        return DeleteThreadResponse()
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error deleting thread {input.thread_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete thread")
 
 
 @app.get("/health")
