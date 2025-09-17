@@ -32,8 +32,8 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.3 features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor` with intelligent auto-routing capabilities.
 1. **FastAPI Service**: Serves the agent with both streaming and non-streaming endpoints.
 1. **Advanced Streaming**: A novel approach to support both token-based and message-based streaming.
-1. **Streamlit Interface (Local Dev UI)**: Simple reference UI for local testing & debugging (kept intentionally lightweight).
-1. **Next.js Chat UI (Production-Focused)**: A modern React/Next.js application in `ui/` designed for deployment
+1. **Streamlit Interface**: Simple reference UI for local testing & debugging (kept intentionally lightweight).
+1. **Next.js Chat UI**: Modern production-focused React/Next.js application - [see UI README](ui/README.md)
 1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
@@ -381,13 +381,12 @@ For local development, we recommend using [docker compose watch](https://docs.do
    cd ui
    pnpm install  # or npm/yarn
    cp .env.example .env.local
-   # Adjust BACKEND_URL if your FastAPI service runs somewhere else
+   # Adjust environment variables as needed - see ui/README.md
    pnpm dev
    ```
    The Next.js app will be available at `http://localhost:3000`.
 
 6. The agent service API will be available at `http://0.0.0.0:8080`. You can also use the OpenAPI docs at `http://0.0.0.0:8080/redoc`.
-   - When using the Next.js UI, set `BACKEND_URL` (in `ui/.env.local`) to this base URL.
 
 7. Use `docker compose down` to stop the services.
 
@@ -453,41 +452,6 @@ The following are projects that drew code or inspiration from [JoshuaC215's orig
 - **[raushan-in/dapa](https://github.com/raushan-in/dapa)** - Digital Arrest Protection App (DAPA) enables users to report financial scams and frauds efficiently via a user-friendly platform
 
 If you've built something using this template, please create a pull request or open a discussion to be added to the list!
-
-## Next.js Chat UI (`ui/`)
-
-The repository now contains a second, production-focused chat interface built with **Next.js 15**, **React 19**, **assistant-ui**, and **Tailwind CSS 4**. This UI is intended to become the primary deployable frontend, while the existing **Streamlit app remains a lightweight reference interface for local development and quick experimentation**.
-
-### When to use which UI?
-
-| Use Case | Recommended UI |
-|----------|----------------|
-| Rapid local prototyping / debugging agent behavior | Streamlit (`src/streamlit_app.py`)
-| Production / user-facing chat experience | Next.js (`ui/`)
-| Kubernetes deployment (current charts) | Streamlit (current) – Next.js chart coming soon |
-| Custom theming, component-level control, animations | Next.js |
-| Minimal dependencies / zero Node toolchain | Streamlit |
-
-### Running the Next.js UI Locally
-
-```sh
-cd ui
-pnpm install        # or npm install / yarn install / bun install
-cp .env.example .env.local
-pnpm dev            # starts on http://localhost:3000
-```
-
-Edit `ui/.env.local` as needed:
-
-```
-BACKEND_URL=http://localhost:8080   # FastAPI agent service base URL
-BACKEND_AUTH_TOKEN=                 # (Optional) If you enable auth on the service
-OPENAI_API_KEY=sk-...               # Optional: only needed for fallback client-side model usage
-```
-
-If you're running the Docker composition, the default `BACKEND_URL` may be `http://localhost:8080` (FastAPI inside compose is published to host). Adjust if reverse proxies / ingress paths are in front of the service.
-
----
 
 ## Contributing
 
