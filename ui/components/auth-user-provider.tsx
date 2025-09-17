@@ -4,6 +4,11 @@ import { createContext, useContext, ReactNode, useState, useEffect, useCallback,
 import { useSession } from '@/lib/auth-client';
 import { ThreadInfo } from '@/lib/types';
 
+// Constants
+const SAFETY_NET_DELAY = 100; // ms
+const SYNC_INTERVAL = 30000; // 30 seconds
+const DEFAULT_THREAD_TITLE = 'New Chat';
+
 interface UserContextType {
   // User data
   userData: {
@@ -47,7 +52,6 @@ export function UserProvider({ children }: UserProviderProps) {
   const { data: session, isPending } = useSession();
   const [userData, setUserData] = useState<UserContextType['userData']>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const isCreatingDefaultThreadRef = useRef(false);
   
   // Track pending operations for optimistic updates
@@ -106,13 +110,8 @@ export function UserProvider({ children }: UserProviderProps) {
   const generateOptimisticId = () => `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
   // Create a new thread with optimistic updates
-  const createNewThread = useCallback((title: string = 'New Chat', agentId?: string, modelId?: string) => {
+  const createNewThread = useCallback((title: string = DEFAULT_THREAD_TITLE, agentId?: string, modelId?: string) => {
     if (!session?.user?.id) return null;
-
-    // Prevent multiple simultaneous creations
-    if (isCreatingDefaultThreadRef.current) {
-      return null;
-    }
 
     const tempId = generateOptimisticId();
     const newThread: ThreadInfo = {
@@ -125,14 +124,21 @@ export function UserProvider({ children }: UserProviderProps) {
 
     // Optimistically add to local state
     setUserData(prev => {
-      if (!prev) return null;
+      if (!prev) {
+        // For new accounts, create initial user data structure
+        return {
+          userId: session.user.id,
+          threads: [newThread],
+          currentThreadId: tempId,
+          createdAt: Date.now(),
+        };
+      }
       return {
         ...prev,
         threads: [newThread, ...prev.threads],
+        currentThreadId: tempId,
       };
     });
-
-    setCurrentThreadId(tempId);
     pendingOperationsRef.current.set(tempId, 'create');
 
     // Queue database sync
@@ -154,9 +160,20 @@ export function UserProvider({ children }: UserProviderProps) {
           });
           
           // Update current thread ID if it was the temp one
-          setCurrentThreadId(current => current === tempId ? result.threadId : current);
+          setUserData(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              currentThreadId: prev.currentThreadId === tempId ? result.threadId : prev.currentThreadId,
+            };
+          });
           
           pendingOperationsRef.current.delete(tempId);
+          
+          // Reset safety net flag if this was created by safety net
+          if (isCreatingDefaultThreadRef.current) {
+            isCreatingDefaultThreadRef.current = false;
+          }
         } else {
           // Remove failed thread from local state
           setUserData(prev => {
@@ -168,20 +185,22 @@ export function UserProvider({ children }: UserProviderProps) {
           });
           
           // Switch to another thread if this was current
-          setCurrentThreadId(current => {
-            if (current === tempId) {
-              // Get current threads from state at the time of error
-              const currentUserData = userDataRef.current;
-              if (currentUserData) {
-                const remainingThreads = currentUserData.threads.filter(t => t.id !== tempId);
-                return remainingThreads.length > 0 ? remainingThreads[0].id : null;
-              }
-            }
-            return current;
+          setUserData(prev => {
+            if (!prev || prev.currentThreadId !== tempId) return prev;
+            const remainingThreads = prev.threads.filter(t => t.id !== tempId);
+            return {
+              ...prev,
+              currentThreadId: remainingThreads.length > 0 ? remainingThreads[0].id : null,
+            };
           });
           
           pendingOperationsRef.current.delete(tempId);
           console.error('Failed to create thread in database');
+          
+          // Reset safety net flag if this was created by safety net
+          if (isCreatingDefaultThreadRef.current) {
+            isCreatingDefaultThreadRef.current = false;
+          }
         }
       } catch (error) {
         console.error('Error creating thread:', error);
@@ -194,6 +213,11 @@ export function UserProvider({ children }: UserProviderProps) {
           };
         });
         pendingOperationsRef.current.delete(tempId);
+        
+        // Reset safety net flag if this was created by safety net
+        if (isCreatingDefaultThreadRef.current) {
+          isCreatingDefaultThreadRef.current = false;
+        }
       }
     });
 
@@ -228,25 +252,20 @@ export function UserProvider({ children }: UserProviderProps) {
           lastMessage: thread.lastMessage,
         }));
 
-        // If no threads exist, create a default one (but only once)
-        if (dbThreads.length === 0 && !isCreatingDefaultThreadRef.current) {
-          isCreatingDefaultThreadRef.current = true;
-          try {
-            const newThreadId = createNewThreadRef.current?.('New Chat');
-            if (newThreadId) {
-              // Set up initial user data with the new thread
-              setUserData({
+        // If no threads exist, set up empty user data structure
+        if (dbThreads.length === 0) {
+          setUserData(prev => {
+            if (!prev) {
+              return {
                 userId: session.user.id,
-                threads: [],  // Will be populated by createNewThread optimistic update
-                currentThreadId: newThreadId,
+                threads: [],
+                currentThreadId: null,
                 createdAt: Date.now(),
-              });
-              setCurrentThreadId(newThreadId);
-              return;
+              };
             }
-          } finally {
-            isCreatingDefaultThreadRef.current = false;
-          }
+            return prev;
+          });
+          return;
         }
 
         // Merge database state with local optimistic updates
@@ -259,8 +278,6 @@ export function UserProvider({ children }: UserProviderProps) {
               ? dbThreads.sort((a, b) => b.timestamp - a.timestamp)[0]
               : null;
             const defaultThreadId = mostRecentThread?.id || null;
-            
-            setCurrentThreadId(defaultThreadId);
             
             return {
               userId: session.user.id,
@@ -321,25 +338,50 @@ export function UserProvider({ children }: UserProviderProps) {
       fetchThreads();
     } else {
       setUserData(null);
-      setCurrentThreadId(null);
       setIsLoading(false);
       isCreatingDefaultThreadRef.current = false;
     }
   }, [session, isPending, fetchThreads]);
 
+  // Safety net: Ensure authenticated users always have at least one thread
+  useEffect(() => {
+    const shouldCreateDefaultThread = (
+      !isLoading && 
+      session?.user?.id && 
+      userData && 
+      userData.threads.length === 0 && 
+      !isCreatingDefaultThreadRef.current
+    );
+
+    if (shouldCreateDefaultThread) {
+      isCreatingDefaultThreadRef.current = true;
+      
+      const timeoutId = setTimeout(() => {
+        const newThreadId = createNewThread(DEFAULT_THREAD_TITLE);
+        if (!newThreadId) {
+          console.warn('Safety net: Failed to create default thread');
+          isCreatingDefaultThreadRef.current = false;
+        }
+      }, SAFETY_NET_DELAY);
+      
+      return () => {
+        clearTimeout(timeoutId);
+        isCreatingDefaultThreadRef.current = false;
+      };
+    }
+  }, [isLoading, session?.user?.id, userData?.threads.length, createNewThread]);
+
   // Switch to a different thread
   const switchToThread = useCallback((threadId: string) => {
-    const currentUserData = userDataRef.current;
-    if (!currentUserData) return false;
+    if (!userData) return false;
 
-    const exists = currentUserData.threads.some((t) => t.id === threadId);
-    if (exists) {
-      setCurrentThreadId(threadId);
+    const threadExists = userData.threads.some(t => t.id === threadId);
+    if (threadExists) {
       setUserData(prev => prev ? { ...prev, currentThreadId: threadId } : null);
       return true;
     }
     return false;
-  }, []);
+  }, [userData]);
 
   // Update thread title with optimistic updates
   const updateThreadTitle = useCallback(async (threadId: string, newTitle: string) => {
@@ -567,29 +609,28 @@ export function UserProvider({ children }: UserProviderProps) {
     const originalThread = userDataRef.current?.threads.find(t => t.id === threadId);
     if (!originalThread) return false;
 
-    // Handle switching away from deleted thread
-    let newCurrentThreadId = currentThreadId;
-    let needsNewThread = false;
-    
-    if (currentThreadId === threadId && userDataRef.current) {
-      const remainingThreads = userDataRef.current.threads.filter(t => t.id !== threadId);
-      if (remainingThreads.length > 0) {
-        const mostRecent = remainingThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
-        newCurrentThreadId = mostRecent.id;
-      } else {
-        // This is the last thread - we'll need to create a new one
-        needsNewThread = true;
-        newCurrentThreadId = null;
-      }
-      setCurrentThreadId(newCurrentThreadId);
-    }
-
-    // Optimistically remove from local state
+    // Optimistically remove from local state and handle thread switching
     setUserData(prev => {
       if (!prev) return null;
+      
+      const remainingThreads = prev.threads.filter(t => t.id !== threadId);
+      let newCurrentThreadId = prev.currentThreadId;
+      
+      // If deleting current thread, switch to most recent remaining thread
+      if (prev.currentThreadId === threadId) {
+        if (remainingThreads.length > 0) {
+          const mostRecent = remainingThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
+          newCurrentThreadId = mostRecent.id;
+        } else {
+          // Last thread deleted - safety net will create a new one
+          newCurrentThreadId = null;
+        }
+      }
+      
       return {
         ...prev,
-        threads: prev.threads.filter(t => t.id !== threadId),
+        threads: remainingThreads,
+        currentThreadId: newCurrentThreadId,
       };
     });
 
@@ -599,17 +640,7 @@ export function UserProvider({ children }: UserProviderProps) {
       const result = await apiCall('delete', { threadId });
       if (result?.success) {
         pendingOperationsRef.current.delete(threadId);
-        
-        // If this was the last thread, create a new one
-        if (needsNewThread) {
-          setTimeout(() => {
-            const newThreadId = createNewThread('New Chat');
-            if (newThreadId) {
-              setCurrentThreadId(newThreadId);
-            }
-          }, 100); // Small delay to ensure state is updated
-        }
-        
+        // Safety net will handle creating a new thread if this was the last one
         return true;
       } else {
         // Rollback on failure
@@ -618,9 +649,9 @@ export function UserProvider({ children }: UserProviderProps) {
           return {
             ...prev,
             threads: [...prev.threads, originalThread].sort((a, b) => b.timestamp - a.timestamp),
+            currentThreadId: originalThread.id, // Restore to deleted thread
           };
         });
-        setCurrentThreadId(currentThreadId); // Restore original
         pendingOperationsRef.current.delete(threadId);
         return false;
       }
@@ -632,20 +663,19 @@ export function UserProvider({ children }: UserProviderProps) {
         return {
           ...prev,
           threads: [...prev.threads, originalThread].sort((a, b) => b.timestamp - a.timestamp),
+          currentThreadId: originalThread.id, // Restore to deleted thread
         };
       });
-      setCurrentThreadId(currentThreadId); // Restore original
       pendingOperationsRef.current.delete(threadId);
       return false;
     }
-  }, [apiCall, currentThreadId, createNewThread]);
+  }, [apiCall, userData?.currentThreadId, createNewThread]);
 
 
 
   // Clear user data (for logout)
   const clearUserData = useCallback(() => {
     setUserData(null);
-    setCurrentThreadId(null);
     pendingOperationsRef.current.clear();
     syncQueueRef.current = [];
     isSyncingRef.current = false;
@@ -661,23 +691,17 @@ export function UserProvider({ children }: UserProviderProps) {
       if (pendingOperationsRef.current.size === 0) {
         fetchThreads();
       }
-    }, 30000); // 30 seconds
+    }, SYNC_INTERVAL);
     
     return () => clearInterval(interval);
-  }, [session?.user?.id, userData, fetchThreads]); // Add fetchThreads dependency
+  }, [session?.user?.id, userData?.threads?.length, fetchThreads]);
 
   // Computed values
   const activeThreads = userData?.threads || [];
-  const currentThread = userData?.threads?.find(t => t.id === currentThreadId) || null;
-
-  // Update userData with current thread ID
-  const userDataWithCurrentThread = userData ? {
-    ...userData,
-    currentThreadId,
-  } : null;
+  const currentThread = userData?.threads?.find(t => t.id === userData?.currentThreadId) || null;
 
   const contextValue: UserContextType = {
-    userData: userDataWithCurrentThread,
+    userData,
     isLoading: isLoading || isPending,
     createNewThread,
     switchToThread,

@@ -66,11 +66,11 @@ export function PrivacyPopup() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="bottom" className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4 sm:p-6 w-full max-w-full">
-        <SheetHeader>
+      <SheetContent side="bottom" className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4 sm:p-6 w-full max-w-full max-h-[85vh] flex flex-col">
+        <SheetHeader className="flex-shrink-0">
           <SheetTitle>Privacy Policy & Data Handling</SheetTitle>
           <SheetDescription asChild>
-            <div className="space-y-3 text-sm leading-relaxed">
+            <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-3 text-sm leading-relaxed">
               <div>
                 <h4 className="font-semibold mb-1">Data Collection & Storage</h4>
                 <p>
@@ -121,7 +121,7 @@ export function PrivacyPopup() {
             </div>
           </SheetDescription>
         </SheetHeader>
-        <div className="mt-6 flex justify-between items-center">
+        <div className="flex justify-between items-center flex-shrink-0">
           <p className="text-xs text-muted-foreground">Last updated: September 2025</p>
           <Button size="sm" variant="outline" onClick={handleDismiss}>I Understand</Button>
         </div>
