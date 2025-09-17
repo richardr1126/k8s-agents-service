@@ -1,6 +1,6 @@
 import { ChatRequest, ChatMessage, BackendServiceMetadata } from './types';
 
-class FrontendApiClient {
+class ApiClient {
   private baseUrl: string;
 
   constructor(baseUrl: string = '') {
@@ -108,4 +108,4 @@ class FrontendApiClient {
   }
 }
 
-export const apiClient = new FrontendApiClient();
+export const apiClient = new ApiClient();

@@ -18,6 +18,7 @@ import {
   ChevronRightIcon,
   Square,
 } from "lucide-react";
+import { useServiceInfo } from "@/components/service-info-provider";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { motion } from "framer-motion";
@@ -76,7 +77,8 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 const ThreadWelcome: FC = () => {
-  const { selectedAgentId, serviceInfo } = useThreadContext();
+  const { selectedAgentId } = useThreadContext();
+  const { serviceInfo } = useServiceInfo();
   
   // Find the current agent's description
   const currentAgent = serviceInfo?.agents?.find(

@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createBackendClient } from '@/lib/backend-client';
-import { ChatMessage, ToolCall } from '@/lib/types';
+import { ChatMessage, ToolCall, BackendChatHistory } from '@/lib/types';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 
@@ -18,8 +17,32 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { threadId } = body;
 
-    const backendClient = createBackendClient();
-    const history = await backendClient.getChatHistory(threadId);
+    const baseUrl = process.env.BACKEND_URL;
+    const authToken = process.env.BACKEND_AUTH_TOKEN;
+
+    if (!baseUrl) {
+      throw new Error('BACKEND_URL environment variable is not set');
+    }
+
+    const requestHeaders: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (authToken) {
+      requestHeaders['Authorization'] = `Bearer ${authToken}`;
+    }
+
+    const response = await fetch(`${baseUrl}/history`, {
+      method: 'POST',
+      headers: requestHeaders,
+      body: JSON.stringify({ thread_id: threadId }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Backend request failed: ${response.status}`);
+    }
+
+    const history: BackendChatHistory = await response.json();
 
     // Convert backend messages to frontend format
     const messages: ChatMessage[] = history.messages.map((msg, index) => {

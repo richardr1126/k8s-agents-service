@@ -9,8 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BackendServiceMetadata } from "@/lib/types";
-import { apiClient } from "@/lib/frontend-api-client";
+import { useServiceInfo } from "@/components/service-info-provider";
 
 interface ModelSelectProps {
   selectedModelId?: string | null;
@@ -23,28 +22,16 @@ export function ModelSelect({
   onModelChange, 
   className 
 }: ModelSelectProps) {
-  const [serviceInfo, setServiceInfo] = useState<BackendServiceMetadata | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { serviceInfo, isLoading: loading } = useServiceInfo();
+  const [hasSetDefault, setHasSetDefault] = useState(false);
 
+  // Set default model when service info loads and no model is selected
   useEffect(() => {
-    const loadServiceInfo = async () => {
-      try {
-        const info = await apiClient.getServiceInfo();
-        setServiceInfo(info);
-        
-        // If no model is selected but we have a default, use it
-        if (!selectedModelId && info.default_model && onModelChange) {
-          onModelChange(info.default_model);
-        }
-      } catch (error) {
-        console.error("Failed to load service info:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadServiceInfo();
-  }, [selectedModelId, onModelChange]);
+    if (serviceInfo && !selectedModelId && !hasSetDefault && serviceInfo.default_model && onModelChange) {
+      onModelChange(serviceInfo.default_model);
+      setHasSetDefault(true);
+    }
+  }, [serviceInfo, selectedModelId, hasSetDefault, onModelChange]);
 
   if (loading) {
     return (
