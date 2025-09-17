@@ -1,5 +1,3 @@
-"use client";
-
 import { 
   useExternalStoreRuntime, 
   ThreadMessageLike, 
@@ -11,12 +9,12 @@ import {
   ToolCallMessagePart
 } from "@assistant-ui/react";
 import { ReactNode, useState, useCallback, useEffect, createContext, useContext, useMemo } from "react";
-import { apiClient } from "@/lib/frontend-api-client";
-import { ChatMessage, BackendServiceMetadata, BackendMessage } from "@/lib/types";
+import { apiClient } from "@/lib/api-client";
+import { ChatMessage, BackendMessage } from "@/lib/types";
 import { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
-import { useUrlState } from "@/hooks/use-url-state";
 import { generateThreadTitle } from "@/lib/thread-utils";
 import { useUser } from "@/components/auth-user-provider";
+import { useServiceInfo } from "@/components/service-info-provider";
 
 // Convert our ChatMessage format to ThreadMessageLike
 const convertMessage = (message: ChatMessage): ThreadMessageLike => {
@@ -64,7 +62,6 @@ interface ThreadContextType {
   setCurrentThreadId: (id: string) => void;
   threads: Map<string, ChatMessage[]>;
   setThreads: React.Dispatch<React.SetStateAction<Map<string, ChatMessage[]>>>;
-  serviceInfo: BackendServiceMetadata | null;
   userId: string | null;
   selectedAgentId: string | null;
   setSelectedAgentId: (agentId: string) => void;
@@ -79,7 +76,6 @@ const ThreadContext = createContext<ThreadContextType>({
   setCurrentThreadId: () => {},
   threads: new Map(),
   setThreads: () => {},
-  serviceInfo: null,
   userId: null,
   selectedAgentId: null,
   setSelectedAgentId: () => {},
@@ -102,16 +98,24 @@ interface ThreadProviderProps {
 }
 
 function ThreadProvider({ children }: ThreadProviderProps) {
-  const { userData, isLoading: userLoading, updateThreadAgent, updateThreadModel } = useUser();
-  const { threadId: urlThreadId, setThreadId: setUrlThreadId } = useUrlState();
+  const { userData, isLoading: userLoading, updateThreadAgent, updateThreadModel, switchToThread } = useUser();
+  const { serviceInfo } = useServiceInfo();
   
   const [threads, setThreads] = useState<Map<string, ChatMessage[]>>(new Map());
   const [loadedThreads, setLoadedThreads] = useState<Set<string>>(new Set());
-  const [serviceInfo, setServiceInfo] = useState<BackendServiceMetadata | null>(null);
   const [runningThreads, setRunningThreads] = useState<Set<string>>(new Set());
 
-  // Determine current thread ID from URL or user data
-  const currentThreadId = urlThreadId || userData?.currentThreadId || null;
+  // Always use the most recent thread (by timestamp) from user data
+  const getMostRecentThread = () => {
+    if (!userData?.threads || userData.threads.length === 0) return null;
+    const activeThreads = userData.threads.filter(t => !t.archived);
+    if (activeThreads.length === 0) return null;
+    // Sort by timestamp descending and return the first (most recent)
+    return activeThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
+  };
+
+  const mostRecentThread = getMostRecentThread();
+  const currentThreadId = userData?.currentThreadId || mostRecentThread?.id || null;
   const userId = userData?.userId || null;
   
   // Get the selected agent and model for the current thread
@@ -133,30 +137,28 @@ function ThreadProvider({ children }: ThreadProviderProps) {
     }
   }, [currentThreadId, updateThreadModel]);
 
-  // Load service info on mount
+  // Set defaults when service info is loaded and we have a current thread
   useEffect(() => {
-    apiClient.getServiceInfo()
-      .then((info) => {
-        setServiceInfo(info);
-        // Set default agent and model for current thread if none selected
-        if (currentThreadId) {
-          if (!selectedAgentId && info.default_agent) {
-            updateThreadAgent(currentThreadId, info.default_agent);
-          }
-          if (!selectedModelId && info.default_model) {
-            updateThreadModel(currentThreadId, info.default_model);
-          }
-        }
-      })
-      .catch(console.error);
-  }, [currentThreadId, selectedAgentId, selectedModelId, updateThreadAgent, updateThreadModel]);
-
-  // Sync URL with user data when user data changes
-  useEffect(() => {
-    if (!userLoading && userData && !urlThreadId && userData.currentThreadId) {
-      setUrlThreadId(userData.currentThreadId);
+    if (serviceInfo && currentThreadId) {
+      // Set default agent if none selected
+      if (!selectedAgentId && serviceInfo.default_agent) {
+        updateThreadAgent(currentThreadId, serviceInfo.default_agent);
+      }
+      // Set default model if none selected
+      if (!selectedModelId && serviceInfo.default_model) {
+        updateThreadModel(currentThreadId, serviceInfo.default_model);
+      }
     }
-  }, [userData, urlThreadId, setUrlThreadId, userLoading]);
+  }, [serviceInfo, currentThreadId, selectedAgentId, selectedModelId, updateThreadAgent, updateThreadModel]); // Add missing dependencies
+
+  // Auto-switch to most recent thread if current thread is not set or invalid
+  useEffect(() => {
+    if (!userLoading && userData && mostRecentThread) {
+      if (!userData.currentThreadId || !userData.threads.find(t => t.id === userData.currentThreadId && !t.archived)) {
+        switchToThread(mostRecentThread.id);
+      }
+    }
+  }, [userData, mostRecentThread, userLoading, switchToThread]);
 
   // Load chat history when thread changes, but only if we haven't already tried to load it
   useEffect(() => {
@@ -177,8 +179,8 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   }, [currentThreadId, threads, loadedThreads]);
 
   const setCurrentThreadId = useCallback((id: string) => {
-    setUrlThreadId(id);
-  }, [setUrlThreadId]);
+    switchToThread(id);
+  }, [switchToThread]);
 
   return (
     <ThreadContext.Provider 
@@ -187,7 +189,6 @@ function ThreadProvider({ children }: ThreadProviderProps) {
         setCurrentThreadId, 
         threads, 
         setThreads, 
-        serviceInfo,
         userId,
         selectedAgentId,
         setSelectedAgentId,
@@ -214,13 +215,14 @@ function ChatWithThreads({
     setCurrentThreadId, 
     threads, 
     setThreads, 
-    serviceInfo,
     userId,
     selectedAgentId,
     selectedModelId,
     runningThreads,
     setRunningThreads
   } = useThreadContext();
+  
+  const { serviceInfo } = useServiceInfo();
   
   const { 
     userData, 
@@ -524,7 +526,7 @@ function ChatWithThreads({
     onArchive: async (threadId) => {
       const result = await archiveThread(threadId);
       if (result.success && result.newThreadId) {
-        // If a new thread was created, switch to it and update the URL
+        // If a new thread was created, switch to it
         setCurrentThreadId(result.newThreadId);
         switchToThread(result.newThreadId);
         // Also create an empty thread in our local state

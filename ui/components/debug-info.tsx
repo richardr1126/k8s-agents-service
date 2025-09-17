@@ -1,12 +1,10 @@
 "use client";
 
-import { useUrlState } from "@/hooks/use-url-state";
 import { useThreadContext } from "@/components/custom-runtime-provider";
 import { useUser } from "@/components/auth-user-provider";
 
 export function DebugInfo() {
   const { activeThreads, archivedThreads } = useUser();
-  const { threadId } = useUrlState();
   const { currentThreadId, userId } = useThreadContext();
 
   if (process.env.NODE_ENV !== 'development') {
@@ -17,7 +15,6 @@ export function DebugInfo() {
     <div className="fixed bottom-4 right-4 bg-black/80 text-white text-xs p-2 rounded max-w-xs overflow-auto z-50">
       <div className="font-bold mb-1">Debug Info:</div>
       <div>User ID: {userId}</div>
-      <div>URL Thread: {threadId || 'none'}</div>
       <div>Current Thread: {currentThreadId || 'none'}</div>
       <div>Active Threads: {activeThreads.length}</div>
       <div>Archived Threads: {archivedThreads.length}</div>

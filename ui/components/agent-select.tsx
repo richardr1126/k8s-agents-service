@@ -9,8 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BackendServiceMetadata } from "@/lib/types";
-import { apiClient } from "@/lib/frontend-api-client";
+import { useServiceInfo } from "@/components/service-info-provider";
 
 interface AgentSelectProps {
   selectedAgentId?: string | null;
@@ -23,28 +22,16 @@ export function AgentSelect({
   onAgentChange, 
   className 
 }: AgentSelectProps) {
-  const [serviceInfo, setServiceInfo] = useState<BackendServiceMetadata | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { serviceInfo, isLoading: loading } = useServiceInfo();
+  const [hasSetDefault, setHasSetDefault] = useState(false);
 
+  // Set default agent when service info loads and no agent is selected
   useEffect(() => {
-    const loadServiceInfo = async () => {
-      try {
-        const info = await apiClient.getServiceInfo();
-        setServiceInfo(info);
-        
-        // If no agent is selected but we have a default, use it
-        if (!selectedAgentId && info.default_agent && onAgentChange) {
-          onAgentChange(info.default_agent);
-        }
-      } catch (error) {
-        console.error("Failed to load service info:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadServiceInfo();
-  }, [selectedAgentId, onAgentChange]);
+    if (serviceInfo && !selectedAgentId && !hasSetDefault && serviceInfo.default_agent && onAgentChange) {
+      onAgentChange(serviceInfo.default_agent);
+      setHasSetDefault(true);
+    }
+  }, [serviceInfo, selectedAgentId, hasSetDefault, onAgentChange]);
 
   if (loading) {
     return (

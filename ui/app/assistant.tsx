@@ -13,6 +13,7 @@ import { ModelSelect } from "@/components/model-select";
 import { CustomRuntimeProvider, useThreadContext } from "@/components/custom-runtime-provider";
 import { TaskToolUI } from "@/components/task-ui";
 import { UserProvider } from "@/components/auth-user-provider";
+import { ServiceInfoProvider } from "@/components/service-info-provider";
 import { useSession } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect } from "react";
@@ -49,22 +50,24 @@ function AssistantHeader() {
 
 function AuthenticatedContent() {
   return (
-    <UserProvider>
-      <CustomRuntimeProvider>
-        <SidebarProvider>
-          <div className="flex h-dvh w-full pr-0.5">
-            <AppSidebar />
-            <SidebarInset>
-              <AssistantHeader />
-              <div className="flex-1 overflow-hidden">
-                <Thread />
-                <TaskToolUI />
-              </div>
-            </SidebarInset>
-          </div>
-        </SidebarProvider>
-      </CustomRuntimeProvider>
-    </UserProvider>
+    <ServiceInfoProvider>
+      <UserProvider>
+        <CustomRuntimeProvider>
+          <SidebarProvider>
+            <div className="flex h-dvh w-full pr-0.5">
+              <AppSidebar />
+              <SidebarInset>
+                <AssistantHeader />
+                <div className="flex-1 overflow-hidden">
+                  <Thread />
+                  <TaskToolUI />
+                </div>
+              </SidebarInset>
+            </div>
+          </SidebarProvider>
+        </CustomRuntimeProvider>
+      </UserProvider>
+    </ServiceInfoProvider>
   );
 }
 
@@ -72,10 +75,9 @@ function AssistantContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
 
-  // Clear URL parameters when not authenticated
+  // Redirect to signin when not authenticated
   useEffect(() => {
     if (!isPending && !session) {
-      // Clear any thread parameters from URL and redirect to signin
       router.push('/signin');
     }
   }, [session, isPending, router]);
