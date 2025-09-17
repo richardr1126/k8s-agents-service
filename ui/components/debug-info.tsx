@@ -4,7 +4,7 @@ import { useThreadContext } from "@/components/custom-runtime-provider";
 import { useUser } from "@/components/auth-user-provider";
 
 export function DebugInfo() {
-  const { activeThreads, archivedThreads } = useUser();
+  const { activeThreads } = useUser();
   const { currentThreadId, userId } = useThreadContext();
 
   if (process.env.NODE_ENV !== 'development') {
@@ -17,7 +17,6 @@ export function DebugInfo() {
       <div>User ID: {userId}</div>
       <div>Current Thread: {currentThreadId || 'none'}</div>
       <div>Active Threads: {activeThreads.length}</div>
-      <div>Archived Threads: {archivedThreads.length}</div>
       <div className="mt-1">
         <div className="font-semibold">Active Threads:</div>
         {activeThreads.map(thread => (
@@ -26,16 +25,6 @@ export function DebugInfo() {
             {currentThreadId === thread.id && ' [current]'}
           </div>
         ))}
-        {archivedThreads.length > 0 && (
-          <>
-            <div className="font-semibold mt-1">Archived:</div>
-            {archivedThreads.map(thread => (
-              <div key={thread.id} className="ml-2 truncate text-gray-400">
-                {thread.title}
-              </div>
-            ))}
-          </>
-        )}
       </div>
     </div>
   );

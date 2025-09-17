@@ -108,10 +108,8 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   // Always use the most recent thread (by timestamp) from user data
   const getMostRecentThread = () => {
     if (!userData?.threads || userData.threads.length === 0) return null;
-    const activeThreads = userData.threads.filter(t => !t.archived);
-    if (activeThreads.length === 0) return null;
     // Sort by timestamp descending and return the first (most recent)
-    return activeThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
+    return userData.threads.sort((a, b) => b.timestamp - a.timestamp)[0];
   };
 
   const mostRecentThread = getMostRecentThread();
@@ -154,7 +152,7 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   // Auto-switch to most recent thread if current thread is not set or invalid
   useEffect(() => {
     if (!userLoading && userData && mostRecentThread) {
-      if (!userData.currentThreadId || !userData.threads.find(t => t.id === userData.currentThreadId && !t.archived)) {
+      if (!userData.currentThreadId || !userData.threads.find(t => t.id === userData.currentThreadId)) {
         switchToThread(mostRecentThread.id);
       }
     }
@@ -230,10 +228,8 @@ function ChatWithThreads({
     switchToThread, 
     updateThreadTitle, 
     updateThreadActivity, 
-    archiveThread, 
     deleteThread,
-    activeThreads,
-    archivedThreads
+    activeThreads
   } = useUser();
   
   // Check if current thread is running
@@ -249,13 +245,6 @@ function ChatWithThreads({
   const threadList = activeThreads.map(thread => ({
     threadId: thread.id,
     status: "regular" as const,
-    title: thread.title,
-    isLoading: runningThreads.has(thread.id),
-  }));
-
-  const archivedThreadList = archivedThreads.map(thread => ({
-    threadId: thread.id,
-    status: "archived" as const,
     title: thread.title,
     isLoading: runningThreads.has(thread.id),
   }));
@@ -505,7 +494,7 @@ function ChatWithThreads({
   const threadListAdapter: ExternalStoreThreadListAdapter = {
     threadId: currentThreadId || '',
     threads: threadList,
-    archivedThreads: archivedThreadList,
+    archivedThreads: [],
     onSwitchToNewThread: async () => {
       const defaultAgent = serviceInfo?.default_agent;
       const defaultModel = serviceInfo?.default_model;
@@ -524,13 +513,11 @@ function ChatWithThreads({
       await updateThreadTitle(threadId, newTitle);
     },
     onArchive: async (threadId) => {
-      const result = await archiveThread(threadId);
-      if (result.success && result.newThreadId) {
-        // If a new thread was created, switch to it
-        setCurrentThreadId(result.newThreadId);
-        switchToThread(result.newThreadId);
-        // Also create an empty thread in our local state
-        setThreads(prev => new Map(prev).set(result.newThreadId!, []));
+      // Replace archiving with deletion
+      const result = await deleteThread(threadId);
+      if (result) {
+        // If deletion was successful, the user provider will handle switching to another thread
+        // No additional action needed here
       }
     },
     onDelete: async (threadId) => {

@@ -8,7 +8,6 @@ export interface UserThread {
   timestamp: number;
   agentId?: string;
   modelId?: string;
-  archived: boolean;
   lastMessage?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -28,7 +27,6 @@ export function convertToThreadInfo(dbThread: UserThread): ThreadInfo {
     timestamp: dbThread.timestamp,
     agentId: dbThread.agentId,
     modelId: dbThread.modelId,
-    archived: dbThread.archived,
     lastMessage: dbThread.lastMessage,
   };
 }
@@ -41,7 +39,6 @@ export function convertFromThreadInfo(threadInfo: ThreadInfo, userId: string): O
     timestamp: threadInfo.timestamp,
     agentId: threadInfo.agentId,
     modelId: threadInfo.modelId,
-    archived: threadInfo.archived || false,
     lastMessage: threadInfo.lastMessage,
   };
 }

@@ -22,12 +22,10 @@ interface UserContextType {
   updateThreadAgent: (threadId: string, agentId: string) => Promise<boolean>;
   updateThreadModel: (threadId: string, modelId: string) => Promise<boolean>;
   deleteThread: (threadId: string) => Promise<boolean>;
-  archiveThread: (threadId: string) => Promise<{ success: boolean; newThreadId?: string | null }>;
   clearUserData: () => void;
   
   // Computed values
   activeThreads: ThreadInfo[];
-  archivedThreads: ThreadInfo[];
   currentThread: ThreadInfo | null;
 }
 
@@ -111,6 +109,11 @@ export function UserProvider({ children }: UserProviderProps) {
   const createNewThread = useCallback((title: string = 'New Chat', agentId?: string, modelId?: string) => {
     if (!session?.user?.id) return null;
 
+    // Prevent multiple simultaneous creations
+    if (isCreatingDefaultThreadRef.current) {
+      return null;
+    }
+
     const tempId = generateOptimisticId();
     const newThread: ThreadInfo = {
       id: tempId,
@@ -170,7 +173,7 @@ export function UserProvider({ children }: UserProviderProps) {
               // Get current threads from state at the time of error
               const currentUserData = userDataRef.current;
               if (currentUserData) {
-                const remainingThreads = currentUserData.threads.filter(t => t.id !== tempId && !t.archived);
+                const remainingThreads = currentUserData.threads.filter(t => t.id !== tempId);
                 return remainingThreads.length > 0 ? remainingThreads[0].id : null;
               }
             }
@@ -215,7 +218,6 @@ export function UserProvider({ children }: UserProviderProps) {
           timestamp: number;
           agentId?: string;
           modelId?: string;
-          archived?: boolean;
           lastMessage?: string;
         }) => ({
           id: thread.id,
@@ -223,7 +225,6 @@ export function UserProvider({ children }: UserProviderProps) {
           timestamp: thread.timestamp,
           agentId: thread.agentId,
           modelId: thread.modelId,
-          archived: thread.archived,
           lastMessage: thread.lastMessage,
         }));
 
@@ -233,7 +234,14 @@ export function UserProvider({ children }: UserProviderProps) {
           try {
             const newThreadId = createNewThreadRef.current?.('New Chat');
             if (newThreadId) {
-              // The createNewThread will handle the local state update
+              // Set up initial user data with the new thread
+              setUserData({
+                userId: session.user.id,
+                threads: [],  // Will be populated by createNewThread optimistic update
+                currentThreadId: newThreadId,
+                createdAt: Date.now(),
+              });
+              setCurrentThreadId(newThreadId);
               return;
             }
           } finally {
@@ -247,11 +255,10 @@ export function UserProvider({ children }: UserProviderProps) {
           
           if (!prev) {
             // Initial load
-            const activeThreads = dbThreads.filter(t => !t.archived);
-            const mostRecentThread = activeThreads.length > 0 
-              ? activeThreads.sort((a, b) => b.timestamp - a.timestamp)[0]
+            const mostRecentThread = dbThreads.length > 0 
+              ? dbThreads.sort((a, b) => b.timestamp - a.timestamp)[0]
               : null;
-            const defaultThreadId = mostRecentThread?.id || dbThreads[0]?.id || null;
+            const defaultThreadId = mostRecentThread?.id || null;
             
             setCurrentThreadId(defaultThreadId);
             
@@ -562,12 +569,16 @@ export function UserProvider({ children }: UserProviderProps) {
 
     // Handle switching away from deleted thread
     let newCurrentThreadId = currentThreadId;
+    let needsNewThread = false;
+    
     if (currentThreadId === threadId && userDataRef.current) {
-      const remainingActiveThreads = userDataRef.current.threads.filter(t => t.id !== threadId && !t.archived);
-      if (remainingActiveThreads.length > 0) {
-        const mostRecent = remainingActiveThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
+      const remainingThreads = userDataRef.current.threads.filter(t => t.id !== threadId);
+      if (remainingThreads.length > 0) {
+        const mostRecent = remainingThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
         newCurrentThreadId = mostRecent.id;
       } else {
+        // This is the last thread - we'll need to create a new one
+        needsNewThread = true;
         newCurrentThreadId = null;
       }
       setCurrentThreadId(newCurrentThreadId);
@@ -588,6 +599,17 @@ export function UserProvider({ children }: UserProviderProps) {
       const result = await apiCall('delete', { threadId });
       if (result?.success) {
         pendingOperationsRef.current.delete(threadId);
+        
+        // If this was the last thread, create a new one
+        if (needsNewThread) {
+          setTimeout(() => {
+            const newThreadId = createNewThread('New Chat');
+            if (newThreadId) {
+              setCurrentThreadId(newThreadId);
+            }
+          }, 100); // Small delay to ensure state is updated
+        }
+        
         return true;
       } else {
         // Rollback on failure
@@ -616,84 +638,9 @@ export function UserProvider({ children }: UserProviderProps) {
       pendingOperationsRef.current.delete(threadId);
       return false;
     }
-  }, [apiCall, currentThreadId]);
-
-  // Archive a thread with optimistic updates
-  const archiveThread = useCallback(async (threadId: string) => {
-    // Store original thread for rollback
-    const originalThread = userDataRef.current?.threads.find(t => t.id === threadId);
-    if (!originalThread) return { success: false };
-
-    let newThreadId: string | null = null;
-
-    // Handle switching away from archived thread
-    if (currentThreadId === threadId) {
-      // First try to find the most recent active thread (excluding the one being archived)
-      const remainingActiveThreads = userDataRef.current?.threads?.filter(t => !t.archived && t.id !== threadId) || [];
-      
-      if (remainingActiveThreads.length > 0) {
-        // Switch to most recent active thread
-        const mostRecent = remainingActiveThreads.sort((a, b) => b.timestamp - a.timestamp)[0];
-        setCurrentThreadId(mostRecent.id);
-      } else {
-        // No active threads left, create a new one
-        newThreadId = createNewThread('New Chat');
-        if (newThreadId) {
-          setCurrentThreadId(newThreadId);
-        }
-      }
-    }
-
-    // Optimistically archive in local state
-    setUserData(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        threads: prev.threads.map(t => 
-          t.id === threadId ? { ...t, archived: true } : t
-        ),
-      };
-    });
-
-    pendingOperationsRef.current.set(threadId, 'update');
-
-    try {
-      const result = await apiCall('update', { id: threadId, archived: true });
-      if (result?.success) {
-        pendingOperationsRef.current.delete(threadId);
-        return { success: true, newThreadId };
-      } else {
-        // Rollback on failure
-        setUserData(prev => {
-          if (!prev) return null;
-          return {
-            ...prev,
-            threads: prev.threads.map(t => 
-              t.id === threadId ? { ...t, archived: false } : t
-            ),
-          };
-        });
-        setCurrentThreadId(currentThreadId); // Restore original
-        pendingOperationsRef.current.delete(threadId);
-        return { success: false };
-      }
-    } catch (error) {
-      console.error('Error archiving thread:', error);
-      // Rollback on error
-      setUserData(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          threads: prev.threads.map(t => 
-            t.id === threadId ? { ...t, archived: false } : t
-          ),
-        };
-      });
-      setCurrentThreadId(currentThreadId); // Restore original
-      pendingOperationsRef.current.delete(threadId);
-      return { success: false };
-    }
   }, [apiCall, currentThreadId, createNewThread]);
+
+
 
   // Clear user data (for logout)
   const clearUserData = useCallback(() => {
@@ -702,6 +649,7 @@ export function UserProvider({ children }: UserProviderProps) {
     pendingOperationsRef.current.clear();
     syncQueueRef.current = [];
     isSyncingRef.current = false;
+    isCreatingDefaultThreadRef.current = false;
   }, []);
 
   // Periodic sync with database (every 30 seconds)
@@ -719,8 +667,7 @@ export function UserProvider({ children }: UserProviderProps) {
   }, [session?.user?.id, userData, fetchThreads]); // Add fetchThreads dependency
 
   // Computed values
-  const activeThreads = userData?.threads?.filter(t => !t.archived) || [];
-  const archivedThreads = userData?.threads?.filter(t => t.archived) || [];
+  const activeThreads = userData?.threads || [];
   const currentThread = userData?.threads?.find(t => t.id === currentThreadId) || null;
 
   // Update userData with current thread ID
@@ -739,10 +686,8 @@ export function UserProvider({ children }: UserProviderProps) {
     updateThreadAgent,
     updateThreadModel,
     deleteThread,
-    archiveThread,
     clearUserData,
     activeThreads,
-    archivedThreads,
     currentThread,
   };
 

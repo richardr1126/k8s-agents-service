@@ -173,3 +173,19 @@ class ChatHistoryInput(BaseModel):
 
 class ChatHistory(BaseModel):
     messages: list[ChatMessage]
+
+
+class DeleteThreadInput(BaseModel):
+    """Input for deleting a thread."""
+    
+    thread_id: str = Field(
+        description="Thread ID to delete.",
+        examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
+    )
+
+
+class DeleteThreadResponse(BaseModel):
+    """Response for thread deletion."""
+    
+    status: Literal["success"] = "success"
+    message: str = "Thread deleted successfully"

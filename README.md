@@ -38,6 +38,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
 1. **RAG Agent**: RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
+1. **Thread Management**: Complete thread lifecycle management with proper deletion from both conversation memory (checkpointer) and long-term memory (store).
 1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
 1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
 1. **Testing**: Includes robust unit and integration tests for the full repo.
@@ -164,6 +165,7 @@ The repository is structured as follows:
 - [Setting up Ollama](docs/Ollama.md)
 - [Setting up VertexAI](docs/VertexAI.md)
 - [Setting up RAG with PGVector](docs/RAG_Assistant.md)
+- [Thread Deletion API](docs/Thread_Deletion.md)
 
 ### Building or customizing your own agent
 

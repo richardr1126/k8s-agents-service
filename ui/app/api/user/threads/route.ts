@@ -22,7 +22,6 @@ async function initializeThreadsTable() {
         timestamp BIGINT NOT NULL,
         agent_id VARCHAR(255),
         model_id VARCHAR(255),
-        archived BOOLEAN DEFAULT FALSE,
         last_message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -66,7 +65,6 @@ export async function GET() {
         timestamp: parseInt(row.timestamp),
         agentId: row.agent_id,
         modelId: row.model_id,
-        archived: row.archived,
         lastMessage: row.last_message,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -106,25 +104,24 @@ export async function POST(req: NextRequest) {
         const { title = 'New Chat', agentId, modelId } = threadData || {};
 
         await client.query(
-          `INSERT INTO user_threads (id, user_id, title, timestamp, agent_id, model_id, archived, created_at, updated_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          [threadId, session.user.id, title, Date.now(), agentId, modelId, false]
+          `INSERT INTO user_threads (id, user_id, title, timestamp, agent_id, model_id, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          [threadId, session.user.id, title, Date.now(), agentId, modelId]
         );
 
         return NextResponse.json({ threadId, success: true });
       } else if (action === 'update') {
-        const { id, title, agentId, modelId, archived, lastMessage } = threadData;
+        const { id, title, agentId, modelId, lastMessage } = threadData;
 
         await client.query(
           `UPDATE user_threads 
            SET title = COALESCE($2, title),
                agent_id = COALESCE($3, agent_id),
                model_id = COALESCE($4, model_id),
-               archived = COALESCE($5, archived),
-               last_message = COALESCE($6, last_message),
+               last_message = COALESCE($5, last_message),
                updated_at = CURRENT_TIMESTAMP
-           WHERE id = $1 AND user_id = $7`,
-          [id, title, agentId, modelId, archived, lastMessage, session.user.id]
+           WHERE id = $1 AND user_id = $6`,
+          [id, title, agentId, modelId, lastMessage, session.user.id]
         );
 
         return NextResponse.json({ success: true });
