@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createBackendClient } from '@/lib/backend-client';
 import { ChatRequest, ChatMessage, BackendMessage } from '@/lib/types';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 
 export async function POST(req: NextRequest) {
   try {
+    // Check authentication
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body: ChatRequest = await req.json();
-    const { message, threadId, userId, agentId, model, stream } = body;
+    const { message, threadId, agentId, model, stream } = body;
+
+    // Use authenticated user ID instead of client-provided userId
+    const userId = session.user.id;
 
     const backendClient = createBackendClient();
 

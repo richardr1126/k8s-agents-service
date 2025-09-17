@@ -16,7 +16,7 @@ import { ChatMessage, BackendServiceMetadata, BackendMessage } from "@/lib/types
 import { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
 import { useUrlState } from "@/hooks/use-url-state";
 import { generateThreadTitle } from "@/lib/thread-utils";
-import { UserProvider, useUser } from "@/components/user-provider";
+import { useUser } from "@/components/auth-user-provider";
 
 // Convert our ChatMessage format to ThreadMessageLike
 const convertMessage = (message: ChatMessage): ThreadMessageLike => {
@@ -504,10 +504,10 @@ function ChatWithThreads({
     threadId: currentThreadId || '',
     threads: threadList,
     archivedThreads: archivedThreadList,
-    onSwitchToNewThread: () => {
+    onSwitchToNewThread: async () => {
       const defaultAgent = serviceInfo?.default_agent;
       const defaultModel = serviceInfo?.default_model;
-      const newThreadId = createNewThread('New Chat', defaultAgent, defaultModel);
+      const newThreadId = await createNewThread('New Chat', defaultAgent, defaultModel);
       if (newThreadId) {
         setThreads(prev => new Map(prev).set(newThreadId, []));
         setCurrentThreadId(newThreadId);
@@ -518,11 +518,11 @@ function ChatWithThreads({
       setCurrentThreadId(threadId);
       switchToThread(threadId);
     },
-    onRename: (threadId, newTitle) => {
-      updateThreadTitle(threadId, newTitle);
+    onRename: async (threadId, newTitle) => {
+      await updateThreadTitle(threadId, newTitle);
     },
-    onArchive: (threadId) => {
-      const result = archiveThread(threadId);
+    onArchive: async (threadId) => {
+      const result = await archiveThread(threadId);
       if (result.success && result.newThreadId) {
         // If a new thread was created, switch to it and update the URL
         setCurrentThreadId(result.newThreadId);
@@ -531,8 +531,8 @@ function ChatWithThreads({
         setThreads(prev => new Map(prev).set(result.newThreadId!, []));
       }
     },
-    onDelete: (threadId) => {
-      deleteThread(threadId);
+    onDelete: async (threadId) => {
+      await deleteThread(threadId);
       setThreads(prev => {
         const next = new Map(prev);
         next.delete(threadId);
@@ -575,12 +575,10 @@ export function CustomRuntimeProvider({
   ...props
 }: CustomRuntimeProviderProps) {
   return (
-    <UserProvider>
-      <ThreadProvider>
-        <ChatWithThreads {...props}>
-          {children}
-        </ChatWithThreads>
-      </ThreadProvider>
-    </UserProvider>
+    <ThreadProvider>
+      <ChatWithThreads {...props}>
+        {children}
+      </ChatWithThreads>
+    </ThreadProvider>
   );
 }

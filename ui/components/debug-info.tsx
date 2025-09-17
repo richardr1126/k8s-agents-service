@@ -2,7 +2,7 @@
 
 import { useUrlState } from "@/hooks/use-url-state";
 import { useThreadContext } from "@/components/custom-runtime-provider";
-import { useUser } from "@/components/user-provider";
+import { useUser } from "@/components/auth-user-provider";
 
 export function DebugInfo() {
   const { activeThreads, archivedThreads } = useUser();
