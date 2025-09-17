@@ -53,6 +53,7 @@ export function UserProvider({ children }: UserProviderProps) {
   const [userData, setUserData] = useState<UserContextType['userData']>(null);
   const [isLoading, setIsLoading] = useState(true);
   const isCreatingDefaultThreadRef = useRef(false);
+  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
   // Track pending operations for optimistic updates
   const pendingOperationsRef = useRef<Map<string, 'create' | 'update' | 'delete'>>(new Map());
@@ -687,18 +688,52 @@ export function UserProvider({ children }: UserProviderProps) {
     isCreatingDefaultThreadRef.current = false;
   }, []);
 
-  // Periodic sync with database (every 30 seconds)
+  // Periodic sync with database (pauses when page is hidden)
   useEffect(() => {
     if (!session?.user?.id || !userData) return;
-    
-    const interval = setInterval(() => {
-      // Only sync if no pending operations
-      if (pendingOperationsRef.current.size === 0) {
-        fetchThreads();
+
+    const startSyncInterval = () => {
+      // Clear any existing interval
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
       }
-    }, SYNC_INTERVAL);
+      
+      // Start new interval
+      syncIntervalRef.current = setInterval(() => {
+        // Only sync if no pending operations and page is visible
+        if (pendingOperationsRef.current.size === 0 && !document.hidden) {
+          fetchThreads();
+        }
+      }, SYNC_INTERVAL);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        // Page is hidden - pause sync to save database compute
+        if (syncIntervalRef.current) {
+          clearInterval(syncIntervalRef.current);
+          syncIntervalRef.current = null;
+        }
+      } else {
+        // Page is visible - resume sync and do immediate sync
+        fetchThreads(); // Immediate sync when page becomes visible
+        startSyncInterval();
+      }
+    };
+
+    // Start initial sync interval
+    startSyncInterval();
+
+    // Listen for visibility changes
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    return () => clearInterval(interval);
+    return () => {
+      if (syncIntervalRef.current) {
+        clearInterval(syncIntervalRef.current);
+        syncIntervalRef.current = null;
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [session?.user?.id, userData, fetchThreads]);
 
   // Computed values
