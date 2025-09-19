@@ -34,7 +34,7 @@ export default function SignIn() {
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
+                placeholder="me@example.com"
                 required
                 onChange={(e) => {
                   setEmail(e.target.value);

@@ -14,9 +14,11 @@ import { CustomRuntimeProvider, useThreadContext } from "@/components/custom-run
 import { TaskToolUI } from "@/components/task-ui";
 import { UserProvider } from "@/components/auth-user-provider";
 import { ServiceInfoProvider } from "@/components/service-info-provider";
-import { useSession } from "@/lib/auth-client";
+import { useSession, signIn } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Loader2, MessagesSquare } from "lucide-react";
 
 function AssistantHeader() {
   const {
@@ -75,23 +77,55 @@ function AssistantContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
 
-  // Redirect to signin when not authenticated
+  // Auto sign-in anonymous users if not authenticated
   useEffect(() => {
     if (!isPending && !session) {
-      router.push('/signin');
+      // Don't redirect to signin, instead sign in anonymously
+      const signInAnonymously = async () => {
+        try {
+          await signIn.anonymous();
+          // Session will be updated automatically via the auth client
+        } catch (error) {
+          console.error('Failed to sign in anonymously:', error);
+          // Fallback to signin page if anonymous auth fails
+          router.push('/signin');
+        }
+      };
+      
+      signInAnonymously();
     }
   }, [session, isPending, router]);
 
-  if (isPending) {
+  // Show loading state while checking auth or signing in
+  if (isPending || !session) {
     return (
-      <div className="flex h-dvh w-full items-center justify-center">
-        <div className="text-lg">Loading...</div>
+      <div className="flex h-dvh w-full items-center justify-center p-4">
+        <Card className="max-w-md w-full">
+          <CardHeader className="text-center">
+            <div className="flex justify-center mb-4">
+              <div className="flex aspect-square size-12 items-center justify-center rounded-lg bg-primary text-primary-foreground">
+                <MessagesSquare className="size-6" />
+              </div>
+            </div>
+            <CardTitle className="text-lg md:text-xl">chat.richardr.dev</CardTitle>
+          </CardHeader>
+          <CardContent className="text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <Loader2 className="size-5 animate-spin" />
+              <span className="text-sm text-muted-foreground">
+                {isPending ? "Checking authentication..." : "Signing in anonymously..."}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {isPending 
+                ? "Please wait while we verify your session"
+                : "Setting up your temporary session to get started"
+              }
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
-  }
-
-  if (!session) {
-    return null; // Will redirect to signin via useEffect
   }
 
   return <AuthenticatedContent />;
