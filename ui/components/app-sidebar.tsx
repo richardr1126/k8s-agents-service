@@ -95,7 +95,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <div className="flex flex-col gap-0.5 leading-none text-left">
                   <span className="font-semibold">Create Account</span>
                   <span className="text-xs opacity-60">
-                    Save your chats or{" "}
+                    Manage your chats or{" "}
                     <span 
                       onClick={(e) => {
                         e.stopPropagation();

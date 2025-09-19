@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "@/components/ui/button";
 
 // Key for localStorage to remember dismissal (updated for auth version)
-const STORAGE_KEY = "privacy_notice_v2_auth_dismissed";
+const STORAGE_KEY = "privacy_notice_v3_auth_dismissed";
 
 /**
  * PrivacyPopup displays a comprehensive privacy policy for the AI agents service.
@@ -31,18 +31,18 @@ export function PrivacyPopup() {
   const [open, setOpen] = useState(false);
 
   // Remove automatic popup display - now only shown via explicit user action
-  // useEffect(() => {
-  //   try {
-  //     const dismissed = typeof window !== 'undefined' && window.localStorage.getItem(STORAGE_KEY);
-  //     if (!dismissed) {
-  //       // Defer open slightly to avoid layout shift on first paint
-  //       const t = setTimeout(() => setOpen(true), 400);
-  //       return () => clearTimeout(t);
-  //     }
-  //   } catch {
-  //     // Ignore storage errors
-  //   }
-  // }, []);
+  useEffect(() => {
+    try {
+      const dismissed = typeof window !== 'undefined' && window.localStorage.getItem(STORAGE_KEY);
+      if (!dismissed) {
+        // Defer open slightly to avoid layout shift on first paint
+        const t = setTimeout(() => setOpen(true), 400);
+        return () => clearTimeout(t);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
 
   const handleDismiss = () => {
     try {
@@ -66,7 +66,7 @@ export function PrivacyPopup() {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="bottom" className="border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4 sm:p-6 w-full max-w-full max-h-[85vh] flex flex-col">
+      <SheetContent side="bottom" className="gap-0 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 p-4 sm:p-8 w-full max-w-full max-h-[85vh] flex flex-col">
         <SheetHeader className="flex-shrink-0">
           <SheetTitle>Privacy Policy & Data Handling</SheetTitle>
           <SheetDescription asChild>
@@ -74,48 +74,42 @@ export function PrivacyPopup() {
               <div>
                 <h4 className="font-semibold mb-1">Data Collection & Storage</h4>
                 <p>
-                  We collect and store your conversations, authentication data, and usage information to provide and improve our AI agent services.
+                  We store your conversations, authentication, and usage data to run and improve the service.
                 </p>
               </div>
-              
+
               <div>
                 <h4 className="font-semibold mb-1">Account Information</h4>
                 <p>
-                  Your account details (email, name, profile picture) are securely stored using industry-standard authentication practices. 
-                  All conversations and threads are linked to your authenticated account.
+                  You start with an anonymous account linked to your browser. If your cookie expires or is cleared, you get a new anonymous account. Old threads from the previous account cannot be deleted or managed. If you sign up, your threads move to your new account. Your email, name, and profile picture are stored securely. All chats link to your account.
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-1">Conversation Data</h4>
                 <p>
-                  Chat conversations, including messages, tool interactions, and metadata, are stored for service operation, 
-                  observability, debugging, and product improvement. This data persists across your sessions.
+                  We keep chat messages, tool use, and metadata for features, debugging, and product improvement. If you lose your anonymous account, you cannot delete or manage old threads. Signing up moves your threads to your account.
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-1">Data Retention & Deletion</h4>
                 <p>
-                  When you delete threads from your account, they are immediately removed from our primary databases. 
-                  However, conversation data may persist in our observability platform (LangSmith) for up to 14 days 
-                  for operational monitoring and debugging purposes.
+                  Deleted threads are removed from our main databases. Copies may stay in LangSmith for up to 14 days. If you lose your anonymous account, you cannot delete or manage those threads. Signing up keeps your threads under your control.
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-1">Data Security</h4>
                 <p>
-                  <strong>Important:</strong> Avoid sharing sensitive personal information, passwords, or confidential data in conversations. 
-                  While we implement security measures, conversations are processed and stored for service improvement.
+                  <strong>Important:</strong> Do not share sensitive info, passwords, or secrets in chats. We use security measures, but all chats are processed and stored.
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-1">Your Rights</h4>
                 <p>
-                  You may sign out at any time and delete individual conversation threads. 
-                  For complete account deletion or data inquiries, please contact me on richardr.dev or at me@richardr.dev.
+                  You can sign out or delete threads anytime if you have access. If you lose your anonymous account, you cannot delete or manage old threads. Signing up keeps your threads under your control. For account deletion or questions, contact richardr.dev or me@richardr.dev.
                 </p>
               </div>
             </div>
