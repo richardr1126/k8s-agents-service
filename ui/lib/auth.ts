@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
+import { anonymous } from "better-auth/plugins";
 import { Pool } from "pg";
 
 // Create PostgreSQL connection pool for auth
@@ -44,7 +45,44 @@ export const auth = betterAuth({
       return `user-${timestamp}-${random}`;
     },
   },
-  plugins: [nextCookies()], // Enable Next.js cookie handling
+  plugins: [
+    nextCookies(), // Enable Next.js cookie handling
+    anonymous({
+      onLinkAccount: async ({ anonymousUser, newUser }) => {
+        try {
+          // Log when anonymous user links to a real account
+          console.log("Anonymous user linked to account:", {
+            anonymousUserId: anonymousUser.user.id,
+            newUserId: newUser.user.id,
+            newUserEmail: newUser.user.email,
+          });
+
+          // Transfer all threads from anonymous user to the new authenticated user
+          const client = await pool.connect();
+          try {
+            // Update all user_threads records to transfer ownership
+            const result = await client.query(
+              `UPDATE user_threads 
+               SET user_id = $1, updated_at = CURRENT_TIMESTAMP 
+               WHERE user_id = $2`,
+              [newUser.user.id, anonymousUser.user.id]
+            );
+
+            console.log(`Successfully transferred ${result.rowCount} threads from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+          } catch (error) {
+            console.error("Error transferring threads during account linking:", error);
+            // Don't throw here to prevent blocking the account linking process
+          } finally {
+            client.release();
+          }
+        } catch (error) {
+          console.error("Error in onLinkAccount callback:", error);
+          // Don't throw here to prevent blocking the account linking process
+        }
+        // Note: Anonymous user will be automatically deleted after this callback completes
+      },
+    }),
+  ],
 });
 
 export type Session = typeof auth.$Infer.Session;

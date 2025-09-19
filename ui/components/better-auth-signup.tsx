@@ -58,7 +58,7 @@ export default function SignUp() {
 							<Label htmlFor="first-name">First name</Label>
 							<Input
 								id="first-name"
-								placeholder="Max"
+								placeholder="Richard"
 								required
 								onChange={(e) => {
 									setFirstName(e.target.value);
@@ -70,7 +70,7 @@ export default function SignUp() {
 							<Label htmlFor="last-name">Last name</Label>
 							<Input
 								id="last-name"
-								placeholder="Robinson"
+								placeholder="Roberson"
 								required
 								onChange={(e) => {
 									setLastName(e.target.value);
@@ -84,7 +84,7 @@ export default function SignUp() {
 						<Input
 							id="email"
 							type="email"
-							placeholder="m@example.com"
+							placeholder="me@example.com"
 							required
 							onChange={(e) => {
 								setEmail(e.target.value);
