@@ -60,7 +60,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarContent>
       
       <SidebarRail />
-      <SidebarFooter>
+      <SidebarFooter className="mb-3">
         <SidebarMenu>
           {session && !isAnonymous && (
             <SidebarMenuItem>
