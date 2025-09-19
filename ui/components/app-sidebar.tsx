@@ -93,9 +93,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <UserPlus className="size-4" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none text-left">
-                  <span className="font-semibold">Create Account</span>
-                  <span className="text-xs opacity-60">
-                    Manage your chats or{" "}
+                  <span className="font-semibold">
+                    Create Account or&nbsp;
                     <span 
                       onClick={(e) => {
                         e.stopPropagation();
@@ -103,8 +102,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       }}
                       className="underline hover:opacity-80 cursor-pointer"
                     >
-                      sign in
+                      Sign in
                     </span>
+                  </span>
+                  <span className="text-xs opacity-60">
+                    Manage your chats and data
                   </span>
                 </div>
               </SidebarMenuButton>
@@ -119,33 +121,31 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none text-left">
                   <span className="font-semibold">Sign Out</span>
-                  <span className="">Logout</span>
+                  <span className="text-xs opacity-60">Logout</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
           )}
           
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
+            <SidebarMenuButton size="sm" asChild>
               <Link href="https://github.com/richardr1126/k8s-agents-service" target="_blank">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <Github className="size-4" />
+                <div className="flex aspect-square size-5 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
+                  <Github className="size-3" />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-semibold">GitHub</span>
-                  <span className="">View Source</span>
+                  <span className="font-semibold">Source Code</span>
                 </div>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" onClick={() => showPrivacyPopup()}>
-              <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                <Shield className="size-4" />
+            <SidebarMenuButton size="sm" onClick={() => showPrivacyPopup()}>
+              <div className="flex aspect-square size-5 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
+                <Shield className="size-3" />
               </div>
               <div className="flex flex-col gap-0.5 leading-none text-left">
-                <span className="font-semibold">Privacy</span>
-                <span className="">View Notice</span>
+                <span className="font-semibold">Privacy Policy</span>
               </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
