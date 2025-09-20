@@ -5,8 +5,10 @@ import {
   useThreadListItem,
 } from "@assistant-ui/react";
 import { Trash2Icon, PlusIcon, Loader2 } from "lucide-react";
+import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { useThreadContext } from "@/components/custom-runtime-provider";
 import { useUser } from "@/components/auth-user-provider";
@@ -44,21 +46,22 @@ const ThreadListItems: FC = () => {
 const ThreadListLoading: FC = () => {
   return (
     <div className="flex flex-col items-stretch gap-1.5">
-      {/* Show 3 skeleton items while loading */}
-      {[...Array(4)].map((_, index) => (
-        <div 
+      {/* Show skeleton items while loading */}
+      {[0, 1, 2, 3, 4].map((index) => (
+        <motion.div
           key={index}
-          className="flex items-center gap-2 rounded-lg transition-all animate-pulse"
+          initial={{ opacity: 0, y: 5 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 * index }}
+          className="flex items-center gap-2 sm:mx-2 rounded-lg min-h-[44px] py-1"
         >
-          <div className="flex-grow px-3 py-2 text-start">
-            <div className="flex items-center gap-2">
-              <div className="h-4 bg-muted rounded w-3/4"></div>
-            </div>
+          <div className="flex-grow px-1 py-1">
+            <Skeleton 
+              className="h-6" 
+              style={{ width: `${60 + Math.random() * 40}%` }}
+            />
           </div>
-          <div className="p-4 mr-1 size-4 flex items-center justify-center">
-            <div className="h-3 w-3 bg-muted rounded"></div>
-          </div>
-        </div>
+        </motion.div>
       ))}
     </div>
   );
