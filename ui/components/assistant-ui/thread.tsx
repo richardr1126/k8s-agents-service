@@ -50,10 +50,10 @@ export const Thread: FC = () => {
   return (
     <ThreadPrimitive.Root
       // aui-thread-root
-      className="bg-background flex h-full flex-col"
+      className="bg-background flex h-full flex-col pb-2 sm:pb-0"
       style={{
         ["--thread-max-width" as string]: "48rem",
-        ["--thread-padding-x" as string]: "0.5rem",
+        ["--thread-padding-x" as string]: "0.7rem",
       }}
     >
       {/* aui-thread-viewport */}
@@ -238,7 +238,7 @@ const ThreadWelcomeSuggestions: FC = () => {
             <Button
               variant="ghost"
               // aui-thread-welcome-suggestion
-              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-1 rounded-xl border px-4 py-3.5 text-left text-sm sm:flex-col"
+              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-0.7 rounded-lg border px-3 py-2 text-left text-sm sm:flex-col"
               aria-label={suggestedAction.action}
             >
               {/* aui-thread-welcome-suggestion-text-1 */}
