@@ -142,7 +142,7 @@ export function UserProvider({ children }: UserProviderProps) {
     });
     pendingOperationsRef.current.set(threadId, 'create');
 
-    // Queue database sync (backend just stores the thread with our ID)
+    // Queue database sync (backend stores the thread with our ID)
     queueSync(async () => {
       try {
         const result = await apiCall('create', { id: threadId, title, agentId, modelId });
@@ -269,29 +269,33 @@ export function UserProvider({ children }: UserProviderProps) {
             };
           }
           
-          // Merge: keep optimistic updates, sync confirmed changes
+          // Merge: prefer local thread when present to avoid clobbering with stale server data
           const mergedThreads = dbThreads.map(dbThread => {
-            const isPending = pendingOperationsRef.current.has(dbThread.id);
             const localThread = prev.threads.find(t => t.id === dbThread.id);
-            
-            // If pending, keep local changes
-            if (isPending && localThread) {
+            if (localThread) {
+              // If we have a local copy, prefer it. This prevents races where the server returns
+              // slightly stale data (e.g., title still "New Chat") right after a local update.
               return localThread;
             }
-            
-            // Otherwise use database version
             return dbThread;
           });
-          
-          // Add any local-only threads (optimistic creates)
-          const localOnlyThreads = prev.threads.filter(localThread => 
-            !dbThreads.find(dbThread => dbThread.id === localThread.id) &&
-            pendingOperationsRef.current.has(localThread.id)
-          );
-          
+
+          // Add any local-only threads (e.g., just created) that the server hasn't returned yet.
+          // Exclude those that are pending deletion to avoid resurrecting deleted threads.
+          const localOnlyThreads = prev.threads.filter(localThread => {
+            const existsInDb = dbThreads.some(dbThread => dbThread.id === localThread.id);
+            const pendingOp = pendingOperationsRef.current.get(localThread.id);
+            return !existsInDb && pendingOp !== 'delete';
+          });
+
+          // Dedupe by ID and sort deterministically by timestamp desc
+          const dedupMap = new Map<string, ThreadInfo>();
+          [...localOnlyThreads, ...mergedThreads].forEach(t => dedupMap.set(t.id, t));
+          const nextThreads = Array.from(dedupMap.values()).sort((a, b) => b.timestamp - a.timestamp);
+
           return {
             ...prev,
-            threads: [...localOnlyThreads, ...mergedThreads].sort((a, b) => b.timestamp - a.timestamp),
+            threads: nextThreads,
           };
         });
       }
