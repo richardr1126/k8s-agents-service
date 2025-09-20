@@ -69,6 +69,7 @@ interface ThreadContextType {
   setSelectedModelId: (modelId: string) => void;
   runningThreads: Set<string>;
   setRunningThreads: React.Dispatch<React.SetStateAction<Set<string>>>;
+  setLoadedThreads: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
 const ThreadContext = createContext<ThreadContextType>({
@@ -83,6 +84,7 @@ const ThreadContext = createContext<ThreadContextType>({
   setSelectedModelId: () => {},
   runningThreads: new Set(),
   setRunningThreads: () => {},
+  setLoadedThreads: () => {},
 });
 
 export const useThreadContext = () => {
@@ -193,7 +195,8 @@ function ThreadProvider({ children }: ThreadProviderProps) {
         selectedModelId,
         setSelectedModelId,
         runningThreads,
-        setRunningThreads
+        setRunningThreads,
+        setLoadedThreads
       }}
     >
       {children}
@@ -217,7 +220,8 @@ function ChatWithThreads({
     selectedAgentId,
     selectedModelId,
     runningThreads,
-    setRunningThreads
+    setRunningThreads,
+    setLoadedThreads
   } = useThreadContext();
   
   const { serviceInfo } = useServiceInfo();
@@ -498,11 +502,14 @@ function ChatWithThreads({
     onSwitchToNewThread: async () => {
       const defaultAgent = serviceInfo?.default_agent;
       const defaultModel = serviceInfo?.default_model;
+      
+      // Create the thread synchronously first to avoid race conditions
       const newThreadId = await createNewThread('New Chat', defaultAgent, defaultModel);
       if (newThreadId) {
+        // Immediately set up the thread in our local state before any async operations
+        // This prevents the skeleton from showing since the thread exists in the map
         setThreads(prev => new Map(prev).set(newThreadId, []));
-        setCurrentThreadId(newThreadId);
-        switchToThread(newThreadId);
+        setLoadedThreads(prev => new Set(prev).add(newThreadId));
       }
     },
     onSwitchToThread: (threadId) => {

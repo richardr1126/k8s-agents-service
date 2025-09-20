@@ -5,33 +5,38 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState, useEffect } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
 import { signIn } from "@/lib/auth-client";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { showPrivacyPopup } from "@/components/privacy-popup";
 
+function SessionExpiredLoader({ setSessionExpired }: { setSessionExpired: (v: boolean) => void }) {
+  const searchParams = useSearchParams();
+  // Set the flag based on the URL param; this is allowed in Suspense boundary
+  const reason = searchParams.get("reason");
+  useEffect(() => {
+    setSessionExpired(reason === "expired");
+  }, [reason, setSessionExpired]);
+  return null;
+}
+
 export default function SignIn() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
   const [sessionExpired, setSessionExpired] = useState(false);
 
-  // Check if user arrived here due to session expiration
-  useEffect(() => {
-    const reason = searchParams.get('reason');
-    if (reason === 'expired') {
-      setSessionExpired(true);
-    }
-  }, [searchParams]);
-
   return (
     <Card className="max-w-md">
       <CardHeader>
+        {/* Only this part uses useSearchParams via the loader, wrapped in Suspense */}
+        <Suspense fallback={null}>
+          <SessionExpiredLoader setSessionExpired={setSessionExpired} />
+        </Suspense>
         {sessionExpired && (
           <div className="flex items-center gap-2 p-3 mb-2 bg-amber-50 border border-amber-200 rounded-md dark:bg-amber-950 dark:border-amber-800">
             <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />

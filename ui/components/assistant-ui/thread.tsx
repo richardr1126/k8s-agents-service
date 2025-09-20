@@ -24,13 +24,29 @@ import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownText } from "./markdown-text";
 import { ToolFallback } from "./tool-fallback";
 import { useThreadContext } from "@/components/custom-runtime-provider";
 import { AgentSelect } from "@/components/agent-select";
 import { ModelSelect } from "@/components/model-select";
+import { useUser } from "@/components/auth-user-provider";
+import agentSuggestions from "./agent-suggestions.json";
 
 export const Thread: FC = () => {
+  const { currentThreadId, threads } = useThreadContext();
+  const { isLoading: userLoading } = useUser();
+  const { isLoading: serviceLoading } = useServiceInfo();
+  
+  // Show loading skeleton only when we're genuinely loading user/service data
+  // OR when we have a thread ID but it's not in our threads map at all
+  const isThreadLoading = userLoading || serviceLoading || 
+    (currentThreadId && !threads.has(currentThreadId));
+
+  if (isThreadLoading) {
+    return <ThreadLoadingSkeleton />;
+  }
+
   return (
     <ThreadPrimitive.Root
       // aui-thread-root
@@ -60,6 +76,74 @@ export const Thread: FC = () => {
 
       <Composer />
     </ThreadPrimitive.Root>
+  );
+};
+
+const ThreadLoadingSkeleton: FC = () => {
+  return (
+    <div className="bg-background flex h-full flex-col">
+      {/* Skeleton for main content area */}
+      <div className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
+        <div className="mx-auto flex w-full max-w-[48rem] flex-grow flex-col px-2">
+          {/* Welcome section skeleton */}
+          <div className="flex w-full flex-grow flex-col items-center justify-center">
+            <div className="flex size-full flex-col justify-center px-8 md:mt-20">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="mb-4"
+              >
+                <Skeleton className="h-8 w-32 md:h-10 md:w-40" />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="mb-8"
+              >
+                <Skeleton className="h-6 w-64 md:h-8 md:w-80" />
+              </motion.div>
+            </div>
+          </div>
+          
+          {/* Suggestions skeleton */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.4 }}
+            className="grid w-full gap-2 sm:grid-cols-2 mb-4"
+          >
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-auto w-full">
+                <Skeleton className="h-20 w-full rounded-xl" />
+              </div>
+            ))}
+          </motion.div>
+        </div>
+      </div>
+
+      {/* Composer skeleton */}
+      <div className="bg-background relative mx-auto flex w-full max-w-[48rem] flex-col gap-4 px-2 pb-4 md:pb-6">
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.5 }}
+          className="relative flex w-full flex-col rounded-2xl"
+        >
+          {/* Input skeleton */}
+          <Skeleton className="h-16 w-full rounded-t-2xl" />
+          {/* Action bar skeleton */}
+          <div className="bg-muted border-border dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-8 w-24" />
+              <Skeleton className="h-8 w-24" />
+            </div>
+            <Skeleton className="h-8 w-8 rounded-full" />
+          </div>
+        </motion.div>
+      </div>
+    </div>
   );
 };
 
@@ -125,31 +209,17 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadWelcomeSuggestions: FC = () => {
+  const { selectedAgentId } = useThreadContext();
+  const { serviceInfo } = useServiceInfo();
+  
+  // Get suggestions for the current agent, fallback to auto-router suggestions
+  const currentAgentId = selectedAgentId || serviceInfo?.default_agent || "auto-router";
+  const suggestions = agentSuggestions[currentAgentId as keyof typeof agentSuggestions] || agentSuggestions["auto-router"];
+
   return (
     // aui-thread-welcome-suggestions
     <div className="grid w-full gap-2 sm:grid-cols-2">
-      {[
-        {
-          title: "What is Richard's most technical project?",
-          label: "Uses Resume Agent",
-          action: "What is Richard's most technical project?",
-        },
-        {
-          title: "Overview of Richard's Cloud Computing Skills",
-          label: "Uses Resume Agent",
-          action: "Provide an overview of Richard's skills in cloud computing; linking to his projects.",
-        },
-        {
-          title: "Are Richard's skills in demand?",
-          label: "Uses Resume Agent + Web Agent",
-          action: "What skills does Richard have that are in demand right now?",
-        },
-        {
-          title: "What's the news today?",
-          label: "Uses Web Agent",
-          action: "What is the biggest news that happened today?",
-        },
-      ].map((suggestedAction, index) => (
+      {suggestions.map((suggestedAction, index) => (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}

@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, ReactNode, useState, useEffect, useCallback, useRef } from 'react';
+import { createContext, useContext, ReactNode, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useSession } from '@/lib/auth-client';
 import { ThreadInfo } from '@/lib/types';
 
@@ -107,95 +107,67 @@ export function UserProvider({ children }: UserProviderProps) {
     processSyncQueue();
   }, [processSyncQueue]);
 
-  // Generate optimistic thread ID
-  const generateOptimisticId = () => `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  // Generate a permanent thread ID that the application controls
+  const generateThreadId = () => `thread-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  // Create a new thread with optimistic updates
+  // Create a new thread with a permanent ID (no temp ID needed)
   const createNewThread = useCallback((title: string = DEFAULT_THREAD_TITLE, agentId?: string, modelId?: string) => {
     if (!session?.user?.id) return null;
 
-    const tempId = generateOptimisticId();
+    const threadId = generateThreadId(); // Use permanent ID immediately
     const newThread: ThreadInfo = {
-      id: tempId,
+      id: threadId,
       title,
       timestamp: Date.now(),
       agentId,
       modelId,
     };
 
-    // Optimistically add to local state
+    // Add to local state with permanent ID
     setUserData(prev => {
       if (!prev) {
         // For new accounts, create initial user data structure
         return {
           userId: session.user.id,
           threads: [newThread],
-          currentThreadId: tempId,
+          currentThreadId: threadId,
           createdAt: Date.now(),
         };
       }
       return {
         ...prev,
         threads: [newThread, ...prev.threads],
-        currentThreadId: tempId,
+        currentThreadId: threadId,
       };
     });
-    pendingOperationsRef.current.set(tempId, 'create');
+    pendingOperationsRef.current.set(threadId, 'create');
 
-    // Queue database sync
+    // Queue database sync (backend just stores the thread with our ID)
     queueSync(async () => {
       try {
-        const result = await apiCall('create', { title, agentId, modelId });
+        const result = await apiCall('create', { id: threadId, title, agentId, modelId });
         if (result?.success) {
-          // Replace temp ID with real ID
-          setUserData(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              threads: prev.threads.map(t => 
-                t.id === tempId 
-                  ? { ...t, id: result.threadId }
-                  : t
-              ),
-            };
-          });
-          
-          // Update current thread ID if it was the temp one
-          setUserData(prev => {
-            if (!prev) return null;
-            return {
-              ...prev,
-              currentThreadId: prev.currentThreadId === tempId ? result.threadId : prev.currentThreadId,
-            };
-          });
-          
-          pendingOperationsRef.current.delete(tempId);
+          // No ID replacement needed since we used permanent ID
+          pendingOperationsRef.current.delete(threadId);
           
           // Reset safety net flag if this was created by safety net
           if (isCreatingDefaultThreadRef.current) {
             isCreatingDefaultThreadRef.current = false;
           }
         } else {
-          // Remove failed thread from local state
+          // Remove failed thread and update currentThreadId in a single update
           setUserData(prev => {
             if (!prev) return null;
+            const remainingThreads = prev.threads.filter(t => t.id !== threadId);
+            const isCurrent = prev.currentThreadId === threadId;
             return {
               ...prev,
-              threads: prev.threads.filter(t => t.id !== tempId),
+              threads: remainingThreads,
+              currentThreadId: isCurrent ? (remainingThreads[0]?.id ?? null) : prev.currentThreadId,
             };
           });
           
-          // Switch to another thread if this was current
-          setUserData(prev => {
-            if (!prev || prev.currentThreadId !== tempId) return prev;
-            const remainingThreads = prev.threads.filter(t => t.id !== tempId);
-            return {
-              ...prev,
-              currentThreadId: remainingThreads.length > 0 ? remainingThreads[0].id : null,
-            };
-          });
-          
-          pendingOperationsRef.current.delete(tempId);
+          pendingOperationsRef.current.delete(threadId);
           console.error('Failed to create thread in database');
           
           // Reset safety net flag if this was created by safety net
@@ -205,15 +177,18 @@ export function UserProvider({ children }: UserProviderProps) {
         }
       } catch (error) {
         console.error('Error creating thread:', error);
-        // Handle error same as failed result
+        // Handle error same as failed result in a single update
         setUserData(prev => {
           if (!prev) return null;
+          const remainingThreads = prev.threads.filter(t => t.id !== threadId);
+          const isCurrent = prev.currentThreadId === threadId;
           return {
             ...prev,
-            threads: prev.threads.filter(t => t.id !== tempId),
+            threads: remainingThreads,
+            currentThreadId: isCurrent ? (remainingThreads[0]?.id ?? null) : prev.currentThreadId,
           };
         });
-        pendingOperationsRef.current.delete(tempId);
+        pendingOperationsRef.current.delete(threadId);
         
         // Reset safety net flag if this was created by safety net
         if (isCreatingDefaultThreadRef.current) {
@@ -222,13 +197,11 @@ export function UserProvider({ children }: UserProviderProps) {
       }
     });
 
-    return tempId;
+    return threadId;
   }, [session?.user?.id, apiCall, queueSync]);
 
-  // Stable createNewThread reference for use in fetchThreads
-  const createNewThreadRef = useRef<(title?: string, agentId?: string, modelId?: string) => string | null>(null);
-  createNewThreadRef.current = createNewThread;
-  
+  // Removed unused createNewThreadRef (no longer needed with stable hooks)
+
   // Fetch user threads from the database (used for initial load and periodic sync)
   const fetchThreads = useCallback(async (forceRefresh = false) => {
     if (!session?.user?.id) return;
@@ -695,8 +668,9 @@ export function UserProvider({ children }: UserProviderProps) {
   }, []);
 
   // Periodic sync with database (pauses when page is hidden)
+  const hasUserData = !!userData;
   useEffect(() => {
-    if (!session?.user?.id || !userData) return;
+    if (!session?.user?.id || !hasUserData) return;
 
     const startSyncInterval = () => {
       // Clear any existing interval
@@ -740,13 +714,16 @@ export function UserProvider({ children }: UserProviderProps) {
       }
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [session?.user?.id, userData, fetchThreads]);
+  }, [session?.user?.id, hasUserData, fetchThreads]);
 
-  // Computed values
-  const activeThreads = userData?.threads || [];
-  const currentThread = userData?.threads?.find(t => t.id === userData?.currentThreadId) || null;
+  // Computed values (memoized)
+  const activeThreads = useMemo(() => userData?.threads || [], [userData?.threads]);
+  const currentThread = useMemo(
+    () => (userData?.threads?.find(t => t.id === userData?.currentThreadId) || null),
+    [userData?.threads, userData?.currentThreadId]
+  );
 
-  const contextValue: UserContextType = {
+  const contextValue: UserContextType = useMemo(() => ({
     userData,
     isLoading: isLoading || isPending,
     createNewThread,
@@ -759,7 +736,7 @@ export function UserProvider({ children }: UserProviderProps) {
     clearUserData,
     activeThreads,
     currentThread,
-  };
+  }), [userData, isLoading, isPending, createNewThread, switchToThread, updateThreadTitle, updateThreadActivity, updateThreadAgent, updateThreadModel, deleteThread, clearUserData, activeThreads, currentThread]);
 
   return (
     <UserContext.Provider value={contextValue}>

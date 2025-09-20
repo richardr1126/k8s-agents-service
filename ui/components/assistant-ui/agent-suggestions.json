@@ -1,0 +1,112 @@
+{
+  "auto-router": [
+    {
+      "title": "What is Richard's most technical project?",
+      "label": "Uses Resume Agent",
+      "action": "What is Richard's most technical project?"
+    },
+    {
+      "title": "Overview of Richard's Cloud Computing Skills",
+      "label": "Uses Resume Agent",
+      "action": "Provide an overview of Richard's skills in cloud computing; linking to his projects."
+    },
+    {
+      "title": "Are Richard's skills in demand?",
+      "label": "Uses Resume Agent + Web Agent",
+      "action": "What skills does Richard have that are in demand right now?"
+    },
+    {
+      "title": "What's the news today?",
+      "label": "Uses Web Agent",
+      "action": "What is the biggest news that happened today?"
+    }
+  ],
+  "resume-agent": [
+    {
+      "title": "What are Richard's strongest technical skills?",
+      "label": "Skills Overview",
+      "action": "What are Richard's strongest technical skills and how do they align with current industry trends?"
+    },
+    {
+      "title": "Tell me about Richard's work experience",
+      "label": "Professional Background",
+      "action": "Can you provide an overview of Richard's work experience and key accomplishments?"
+    },
+    {
+      "title": "What projects has Richard worked on?",
+      "label": "Project Portfolio",
+      "action": "What are some notable projects Richard has worked on and what technologies did he use?"
+    },
+    {
+      "title": "Richard's education background",
+      "label": "Academic Credentials",
+      "action": "Tell me about Richard's educational background and any relevant certifications."
+    }
+  ],
+  "web-rag-agent": [
+    {
+      "title": "Latest tech industry news",
+      "label": "Current Events",
+      "action": "What are the biggest technology news stories from today?"
+    },
+    {
+      "title": "Research AI development trends",
+      "label": "Industry Research",
+      "action": "What are the current trends in AI development and machine learning?"
+    },
+    {
+      "title": "Cloud computing market updates",
+      "label": "Market Analysis",
+      "action": "What are the latest developments in the cloud computing market?"
+    },
+    {
+      "title": "Programming language popularity",
+      "label": "Development Trends",
+      "action": "Which programming languages are most in demand right now?"
+    }
+  ],
+  "postgres-mcp-agent": [
+    {
+      "title": "Database performance optimization",
+      "label": "Performance Tuning",
+      "action": "How can I optimize PostgreSQL database performance for large datasets?"
+    },
+    {
+      "title": "Advanced PostgreSQL queries",
+      "label": "SQL Development",
+      "action": "Show me some advanced PostgreSQL query techniques and best practices."
+    },
+    {
+      "title": "Database schema design",
+      "label": "Architecture",
+      "action": "What are the best practices for designing efficient PostgreSQL database schemas?"
+    },
+    {
+      "title": "Database security measures",
+      "label": "Security",
+      "action": "What security measures should I implement for a PostgreSQL database?"
+    }
+  ],
+  "chatbot": [
+    {
+      "title": "Tell me a joke",
+      "label": "Entertainment",
+      "action": "Tell me a programming joke!"
+    },
+    {
+      "title": "Explain a concept",
+      "label": "Learning",
+      "action": "Can you explain the concept of machine learning in simple terms?"
+    },
+    {
+      "title": "Creative writing help",
+      "label": "Creativity",
+      "action": "Help me write a short story about a robot learning to code."
+    },
+    {
+      "title": "General conversation",
+      "label": "Chat",
+      "action": "What's interesting about artificial intelligence?"
+    }
+  ]
+}
