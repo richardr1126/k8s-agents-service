@@ -79,5 +79,17 @@ services:
           action: sync+restart
           target: /app/streamlit_app.py
 
+  postgres-mcp:
+    image: crystaldba/postgres-mcp:latest
+    ports:
+      - "8000:8000"
+    command: ["--access-mode=restricted", "--transport=sse"]
+    environment:
+      - DATABASE_URI=postgresql://cosmerefeed:Carlton%401126%24@192.168.0.73:5433/cosmerefeed
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   postgres_data:

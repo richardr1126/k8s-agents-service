@@ -63,7 +63,8 @@ kubectl create secret generic app-secrets \
   --from-literal=AZURE_OPENAI_ENDPOINT="https://k8s-agents-service.openai.azure.com/" \
   --from-literal=AZURE_OPENAI_API_VERSION="2025-04-01-preview" \
   --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4.1": "gpt-4.1", "gpt-5-chat": "gpt-5-chat"}' \
-  --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}"
+  --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}" \
+  --from-literal=POSTGRES_MCP_URL="http://postgres-mcp.default.svc.cluster.local:8000/sse"
 
 echo "Creating streamlit-secrets..."
 kubectl create secret generic streamlit-secrets \
