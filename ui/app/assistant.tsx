@@ -25,7 +25,7 @@ import {
 function AssistantFloatingTrigger() {
   return (
     <div className="absolute top-2 left-2 z-20">
-      <SidebarTrigger className="h-9 w-9 rounded-full border bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60" />
+      <SidebarTrigger className="rounded-full border size-11 bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60" />
     </div>
   );
 }
