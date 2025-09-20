@@ -44,23 +44,40 @@ export async function POST(req: NextRequest) {
 
     const history: BackendChatHistory = await response.json();
 
-    // Convert backend messages to frontend format
-    const messages: ChatMessage[] = history.messages.map((msg, index) => {
-      const toolCalls: ToolCall[] | undefined = msg.tool_calls?.map(tc => ({
-        id: tc.id || `tool-${index}-${Math.random()}`,
-        name: tc.name,
-        args: tc.args,
-      }));
-
-      return {
-        id: `msg-${index}-${Date.now()}`,
-        role: msg.type === 'human' ? 'user' : 'assistant',
-        content: msg.content,
-        timestamp: Date.now(),
-        runId: msg.run_id,
-        toolCalls,
-      };
+    // Create a map of tool results by tool_call_id for efficient lookup
+    const toolResults = new Map<string, string>();
+    history.messages.forEach(msg => {
+      if (msg.type === 'tool' && msg.tool_call_id) {
+        toolResults.set(msg.tool_call_id, msg.content);
+      }
     });
+
+    // Convert backend messages to frontend format, filtering out standalone tool messages
+    // since they'll be embedded in their corresponding AI messages
+    const messages: ChatMessage[] = history.messages
+      .filter(msg => msg.type !== 'tool') // Filter out standalone tool result messages
+      .map((msg, index) => {
+        let toolCalls: ToolCall[] | undefined;
+        
+        // If this AI message has tool calls, associate the results
+        if (msg.tool_calls && msg.tool_calls.length > 0) {
+          toolCalls = msg.tool_calls.map(tc => ({
+            id: tc.id || `tool-${index}-${Math.random()}`,
+            name: tc.name,
+            args: tc.args,
+            result: tc.id ? toolResults.get(tc.id) : undefined, // Associate the tool result
+          }));
+        }
+
+        return {
+          id: `msg-${index}-${Date.now()}`,
+          role: msg.type === 'human' ? 'user' : 'assistant',
+          content: msg.content,
+          timestamp: Date.now(),
+          runId: msg.run_id,
+          toolCalls,
+        };
+      });
 
     return NextResponse.json({ messages });
   } catch (error) {
