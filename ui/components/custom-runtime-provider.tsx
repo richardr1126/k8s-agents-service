@@ -69,6 +69,7 @@ interface ThreadContextType {
   setSelectedModelId: (modelId: string) => void;
   runningThreads: Set<string>;
   setRunningThreads: React.Dispatch<React.SetStateAction<Set<string>>>;
+  loadedThreads: Set<string>;
   setLoadedThreads: React.Dispatch<React.SetStateAction<Set<string>>>;
 }
 
@@ -84,6 +85,7 @@ const ThreadContext = createContext<ThreadContextType>({
   setSelectedModelId: () => {},
   runningThreads: new Set(),
   setRunningThreads: () => {},
+  loadedThreads: new Set(),
   setLoadedThreads: () => {},
 });
 
@@ -110,8 +112,9 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   // Always use the most recent thread (by timestamp) from user data
   const getMostRecentThread = () => {
     if (!userData?.threads || userData.threads.length === 0) return null;
-    // Sort by timestamp descending and return the first (most recent)
-    return userData.threads.sort((a, b) => b.timestamp - a.timestamp)[0];
+    // Sort a copy by timestamp descending and return the first (most recent)
+    // Avoid mutating state by not sorting the original array in place
+    return [...userData.threads].sort((a, b) => b.timestamp - a.timestamp)[0];
   };
 
   const mostRecentThread = getMostRecentThread();
@@ -196,6 +199,7 @@ function ThreadProvider({ children }: ThreadProviderProps) {
         setSelectedModelId,
         runningThreads,
         setRunningThreads,
+        loadedThreads,
         setLoadedThreads
       }}
     >

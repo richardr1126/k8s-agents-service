@@ -100,8 +100,21 @@ export async function POST(req: NextRequest) {
     const client = await pool.connect();
     try {
       if (action === 'create') {
-        const threadId = generateThreadId();
+        // Allow client to provide a thread ID to avoid client/server ID mismatches
+        const clientProvidedId = (threadData && (typeof (threadData as Record<string, unknown>).id === 'string'
+          ? (threadData as { id: string }).id
+          : undefined));
+        const threadId = clientProvidedId || generateThreadId();
         const { title = 'New Chat', agentId, modelId } = threadData || {};
+
+        // If a record with this id already exists for this user, return success idempotently
+        const existing = await client.query(
+          'SELECT id FROM user_threads WHERE id = $1 AND user_id = $2',
+          [threadId, session.user.id]
+        );
+        if (existing.rowCount && existing.rowCount > 0) {
+          return NextResponse.json({ threadId, success: true });
+        }
 
         await client.query(
           `INSERT INTO user_threads (id, user_id, title, timestamp, agent_id, model_id, created_at, updated_at)
