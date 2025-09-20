@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Brain } from "lucide-react";
+import { Brain, Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ interface ModelSelectProps {
 export function ModelSelect({ 
   selectedModelId, 
   onModelChange, 
-  className 
+  className,
 }: ModelSelectProps) {
   const { serviceInfo, isLoading: loading } = useServiceInfo();
   const [hasSetDefault, setHasSetDefault] = useState(false);
@@ -35,18 +35,18 @@ export function ModelSelect({
 
   if (loading) {
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
-        <Brain className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Loading models...</span>
+      <div className={`flex items-center gap-1 ${className}`}>
+        <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+        <span className="text-xs text-muted-foreground">Loading models...</span>
       </div>
     );
   }
 
   if (!serviceInfo?.models?.length) {
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
+      <div className={`flex items-center gap-1 ${className}`}>
         <Brain className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">No models available</span>
+        <span className="text-xs text-muted-foreground">No models</span>
       </div>
     );
   }
@@ -54,22 +54,17 @@ export function ModelSelect({
   const currentModel = selectedModelId || serviceInfo.default_model;
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <Brain className="h-4 w-4 text-muted-foreground" />
-      <Select
-        value={currentModel || ""}
-        onValueChange={onModelChange}
-      >
-        <SelectTrigger className="w-full sm:w-[180px] h-8 sm:h-10 text-xs sm:text-sm py-1 sm:py-2">
-          <SelectValue placeholder="Select a model">
-            {currentModel || "Select a model"}
-          </SelectValue>
+    <div className={className}>
+      <Select value={currentModel || ""} onValueChange={onModelChange}>
+        <SelectTrigger className="h-6.5 text-xs px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20">
+          <Brain className="h-3 w-3 text-muted-foreground" />
+          <SelectValue placeholder="Model" className="truncate" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="text-sm">
           {serviceInfo.models.map((model) => (
             <SelectItem key={model} value={model}>
               <div className="flex flex-col max-w-[250px]">
-                <span className="font-medium truncate">{model}</span>
+                <span className="truncate">{model}</span>
               </div>
             </SelectItem>
           ))}

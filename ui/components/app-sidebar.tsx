@@ -15,6 +15,7 @@ import {
 import { ThreadList } from "@/components/assistant-ui/thread-list"
 import { showPrivacyPopup } from "@/components/privacy-popup"
 import { signOut, useSession } from "@/lib/auth-client"
+import { clearAuthenticationState } from "@/lib/session-utils"
 import { useRouter } from "next/navigation"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -22,6 +23,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
 
   const handleSignOut = async () => {
+    // Clear authentication state before signing out
+    clearAuthenticationState();
     await signOut();
   };
 
@@ -38,7 +41,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const isAnonymous = session?.user && (session.user as Record<string, unknown>).isAnonymous === true;
 
   return (
-    <Sidebar {...props}>
+    <Sidebar {...props} >
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
