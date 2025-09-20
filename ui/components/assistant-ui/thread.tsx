@@ -289,7 +289,7 @@ const ComposerAction: FC = () => {
 
   return (
     // aui-composer-action-wrapper
-    <div className="bg-muted border-border dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
+    <div className="bg-muted/80 border-top border-1 dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
       {/* left: model/agent selectors */}
       <div className="flex items-center gap-2">
         <AgentSelect
