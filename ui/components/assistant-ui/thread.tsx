@@ -116,7 +116,7 @@ const ThreadLoadingSkeleton: FC = () => {
           >
             {[1, 2, 3, 4].map((i) => (
               <div key={i} className="h-auto w-full">
-                <Skeleton className="h-20 w-full rounded-xl" />
+                <Skeleton className="h-14 w-full rounded-lg" />
               </div>
             ))}
           </motion.div>
@@ -132,7 +132,7 @@ const ThreadLoadingSkeleton: FC = () => {
           className="relative flex w-full flex-col rounded-2xl"
         >
           {/* Input skeleton */}
-          <Skeleton className="h-16 w-full rounded-t-2xl" />
+          <Skeleton className="h-15 w-full rounded-t-2xl" />
           {/* Action bar skeleton */}
           <div className="bg-muted border-border dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
             <div className="flex items-center gap-2">
