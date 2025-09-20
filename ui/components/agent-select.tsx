@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bot } from "lucide-react";
+import { Bot, Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -20,7 +20,7 @@ interface AgentSelectProps {
 export function AgentSelect({ 
   selectedAgentId, 
   onAgentChange, 
-  className 
+  className,
 }: AgentSelectProps) {
   const { serviceInfo, isLoading: loading } = useServiceInfo();
   const [hasSetDefault, setHasSetDefault] = useState(false);
@@ -35,51 +35,37 @@ export function AgentSelect({
 
   if (loading) {
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
-        <Bot className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">Loading agents...</span>
+      <div className={`flex items-center gap-1 ${className}`}>
+        <Loader2 className="h-4 w-4 text-muted-foreground animate-spin" />
+        <span className="text-xs text-muted-foreground">Loading agents...</span>
       </div>
     );
   }
 
   if (!serviceInfo?.agents?.length) {
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
+      <div className={`flex items-center gap-1 ${className}`}>
         <Bot className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm text-muted-foreground">No agents available</span>
+        <span className="text-xs text-muted-foreground">No agents</span>
       </div>
     );
   }
 
-  const currentAgent = serviceInfo.agents.find(
-    agent => agent.key === (selectedAgentId || serviceInfo.default_agent)
-  );
-
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
-      <Bot className="h-4 w-4 text-muted-foreground" />
+    <div className={className}>
       <Select
         value={selectedAgentId || serviceInfo.default_agent || ""}
         onValueChange={onAgentChange}
       >
-        <SelectTrigger className="w-full sm:w-[180px] h-8 sm:h-10 text-xs sm:text-sm py-1 sm:py-2">
-          <SelectValue placeholder="Select an agent">
-            {currentAgent?.key || "Select an agent"}
-          </SelectValue>
+        <SelectTrigger className="h-6.5 text-xs m-0 px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20">
+          <Bot className="h-3 w-3 text-muted-foreground" />
+          <SelectValue placeholder="Agent" className="truncate" />
         </SelectTrigger>
         <SelectContent>
           {serviceInfo.agents.map((agent) => (
             <SelectItem key={agent.key} value={agent.key}>
               <div className="flex flex-col max-w-[250px]">
-                <span className="font-medium truncate">{agent.key}</span>
-                {agent.description && (
-                  <span className="text-xs text-muted-foreground truncate">
-                    {agent.description.length > 60 
-                      ? `${agent.description.substring(0, 60)}...` 
-                      : agent.description
-                    }
-                  </span>
-                )}
+                <span className="truncate">{agent.key}</span>
               </div>
             </SelectItem>
           ))}

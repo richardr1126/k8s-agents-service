@@ -5,26 +5,49 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { signIn } from "@/lib/auth-client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { showPrivacyPopup } from "@/components/privacy-popup";
 
 export default function SignIn() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // Check if user arrived here due to session expiration
+  useEffect(() => {
+    const reason = searchParams.get('reason');
+    if (reason === 'expired') {
+      setSessionExpired(true);
+    }
+  }, [searchParams]);
 
   return (
     <Card className="max-w-md">
       <CardHeader>
-        <CardTitle className="text-lg md:text-xl">Sign In</CardTitle>
+        {sessionExpired && (
+          <div className="flex items-center gap-2 p-3 mb-2 bg-amber-50 border border-amber-200 rounded-md dark:bg-amber-950 dark:border-amber-800">
+            <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            <p className="text-sm text-amber-700 dark:text-amber-300">
+              Your session has expired. Please sign in again to continue.
+            </p>
+          </div>
+        )}
+        <CardTitle className="text-lg md:text-xl">
+          {sessionExpired ? "Session Expired" : "Sign In"}
+        </CardTitle>
         <CardDescription className="text-xs md:text-sm">
-          Enter your email below to login to your account
+          {sessionExpired 
+            ? "Please sign in again to access your account"
+            : "Enter your email below to login to your account"
+          }
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -65,14 +88,13 @@ export default function SignIn() {
             </div>
 
             <div className="flex items-center gap-2">
-                <Checkbox
-                  id="remember"
-                  onClick={() => {
-                    setRememberMe(!rememberMe);
-                  }}
-                />
-                <Label htmlFor="remember">Remember me</Label>
-              </div>
+              <Checkbox
+                id="remember"
+                checked={rememberMe}
+                onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
+              />
+              <Label htmlFor="remember">Remember me</Label>
+            </div>
 
           
 
@@ -95,7 +117,11 @@ export default function SignIn() {
                     setLoading(false);
                   },
                   onSuccess: () => {
-                    // Clear URL and redirect to root
+                    // Clear the expired session flag and redirect to root
+                    if (sessionExpired) {
+                      // Clear localStorage flag since user is now authenticated
+                      localStorage.removeItem('sessionExpired');
+                    }
                     router.push('/');
                   },
                 },

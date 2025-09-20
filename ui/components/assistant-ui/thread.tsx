@@ -27,6 +27,8 @@ import { cn } from "@/lib/utils";
 import { MarkdownText } from "./markdown-text";
 import { ToolFallback } from "./tool-fallback";
 import { useThreadContext } from "@/components/custom-runtime-provider";
+import { AgentSelect } from "@/components/agent-select";
+import { ModelSelect } from "@/components/model-select";
 
 export const Thread: FC = () => {
   return (
@@ -35,11 +37,11 @@ export const Thread: FC = () => {
       className="bg-background flex h-full flex-col"
       style={{
         ["--thread-max-width" as string]: "48rem",
-        ["--thread-padding-x" as string]: "1rem",
+        ["--thread-padding-x" as string]: "0.5rem",
       }}
     >
       {/* aui-thread-viewport */}
-      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll">
+      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
         <ThreadWelcome />
 
         <ThreadPrimitive.Messages
@@ -122,73 +124,73 @@ const ThreadWelcome: FC = () => {
   );
 };
 
-// const ThreadWelcomeSuggestions: FC = () => {
-//   return (
-//     // aui-thread-welcome-suggestions
-//     <div className="grid w-full gap-2 sm:grid-cols-2">
-//       {[
-//         {
-//           title: "What are the advantages",
-//           label: "of using Assistant Cloud?",
-//           action: "What are the advantages of using Assistant Cloud?",
-//         },
-//         {
-//           title: "Write code to",
-//           label: `demonstrate topological sorting`,
-//           action: `Write code to demonstrate topological sorting`,
-//         },
-//         {
-//           title: "Help me write an essay",
-//           label: `about AI chat applications`,
-//           action: `Help me write an essay about AI chat applications`,
-//         },
-//         {
-//           title: "What is the weather",
-//           label: "in San Francisco?",
-//           action: "What is the weather in San Francisco?",
-//         },
-//       ].map((suggestedAction, index) => (
-//         <motion.div
-//           initial={{ opacity: 0, y: 20 }}
-//           animate={{ opacity: 1, y: 0 }}
-//           exit={{ opacity: 0, y: 20 }}
-//           transition={{ delay: 0.05 * index }}
-//           key={`suggested-action-${suggestedAction.title}-${index}`}
-//           // aui-thread-welcome-suggestion-display
-//           className="[&:nth-child(n+3)]:hidden sm:[&:nth-child(n+3)]:block"
-//         >
-//           <ThreadPrimitive.Suggestion
-//             prompt={suggestedAction.action}
-//             method="replace"
-//             autoSend
-//             asChild
-//           >
-//             <Button
-//               variant="ghost"
-//               // aui-thread-welcome-suggestion
-//               className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-1 rounded-xl border px-4 py-3.5 text-left text-sm sm:flex-col"
-//               aria-label={suggestedAction.action}
-//             >
-//               {/* aui-thread-welcome-suggestion-text-1 */}
-//               <span className="font-medium">{suggestedAction.title}</span>
-//               {/* aui-thread-welcome-suggestion-text-2 */}
-//               <p className="text-muted-foreground">{suggestedAction.label}</p>
-//             </Button>
-//           </ThreadPrimitive.Suggestion>
-//         </motion.div>
-//       ))}
-//     </div>
-//   );
-// };
+const ThreadWelcomeSuggestions: FC = () => {
+  return (
+    // aui-thread-welcome-suggestions
+    <div className="grid w-full gap-2 sm:grid-cols-2">
+      {[
+        {
+          title: "What is Richard's most technical project?",
+          label: "Uses Resume Agent",
+          action: "What is Richard's most technical project?",
+        },
+        {
+          title: "Overview of Richard's Cloud Computing Skills",
+          label: "Uses Resume Agent",
+          action: "Provide an overview of Richard's skills in cloud computing; linking to his projects.",
+        },
+        {
+          title: "Are Richard's skills in demand?",
+          label: "Uses Resume Agent + Web Agent",
+          action: "What skills does Richard have that are in demand right now?",
+        },
+        {
+          title: "What's the news today?",
+          label: "Uses Web Agent",
+          action: "What is the biggest news that happened today?",
+        },
+      ].map((suggestedAction, index) => (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: 20 }}
+          transition={{ delay: 0.05 * index }}
+          key={`suggested-action-${suggestedAction.title}-${index}`}
+          // aui-thread-welcome-suggestion-display
+          className="[&:nth-child(n+4)]:hidden sm:[&:nth-child(n+4)]:block"
+        >
+          <ThreadPrimitive.Suggestion
+            prompt={suggestedAction.action}
+            method="replace"
+            autoSend
+            asChild
+          >
+            <Button
+              variant="ghost"
+              // aui-thread-welcome-suggestion
+              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-1 rounded-xl border px-4 py-3.5 text-left text-sm sm:flex-col"
+              aria-label={suggestedAction.action}
+            >
+              {/* aui-thread-welcome-suggestion-text-1 */}
+              <span className="font-medium text-wrap">{suggestedAction.title}</span>
+              {/* aui-thread-welcome-suggestion-text-2 */}
+              <p className="text-muted-foreground text-wrap">{suggestedAction.label}</p>
+            </Button>
+          </ThreadPrimitive.Suggestion>
+        </motion.div>
+      ))}
+    </div>
+  );
+};
 
 const Composer: FC = () => {
   return (
     // aui-composer-wrapper
     <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)] pb-4 md:pb-6">
       <ThreadScrollToBottom />
-      {/* <ThreadPrimitive.Empty>
+      <ThreadPrimitive.Empty>
         <ThreadWelcomeSuggestions />
-      </ThreadPrimitive.Empty> */}
+      </ThreadPrimitive.Empty>
       {/* aui-composer-root */}
       <ComposerPrimitive.Root className="focus-within::ring-offset-2 relative flex w-full flex-col rounded-2xl focus-within:ring-2 focus-within:ring-black dark:focus-within:ring-white">
         {/* aui-composer-input */}
@@ -208,9 +210,29 @@ const Composer: FC = () => {
 };
 
 const ComposerAction: FC = () => {
+  const {
+    selectedAgentId,
+    setSelectedAgentId,
+    selectedModelId,
+    setSelectedModelId,
+  } = useThreadContext();
+
   return (
     // aui-composer-action-wrapper
-    <div className="bg-muted border-border dark:border-muted-foreground/15 relative flex items-center justify-end rounded-b-2xl border-x border-b p-2">
+    <div className="bg-muted border-border dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
+      {/* left: model/agent selectors */}
+      <div className="flex items-center gap-2">
+        <AgentSelect
+          className=""
+          selectedAgentId={selectedAgentId}
+          onAgentChange={setSelectedAgentId}
+        />
+        <ModelSelect
+          className=""
+          selectedModelId={selectedModelId}
+          onModelChange={setSelectedModelId}
+        />
+      </div>
       {/* <TooltipIconButton
         tooltip="Attach file"
         variant="ghost"

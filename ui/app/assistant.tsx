@@ -7,46 +7,26 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Separator } from "@/components/ui/separator";
-import { AgentSelect } from "@/components/agent-select";
-import { ModelSelect } from "@/components/model-select";
-import { CustomRuntimeProvider, useThreadContext } from "@/components/custom-runtime-provider";
+import { CustomRuntimeProvider } from "@/components/custom-runtime-provider";
 import { TaskToolUI } from "@/components/task-ui";
 import { UserProvider } from "@/components/auth-user-provider";
 import { ServiceInfoProvider } from "@/components/service-info-provider";
 import { useSession, signIn } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
-import { Suspense, useEffect } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, MessagesSquare } from "lucide-react";
+import { 
+  wasUserPreviouslyAuthenticated, 
+  markUserAsAuthenticated, 
+  updateLastActivity 
+} from "@/lib/session-utils";
 
-function AssistantHeader() {
-  const {
-    selectedAgentId,
-    setSelectedAgentId,
-    selectedModelId,
-    setSelectedModelId,
-  } = useThreadContext();
-
+function AssistantFloatingTrigger() {
   return (
-    <header
-      className="border-b px-2 py-2 sm:py-0 flex flex-row gap-1 sm:h-16 sm:flex-row sm:items-center"
-    >
-      <div className="flex items-center gap-2">
-        <SidebarTrigger />
-        <Separator orientation="vertical" className="h-4" />
-      </div>
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3 flex-1">
-        <AgentSelect
-          selectedAgentId={selectedAgentId}
-            onAgentChange={setSelectedAgentId}
-        />
-        <ModelSelect
-          selectedModelId={selectedModelId}
-          onModelChange={setSelectedModelId}
-        />
-      </div>
-    </header>
+    <div className="absolute top-2 left-2 z-20">
+      <SidebarTrigger className="h-9 w-9 rounded-full border bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60" />
+    </div>
   );
 }
 
@@ -59,8 +39,8 @@ function AuthenticatedContent() {
             <div className="flex h-dvh w-full pr-0.5">
               <AppSidebar />
               <SidebarInset>
-                <AssistantHeader />
-                <div className="flex-1 overflow-hidden">
+                <div className="min-h-0 relative flex-1">
+                  <AssistantFloatingTrigger />
                   <Thread />
                   <TaskToolUI />
                 </div>
@@ -76,28 +56,68 @@ function AuthenticatedContent() {
 function AssistantContent() {
   const { data: session, isPending } = useSession();
   const router = useRouter();
+  const [hasAttemptedAuth, setHasAttemptedAuth] = useState(false);
+  const [wasAuthenticated, setWasAuthenticated] = useState(() => wasUserPreviouslyAuthenticated());
 
-  // Auto sign-in anonymous users if not authenticated
+  // Track when user becomes authenticated and update activity
   useEffect(() => {
-    if (!isPending && !session) {
-      // Don't redirect to signin, instead sign in anonymously
-      const signInAnonymously = async () => {
-        try {
-          await signIn.anonymous();
-          // Session will be updated automatically via the auth client
-        } catch (error) {
-          console.error('Failed to sign in anonymously:', error);
-          // Fallback to signin page if anonymous auth fails
-          router.push('/signin');
-        }
-      };
-      
-      signInAnonymously();
+    if (session?.user && !session.user.isAnonymous) {
+      markUserAsAuthenticated();
+      setWasAuthenticated(true);
+      updateLastActivity();
     }
-  }, [session, isPending, router]);
+  }, [session]);
+
+  // Update activity on user interaction (optional - for better session tracking)
+  useEffect(() => {
+    // Only attach listeners for fully authenticated (non-anonymous) users
+    if (!session?.user || session.user.isAnonymous) return;
+
+    const handleActivity = () => {
+      updateLastActivity();
+    };
+
+    // Track user activity
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    events.forEach(event => {
+      document.addEventListener(event, handleActivity, { passive: true });
+    });
+
+    return () => {
+      events.forEach(event => {
+        document.removeEventListener(event, handleActivity);
+      });
+    };
+  }, [session]);
+
+  // Handle authentication state
+  useEffect(() => {
+    if (isPending || hasAttemptedAuth) return;
+
+    if (!session) {
+      if (wasAuthenticated) {
+        // User was previously authenticated but session expired
+        // Redirect to sign-in page instead of creating anonymous session
+        router.push('/signin?reason=expired');
+      } else {
+        // New user - create anonymous session
+        const signInAnonymously = async () => {
+          try {
+            await signIn.anonymous();
+          } catch (error) {
+            console.error('Failed to sign in anonymously:', error);
+            router.push('/signin');
+          }
+        };
+        
+        signInAnonymously();
+      }
+      setHasAttemptedAuth(true);
+    }
+  }, [session, isPending, router, wasAuthenticated, hasAttemptedAuth]);
 
   // Show loading state while checking auth or signing in
-  if (isPending || !session) {
+  if (isPending || (!session && !hasAttemptedAuth)) {
     return (
       <div className="flex h-dvh w-full items-center justify-center p-4">
         <Card className="max-w-md w-full">

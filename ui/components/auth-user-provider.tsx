@@ -338,9 +338,15 @@ export function UserProvider({ children }: UserProviderProps) {
       isCreatingDefaultThreadRef.current = false;
       fetchThreads();
     } else {
+      // Session is null - clear user data and reset state
       setUserData(null);
       setIsLoading(false);
       isCreatingDefaultThreadRef.current = false;
+      
+      // Clear pending operations when losing session
+      pendingOperationsRef.current.clear();
+      syncQueueRef.current = [];
+      isSyncingRef.current = false;
     }
   }, [session, isPending, fetchThreads]);
 
