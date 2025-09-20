@@ -10,13 +10,13 @@ import {
 import type { FC } from "react";
 import {
   ArrowDownIcon,
-  ArrowUpIcon,
   CopyIcon,
   CheckIcon,
   PencilIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   Square,
+  SendHorizontalIcon,
 } from "lucide-react";
 import { useServiceInfo } from "@/components/service-info-provider";
 
@@ -319,13 +319,13 @@ const ComposerAction: FC = () => {
         <ComposerPrimitive.Send asChild>
           <Button
             type="submit"
-            variant="default"
+            variant="ghost"
             // aui-composer-send
-            className="dark:border-muted-foreground/90 border-muted-foreground/60 hover:bg-primary/75 size-8 rounded-full border"
+            className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
             aria-label="Send message"
           >
             {/* aui-composer-send-icon */}
-            <ArrowUpIcon className="size-5" />
+            <SendHorizontalIcon className="size-4" />
           </Button>
         </ComposerPrimitive.Send>
       </ThreadPrimitive.If>
@@ -334,9 +334,9 @@ const ComposerAction: FC = () => {
         <ComposerPrimitive.Cancel asChild>
           <Button
             type="button"
-            variant="default"
+            variant="ghost"
             // aui-composer-cancel
-            className="dark:border-muted-foreground/90 border-muted-foreground/60 hover:bg-primary/75 size-8 rounded-full border"
+            className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
             aria-label="Stop generating"
           >
             {/* aui-composer-cancel-icon */}
