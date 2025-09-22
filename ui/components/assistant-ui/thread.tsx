@@ -36,10 +36,13 @@ import agentSuggestions from "./agent-suggestions.json";
 
 export const Thread: FC = () => {
   const { isLoading: userLoading } = useUser();
-  const { isLoading: serviceLoading } = useServiceInfo();
+  const { currentThreadId, threads } = useThreadContext();
   
-  // Base loading depends only on user/service loading to avoid transient data races
-  const baseLoading = userLoading || serviceLoading;
+  // Show thread skeleton when:
+  // 1. User is still loading (authentication)
+  // 2. We have a thread ID but no messages loaded for it yet (thread data loading)
+  const isThreadDataLoading = currentThreadId && !threads.has(currentThreadId);
+  const baseLoading = userLoading || isThreadDataLoading;
 
   // Debounce the transition from loading -> not loading to smooth out quick flips
   const [isThreadLoading, setIsThreadLoading] = useState(baseLoading);
