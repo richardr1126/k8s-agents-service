@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ChatRequest, ChatMessage, BackendMessage, BackendStreamEvent } from '@/lib/types';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
+import { Pool } from 'pg';
+
+// Create PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,6 +26,25 @@ export async function POST(req: NextRequest) {
 
     // Use authenticated user ID instead of client-provided userId
     const userId = session.user.id;
+
+    // If threadId is provided, validate user ownership
+    if (threadId) {
+      const client = await pool.connect();
+      try {
+        const result = await client.query(
+          'SELECT id FROM user_threads WHERE id = $1 AND user_id = $2',
+          [threadId, userId]
+        );
+
+        if (result.rowCount === 0) {
+          return NextResponse.json({ 
+            error: 'Thread not found or you do not have permission to access it' 
+          }, { status: 403 });
+        }
+      } finally {
+        client.release();
+      }
+    }
 
     const baseUrl = process.env.BACKEND_URL;
     const authToken = process.env.BACKEND_AUTH_TOKEN;

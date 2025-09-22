@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { ChatMessage, ToolCall, BackendChatHistory } from '@/lib/types';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
+import { Pool } from 'pg';
+
+// Create PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,6 +23,27 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const { threadId } = body;
+
+    if (!threadId) {
+      return NextResponse.json({ error: 'Thread ID is required' }, { status: 400 });
+    }
+
+    // Validate user ownership of the thread in frontend database
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT id FROM user_threads WHERE id = $1 AND user_id = $2',
+        [threadId, session.user.id]
+      );
+
+      if (result.rowCount === 0) {
+        return NextResponse.json({ 
+          error: 'Thread not found or you do not have permission to access it' 
+        }, { status: 403 });
+      }
+    } finally {
+      client.release();
+    }
 
     const baseUrl = process.env.BACKEND_URL;
     const authToken = process.env.BACKEND_AUTH_TOKEN;
@@ -35,7 +63,7 @@ export async function POST(req: NextRequest) {
     const response = await fetch(`${baseUrl}/history`, {
       method: 'POST',
       headers: requestHeaders,
-      body: JSON.stringify({ thread_id: threadId }),
+      body: JSON.stringify({ thread_id: threadId }), // Backend doesn't track users, only needs thread_id
     });
 
     if (!response.ok) {

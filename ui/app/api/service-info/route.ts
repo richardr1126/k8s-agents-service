@@ -1,7 +1,18 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 
 export async function GET() {
   try {
+    // Check authentication
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const baseUrl = process.env.BACKEND_URL;
     const authToken = process.env.BACKEND_AUTH_TOKEN;
 
@@ -9,16 +20,16 @@ export async function GET() {
       throw new Error('BACKEND_URL environment variable is not set');
     }
 
-    const headers: Record<string, string> = {
+    const requestHeaders: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
     if (authToken) {
-      headers['Authorization'] = `Bearer ${authToken}`;
+      requestHeaders['Authorization'] = `Bearer ${authToken}`;
     }
 
     const response = await fetch(`${baseUrl}/info`, {
-      headers,
+      headers: requestHeaders,
     });
 
     if (!response.ok) {
