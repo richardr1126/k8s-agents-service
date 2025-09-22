@@ -4,7 +4,7 @@ import {
   ThreadListPrimitive,
   useThreadListItem,
 } from "@assistant-ui/react";
-import { Trash2Icon, PlusIcon, Loader2 } from "lucide-react";
+import { Trash2Icon, CirclePlusIcon, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
@@ -25,9 +25,9 @@ export const ThreadList: FC = () => {
 const ThreadListNew: FC = () => {
   return (
     <ThreadListPrimitive.New asChild>
-      <Button className="data-active:bg-muted hover:bg-muted flex items-center justify-start gap-1 sm:mx-2 rounded-lg px-2.5 py-2 text-start" variant="ghost">
-        <PlusIcon />
-        New Thread
+      <Button className="data-active:bg-muted hover:bg-muted flex items-center justify-start gap-2 mx-2 rounded-lg px-2.5 py-2 text-start text-md md:text-sm" variant="ghost">
+        <CirclePlusIcon />
+        Start new chat
       </Button>
     </ThreadListPrimitive.New>
   );
@@ -53,7 +53,7 @@ const ThreadListLoading: FC = () => {
           initial={{ opacity: 0, y: 5 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 * index }}
-          className="flex items-center gap-2 sm:mx-2 rounded-lg min-h-[44px] py-1"
+          className="flex items-center gap-2 mx-2 rounded-lg min-h-[44px] py-1"
         >
           <div className="flex-grow px-1 py-1">
             <Skeleton 
@@ -69,7 +69,7 @@ const ThreadListLoading: FC = () => {
 
 const ThreadListItem: FC = () => {
   return (
-    <ThreadListItemPrimitive.Root className="data-active:bg-muted hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring flex items-center gap-2 sm:mx-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2">
+    <ThreadListItemPrimitive.Root className="data-active:bg-muted hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring flex items-center gap-2 mx-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2">
       <ThreadListItemPrimitive.Trigger className="flex-grow px-3 py-2 text-start">
         <div className="flex items-center gap-2">
           <ThreadListItemTitle />
@@ -83,7 +83,7 @@ const ThreadListItem: FC = () => {
 
 const ThreadListItemTitle: FC = () => {
   return (
-    <p className="text-sm">
+    <p className="text-md md:text-sm md:leading-tight">
       <ThreadListItemPrimitive.Title fallback="New Chat" />
     </p>
   );

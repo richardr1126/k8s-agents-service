@@ -8,6 +8,7 @@ import {
   useMessage,
 } from "@assistant-ui/react";
 import type { FC } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowDownIcon,
   CopyIcon,
@@ -34,14 +35,22 @@ import { useUser } from "@/components/auth-user-provider";
 import agentSuggestions from "./agent-suggestions.json";
 
 export const Thread: FC = () => {
-  const { currentThreadId, threads } = useThreadContext();
   const { isLoading: userLoading } = useUser();
   const { isLoading: serviceLoading } = useServiceInfo();
   
-  // Show loading skeleton only when we're genuinely loading user/service data
-  // OR when we have a thread ID but it's not in our threads map at all
-  const isThreadLoading = userLoading || serviceLoading || 
-    (currentThreadId && !threads.has(currentThreadId));
+  // Base loading depends only on user/service loading to avoid transient data races
+  const baseLoading = userLoading || serviceLoading;
+
+  // Debounce the transition from loading -> not loading to smooth out quick flips
+  const [isThreadLoading, setIsThreadLoading] = useState(baseLoading);
+  useEffect(() => {
+    if (baseLoading) {
+      setIsThreadLoading(true);
+      return;
+    }
+    const t = setTimeout(() => setIsThreadLoading(false), 150);
+    return () => clearTimeout(t);
+  }, [baseLoading]);
 
   if (isThreadLoading) {
     return <ThreadLoadingSkeleton />;
@@ -115,8 +124,8 @@ const ThreadLoadingSkeleton: FC = () => {
             className="grid w-full gap-2 sm:grid-cols-2 mb-4"
           >
             {[1, 2, 3, 4].map((i) => (
-              <div key={i} className="h-auto w-full">
-                <Skeleton className="h-14 w-full rounded-lg" />
+              <div key={i} className={`h-auto w-full ${i === 4 ? 'hidden sm:block' : ''}`}>
+              <Skeleton className="h-9 sm:14 w-full rounded-lg" />
               </div>
             ))}
           </motion.div>
@@ -238,7 +247,7 @@ const ThreadWelcomeSuggestions: FC = () => {
             <Button
               variant="ghost"
               // aui-thread-welcome-suggestion
-              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-0.7 rounded-lg border px-3 py-2 text-left text-sm sm:flex-col"
+              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-[0.1rem] rounded-lg border px-3 py-2 text-left text-sm sm:flex-col"
               aria-label={suggestedAction.action}
             >
               {/* aui-thread-welcome-suggestion-text-1 */}

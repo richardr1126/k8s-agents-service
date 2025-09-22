@@ -15,7 +15,7 @@ import {
 import { ThreadList } from "@/components/assistant-ui/thread-list"
 import { showPrivacyPopup } from "@/components/privacy-popup"
 import { signOut, useSession } from "@/lib/auth-client"
-import { clearAuthenticationState } from "@/lib/session-utils"
+import { clearAuthenticationState, markSignedOut } from "@/lib/session-utils"
 import { useRouter } from "next/navigation"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -24,6 +24,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const handleSignOut = async () => {
     // Clear authentication state before signing out
+    markSignedOut();
     clearAuthenticationState();
     await signOut();
   };
@@ -50,7 +51,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                     <MessagesSquare className="size-4" />
                   </div>
-                  <div className="flex flex-col gap-0.5 leading-none">
+                  <div className="flex flex-col text-[1.1rem] md:text-[0.92rem] leading-none">
                     <span className="font-semibold">chat.richardr.dev</span>
                   </div>
                 </Link>
@@ -81,9 +82,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     <User className="size-4" />
                   )}
                 </div>
-                <div className="flex flex-col gap-0.5 leading-none text-left">
+                <div className="flex flex-col leading-none text-left">
                   <span className="font-semibold">{session.user.name || session.user.email}</span>
-                  <span className="text-xs opacity-60">Signed in</span>
+                  <span className="text-sm md:text-xs opacity-60">Signed in</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -95,7 +96,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <UserPlus className="size-4" />
                 </div>
-                <div className="flex flex-col gap-0.5 leading-none text-left">
+                <div className="flex flex-col leading-none text-left">
                   <span className="font-semibold">
                     Create Account or&nbsp;
                     <span 
@@ -108,7 +109,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       Sign in
                     </span>
                   </span>
-                  <span className="text-xs opacity-60">
+                  <span className="text-sm md:text-xs opacity-60">
                     Manage your chats and data
                   </span>
                 </div>
@@ -122,9 +123,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <LogOut className="size-4" />
                 </div>
-                <div className="flex flex-col gap-0.5 leading-none text-left">
+                <div className="flex flex-col leading-none text-left">
                   <span className="font-semibold">Sign Out</span>
-                  <span className="text-xs opacity-60">Logout</span>
+                  <span className="text-sm md:text-xs opacity-60">Logout</span>
                 </div>
               </SidebarMenuButton>
             </SidebarMenuItem>
