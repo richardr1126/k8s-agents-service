@@ -1,14 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
+import { Pool } from 'pg';
+
+// Create PostgreSQL connection pool
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+});
 
 export async function POST(req: NextRequest) {
   try {
+    // Check authentication
+    const session = await auth.api.getSession({
+      headers: await headers()
+    });
+
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const { threadId } = await req.json();
 
     if (!threadId) {
       return NextResponse.json({ error: 'Thread ID is required' }, { status: 400 });
     }
 
-    // Call the backend delete endpoint
+    // Validate user ownership of the thread in frontend database
+    const client = await pool.connect();
+    try {
+      const result = await client.query(
+        'SELECT id FROM user_threads WHERE id = $1 AND user_id = $2',
+        [threadId, session.user.id]
+      );
+
+      if (result.rowCount === 0) {
+        return NextResponse.json({ 
+          error: 'Thread not found or you do not have permission to delete it' 
+        }, { status: 403 });
+      }
+
+      // Delete from frontend database first
+      await client.query(
+        'DELETE FROM user_threads WHERE id = $1 AND user_id = $2',
+        [threadId, session.user.id]
+      );
+    } finally {
+      client.release();
+    }
+
+    // Call the backend delete endpoint (backend doesn't track users, so just pass thread_id)
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
     const backendResponse = await fetch(`${backendUrl}/thread`, {
       method: 'DELETE',
@@ -23,9 +64,8 @@ export async function POST(req: NextRequest) {
 
     if (!backendResponse.ok) {
       console.error('Backend delete failed:', await backendResponse.text());
-      return NextResponse.json({ 
-        error: 'Failed to delete thread data from backend' 
-      }, { status: 500 });
+      // Note: Frontend DB record is already deleted, so this is just a warning
+      console.warn(`Thread ${threadId} deleted from frontend DB but backend deletion failed`);
     }
 
     return NextResponse.json({ success: true });
