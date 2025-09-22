@@ -116,19 +116,8 @@ const ThreadListItemDelete: FC = () => {
     
     // Confirm deletion
     if (confirm('Are you sure you want to delete this thread? This action cannot be undone.')) {
-      // Delete from UI state (handled by useUser)
+      // Delete thread (this handles both frontend DB and backend deletion)
       await deleteThread(threadListItem.threadId);
-      
-      // Call backend to delete thread data
-      try {
-        await fetch('/api/thread/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ threadId: threadListItem.threadId }),
-        });
-      } catch (error) {
-        console.error('Error deleting thread from backend:', error);
-      }
     }
   };
   

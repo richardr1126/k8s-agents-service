@@ -142,10 +142,56 @@ export async function POST(req: NextRequest) {
       } else if (action === 'delete') {
         const { threadId } = threadData;
 
-        await client.query(
+        if (!threadId) {
+          return NextResponse.json({ error: 'Thread ID is required' }, { status: 400 });
+        }
+
+        // First, validate user ownership of the thread
+        const ownershipCheck = await client.query(
+          'SELECT id FROM user_threads WHERE id = $1 AND user_id = $2',
+          [threadId, session.user.id]
+        );
+
+        if (ownershipCheck.rowCount === 0) {
+          return NextResponse.json({ 
+            error: 'Thread not found or you do not have permission to delete it' 
+          }, { status: 403 });
+        }
+
+        // Delete from frontend database
+        const deleteResult = await client.query(
           'DELETE FROM user_threads WHERE id = $1 AND user_id = $2',
           [threadId, session.user.id]
         );
+
+        // Verify deletion was successful
+        if (deleteResult.rowCount === 0) {
+          return NextResponse.json({ 
+            error: 'Failed to delete thread from database' 
+          }, { status: 500 });
+        }
+
+        // Also call backend to delete thread data
+        try {
+          const backendUrl = process.env.BACKEND_URL || 'http://localhost:8080';
+          const backendResponse = await fetch(`${backendUrl}/thread`, {
+            method: 'DELETE',
+            headers: { 
+              'Content-Type': 'application/json',
+              ...(process.env.BACKEND_AUTH_TOKEN && {
+                'Authorization': `Bearer ${process.env.BACKEND_AUTH_TOKEN}`
+              })
+            },
+            body: JSON.stringify({ thread_id: threadId }),
+          });
+
+          if (!backendResponse.ok) {
+            console.error('Backend delete failed:', await backendResponse.text());
+            console.warn(`Thread ${threadId} deleted from frontend DB but backend deletion failed`);
+          }
+        } catch (error) {
+          console.error('Error calling backend delete:', error);
+        }
 
         return NextResponse.json({ success: true });
       }
