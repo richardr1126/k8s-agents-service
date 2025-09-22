@@ -9,7 +9,8 @@ A modern, production-ready chat interface built with **Next.js 15**, **React 19*
 - **🤖 Multi-Agent Support**: Seamless switching between different AI agents
 - **🛠️ Tool Visualization**: Rich tool call displays with contextual icons
 - **📱 Mobile Responsive**: Optimized for desktop, tablet, and mobile devices
-- **🔐 Authentication**: Secure user authentication with session management
+- **🔐 Secure Authentication**: Complete user authentication with session management and authorization
+- **🛡️ Thread Security**: Full user ownership validation preventing unauthorized access
 - **💬 Thread Management**: Create, delete, and manage conversation threads with complete data cleanup
 - **⚡ Optimistic Updates**: Instant UI feedback with background sync
 - **🎯 Agent Routing**: Intelligent supervisor agent with automatic routing
@@ -57,6 +58,9 @@ BETTER_AUTH_URL=http://localhost:3000      # Your app URL
 # Database (for user sessions and threads)
 DATABASE_URL=postgres://user:pass@host:5432/dbname
 
+# Alternative database environment variable (if using POSTGRES_URL)
+POSTGRES_URL=postgres://user:pass@host:5432/dbname
+
 # Optional: For client-side fallbacks (not recommended for production)
 OPENAI_API_KEY=sk-...
 ```
@@ -70,7 +74,10 @@ OPENAI_API_KEY=sk-...
 | `BETTER_AUTH_SECRET` | Secret key for session encryption | ✅ |
 | `BETTER_AUTH_URL` | Public URL of your application | ✅ |
 | `DATABASE_URL` | PostgreSQL connection string for user data | ✅ |
+| `POSTGRES_URL` | Alternative PostgreSQL connection string | Optional |
 | `OPENAI_API_KEY` | OpenAI API key (client-side fallback only) | Optional |
+
+> **Security Note**: The application implements comprehensive user authorization. All thread operations validate user ownership through the PostgreSQL database to prevent unauthorized access and user impersonation.
 
 ## 🏗️ Architecture
 
@@ -81,20 +88,48 @@ OPENAI_API_KEY=sk-...
 - **`components/service-info-provider.tsx`** - Shared agent/model info context
 - **`components/custom-runtime-provider.tsx`** - Chat runtime integration
 - **`components/assistant-ui/thread.tsx`** - Chat thread display and interactions
-- **`app/api/`** - Next.js API routes for backend communication
+- **`app/api/`** - Next.js API routes with comprehensive security validation
+
+### Security Architecture
+
+The application implements **defense-in-depth security** with multiple layers of protection:
+
+#### **Frontend Authorization Layer**
+- **User Authentication**: Session-based auth with automatic token refresh
+- **Thread Ownership Validation**: All thread operations validate user ownership against Neon DB
+- **Input Validation**: Comprehensive validation of all user inputs and requests
+- **Error Handling**: Secure error responses that don't leak sensitive information
+
+#### **API Route Security**
+All API routes implement robust security measures:
+
+- **`/api/auth/[...all]`** - Better Auth handler with secure session management
+- **`/api/chat`** - Validates thread ownership before allowing new messages
+- **`/api/history`** - Ensures users can only access their own conversation history
+- **`/api/user/threads`** - Complete thread lifecycle management with ownership validation and backend cleanup
+- **`/api/service-info`** - Protected endpoint requiring authentication
+
+#### **Database Security**
+- **User Isolation**: All queries include user ID filtering to prevent cross-user data access
+- **Connection Pooling**: Secure PostgreSQL connection management
+- **Transaction Safety**: Proper error handling and rollback mechanisms
 
 ### Data Flow
 
 ```
 User Interface
      ↓
+🔐 Authentication Layer (session validation)
+     ↓
 Service Info Provider (agents, models)
      ↓
 Auth Provider (user, threads)
      ↓
+🛡️ Authorization Layer (thread ownership validation)
+     ↓
 Custom Runtime Provider (chat state)
      ↓
-API Routes (/api/*)
+API Routes (/api/*) with Security Validation
      ↓
 FastAPI Backend Service
 ```
@@ -105,6 +140,7 @@ FastAPI Backend Service
 - **User & Threads**: Optimistic updates with background database synchronization and complete thread deletion
 - **Chat Messages**: Real-time streaming with message history persistence
 - **Authentication**: Session-based auth with automatic token refresh
+- **Security Context**: Thread ownership validation ensures users can only access their own data
 
 ## 🔧 Development
 
@@ -168,11 +204,34 @@ Tool calls are automatically rendered with contextual icons. To add custom tool 
 
 ### Thread Management
 
-The UI implements complete thread deletion functionality:
+The UI implements complete thread lifecycle management with comprehensive security:
 
-- **Frontend**: Removes thread metadata from Neon database
-- **Backend**: Deletes conversation memory and long-term storage data
-- **UI**: Provides confirmation dialogs and optimistic updates with rollback on failure
+- **Thread Creation**: Secure thread initialization with user ownership tracking
+- **Thread Updates**: Real-time metadata updates with ownership validation
+- **Thread Deletion**: Multi-layer security with frontend and backend cleanup
+- **UI Experience**: Optimistic updates with rollback on failure and confirmation dialogs
+- **Data Integrity**: Atomic operations ensuring consistency across frontend and backend
+
+#### Unified Thread API (`/api/user/threads`)
+All thread operations go through a single, secure endpoint that handles:
+
+- **GET**: Retrieve user's thread list with ownership filtering
+- **POST (create)**: Create new threads with user association
+- **POST (update)**: Update thread metadata with ownership validation  
+- **POST (delete)**: Comprehensive deletion with multi-layer security:
+  1. **Input Validation**: Verify threadId is provided
+  2. **Ownership Check**: Confirm user owns the thread before deletion
+  3. **Frontend Cleanup**: Remove from PostgreSQL user_threads table
+  4. **Backend Cleanup**: Delete conversation data from backend service
+  5. **Error Handling**: Proper status codes and rollback on failures
+
+#### Security Features
+- **User Isolation**: Users can only access, modify, or delete their own threads
+- **Thread Ownership Validation**: Every operation validates ownership against the database
+- **Atomic Operations**: Frontend and backend deletions handled as a unit
+- **Secure Error Handling**: Returns appropriate 403/400/500 responses for different failure scenarios
+- **Defense in Depth**: Multiple validation layers prevent security bypasses
+- **Transaction Safety**: Database operations with proper error handling and consistency checks
 
 ## 🚀 Deployment
 
