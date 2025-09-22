@@ -5,6 +5,7 @@
 // Keys for localStorage
 const WAS_AUTHENTICATED_KEY = 'wasAuthenticated';
 const LAST_ACTIVITY_KEY = 'lastActivity';
+const SIGNED_OUT_KEY = 'signedOut';
 
 /**
  * Mark user as authenticated (called when user signs in)
@@ -13,6 +14,8 @@ export function markUserAsAuthenticated(): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(WAS_AUTHENTICATED_KEY, 'true');
     localStorage.setItem(LAST_ACTIVITY_KEY, Date.now().toString());
+    // Clear explicit sign-out marker upon successful auth
+    localStorage.removeItem(SIGNED_OUT_KEY);
   }
 }
 
@@ -33,6 +36,7 @@ export function clearAuthenticationState(): void {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(WAS_AUTHENTICATED_KEY);
     localStorage.removeItem(LAST_ACTIVITY_KEY);
+    // Leave SIGNED_OUT_KEY untouched here; caller may intentionally set it
   }
 }
 
@@ -67,4 +71,26 @@ export function mightSessionBeExpired(): boolean {
   // Consider session potentially expired if no activity for 7+ days
   const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
   return (Date.now() - lastActivity) > sevenDaysMs;
+}
+
+/**
+ * Explicit sign-out helpers to differentiate logout from expiry
+ */
+export function markSignedOut(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem(SIGNED_OUT_KEY, 'true');
+  }
+}
+
+export function wasSignedOut(): boolean {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem(SIGNED_OUT_KEY) === 'true';
+  }
+  return false;
+}
+
+export function clearSignedOut(): void {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(SIGNED_OUT_KEY);
+  }
 }

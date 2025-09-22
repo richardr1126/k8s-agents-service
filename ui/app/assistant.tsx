@@ -19,7 +19,9 @@ import { Loader2, MessagesSquare } from "lucide-react";
 import { 
   wasUserPreviouslyAuthenticated, 
   markUserAsAuthenticated, 
-  updateLastActivity 
+  updateLastActivity,
+  wasSignedOut,
+  clearSignedOut,
 } from "@/lib/session-utils";
 
 function AssistantFloatingTrigger() {
@@ -95,7 +97,11 @@ function AssistantContent() {
     if (isPending || hasAttemptedAuth) return;
 
     if (!session) {
-      if (wasAuthenticated) {
+      if (wasSignedOut()) {
+        // User explicitly signed out: go to normal sign-in page
+        clearSignedOut();
+        router.push('/signin');
+      } else if (wasAuthenticated) {
         // User was previously authenticated but session expired
         // Redirect to sign-in page instead of creating anonymous session
         router.push('/signin?reason=expired');
@@ -117,7 +123,8 @@ function AssistantContent() {
   }, [session, isPending, router, wasAuthenticated, hasAttemptedAuth]);
 
   // Show loading state while checking auth or signing in
-  if (isPending || (!session && !hasAttemptedAuth)) {
+  // Always show the loading card until we have a session object to avoid flicker
+  if (isPending || !session) {
     return (
       <div className="flex h-dvh w-full items-center justify-center p-4">
         <Card className="max-w-md w-full">
@@ -137,10 +144,9 @@ function AssistantContent() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground">
-              {isPending 
+              {isPending
                 ? "Please wait while we verify your session"
-                : "Setting up your temporary session to get started"
-              }
+                : "Setting up your temporary session to get started"}
             </p>
           </CardContent>
         </Card>
