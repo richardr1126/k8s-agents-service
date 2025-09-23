@@ -6,6 +6,7 @@ import {
   BranchPickerPrimitive,
   ErrorPrimitive,
   useMessage,
+  useComposer,
 } from "@assistant-ui/react";
 import type { FC } from "react";
 import { useEffect, useState } from "react";
@@ -32,6 +33,8 @@ import { useThreadContext } from "@/components/custom-runtime-provider";
 import { AgentSelect } from "@/components/agent-select";
 import { ModelSelect } from "@/components/model-select";
 import { useUser } from "@/components/auth-user-provider";
+import { RateLimitDisplay, RateLimitBanner } from "@/components/rate-limit-display";
+import { useRateLimit } from "@/components/rate-limit-provider";
 import agentSuggestions from "./agent-suggestions.json";
 
 export const Thread: FC = () => {
@@ -266,6 +269,28 @@ const ThreadWelcomeSuggestions: FC = () => {
 };
 
 const Composer: FC = () => {
+  // Use the useComposer hook to get the current text value from composer state
+  const composerText = useComposer((state) => state.text);
+  const maxCharacters = 560; // 2 tweets worth (280 chars each)
+  const isOverLimit = composerText.length > maxCharacters;
+  const charactersRemaining = maxCharacters - composerText.length;
+
+  // Import the rate limit hook to check status
+  const { status } = useRateLimit();
+  const isAtLimit = status ? status.remainingMessages <= 0 : false;
+  const isSendDisabled = isAtLimit || isOverLimit || composerText.trim().length === 0;
+
+  // Handle keyboard events to prevent submission when disabled
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      if (isSendDisabled) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    }
+  };
+
   return (
     // aui-composer-wrapper
     <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)] pb-4 md:pb-6">
@@ -273,25 +298,46 @@ const Composer: FC = () => {
       <ThreadPrimitive.Empty>
         <ThreadWelcomeSuggestions />
       </ThreadPrimitive.Empty>
+      
+      {/* Rate Limit Banner */}
+      <RateLimitBanner />
+      
       {/* aui-composer-root */}
       <ComposerPrimitive.Root className="focus-within::ring-offset-2 relative flex w-full flex-col rounded-2xl focus-within:ring-2 focus-within:ring-black dark:focus-within:ring-white">
         {/* aui-composer-input */}
         <ComposerPrimitive.Input
           placeholder="Send a message..."
-          className={
-            "bg-muted border-border dark:border-muted-foreground/15 focus:outline-primary placeholder:text-muted-foreground max-h-[calc(50dvh)] min-h-16 w-full resize-none rounded-t-2xl border-x border-t px-4 pt-2 pb-3 text-base outline-none"
-          }
+          className={cn(
+            "bg-muted border-border dark:border-muted-foreground/15 focus:outline-primary placeholder:text-muted-foreground max-h-[calc(50dvh)] min-h-16 w-full resize-none rounded-t-2xl border-x border-t px-4 pt-2 pb-3 text-base outline-none",
+            isOverLimit && "border-destructive focus:ring-destructive"
+          )}
           rows={1}
           autoFocus
           aria-label="Message input"
+          onKeyDown={handleKeyDown}
+          maxLength={maxCharacters + 50} // Allow some buffer for user awareness
         />
-        <ComposerAction />
+        <ComposerAction 
+          inputValue={composerText}
+          isOverLimit={isOverLimit}
+          charactersRemaining={charactersRemaining}
+        />
       </ComposerPrimitive.Root>
     </div>
   );
 };
 
-const ComposerAction: FC = () => {
+interface ComposerActionProps {
+  inputValue: string;
+  isOverLimit: boolean;
+  charactersRemaining: number;
+}
+
+const ComposerAction: FC<ComposerActionProps> = ({ 
+  inputValue, 
+  isOverLimit, 
+  charactersRemaining 
+}) => {
   const {
     selectedAgentId,
     setSelectedAgentId,
@@ -299,9 +345,14 @@ const ComposerAction: FC = () => {
     setSelectedModelId,
   } = useThreadContext();
 
+  // Import the hook at the top of file and use it here
+  const { status } = useRateLimit();
+  const isAtLimit = status ? status.remainingMessages <= 0 : false;
+  const isSendDisabled = isAtLimit || isOverLimit || inputValue.trim().length === 0;
+
   return (
     // aui-composer-action-wrapper
-    <div className="bg-muted/80 border-top border-1 dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
+    <div className="bg-muted/80 border-top border-1 dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2 flex-wrap gap-y-1">
       {/* left: model/agent selectors */}
       <div className="flex items-center gap-2">
         <AgentSelect
@@ -327,35 +378,74 @@ const ComposerAction: FC = () => {
         <PlusIcon />
       </TooltipIconButton> */}
 
-      <ThreadPrimitive.If running={false}>
-        <ComposerPrimitive.Send asChild>
-          <Button
-            type="submit"
-            variant="ghost"
-            // aui-composer-send
-            className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
-            aria-label="Send message"
+      {/* Rate limit display and action buttons */}
+      <div className="flex items-center gap-2 pl-1">
+        {/* Character count display */}
+        {inputValue.length > 0 && (
+          <span 
+            className={cn(
+              "text-xs font-mono",
+              isOverLimit 
+                ? "text-destructive" 
+                : charactersRemaining <= 50 
+                  ? "text-amber-600 dark:text-amber-400" 
+                  : "text-muted-foreground"
+            )}
+            title={`${inputValue.length}/560 characters used`}
           >
-            {/* aui-composer-send-icon */}
-            <SendHorizontalIcon className="size-4" />
-          </Button>
-        </ComposerPrimitive.Send>
-      </ThreadPrimitive.If>
+            {charactersRemaining < 0 ? `+${Math.abs(charactersRemaining)}` : charactersRemaining}
+          </span>
+        )}
+        
+        <RateLimitDisplay compact={true} />
+        
+        <ThreadPrimitive.If running={false}>
+          <ComposerPrimitive.Send asChild>
+            <Button
+              type="submit"
+              variant="ghost"
+              // aui-composer-send
+              className={cn(
+                "h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30",
+                isSendDisabled && "opacity-50 cursor-not-allowed"
+              )}
+              aria-label={
+                isOverLimit 
+                  ? "Message too long" 
+                  : isAtLimit 
+                    ? "Rate limit reached" 
+                    : "Send message"
+              }
+              disabled={isSendDisabled}
+              title={
+                isOverLimit 
+                  ? `Message is ${Math.abs(charactersRemaining)} characters over the limit`
+                  : isAtLimit 
+                    ? `Rate limit reached. ${status?.remainingMessages || 0} messages remaining today.`
+                    : undefined
+              }
+            >
+              {/* aui-composer-send-icon */}
+              <SendHorizontalIcon className="size-4" />
+            </Button>
+          </ComposerPrimitive.Send>
+        </ThreadPrimitive.If>
 
-      <ThreadPrimitive.If running>
-        <ComposerPrimitive.Cancel asChild>
-          <Button
-            type="button"
-            variant="ghost"
-            // aui-composer-cancel
-            className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
-            aria-label="Stop generating"
-          >
-            {/* aui-composer-cancel-icon */}
-            <Square className="size-3.5 fill-white dark:size-4 dark:fill-black" />
-          </Button>
-        </ComposerPrimitive.Cancel>
-      </ThreadPrimitive.If>
+        <ThreadPrimitive.If running>
+          <ComposerPrimitive.Cancel asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              // aui-composer-cancel
+              className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
+              aria-label="Stop generating"
+            >
+              {/* aui-composer-cancel-icon */}
+              <Square className="size-3.5 fill-white dark:size-4 dark:fill-black" />
+            </Button>
+          </ComposerPrimitive.Cancel>
+        </ThreadPrimitive.If>
+      </div>
     </div>
   );
 };

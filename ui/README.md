@@ -14,6 +14,7 @@ A modern, production-ready chat interface built with **Next.js 15**, **React 19*
 - **💬 Thread Management**: Create, delete, and manage conversation threads with complete data cleanup
 - **⚡ Optimistic Updates**: Instant UI feedback with background sync
 - **🎯 Agent Routing**: Intelligent supervisor agent with automatic routing
+- **📝 Smart Input Limits**: Character limit enforcement with visual feedback (560 characters - equivalent to 2 tweets)
 
 ## 🚀 Quick Start
 
@@ -53,7 +54,7 @@ BACKEND_AUTH_TOKEN=                        # Optional: Backend authentication to
 
 # Authentication (Better Auth)
 BETTER_AUTH_SECRET=your-secret-key         # Required: Session encryption key
-BETTER_AUTH_URL=http://localhost:3000      # Your app URL
+NEXT_PUBLIC_BETTER_AUTH_URL=http://localhost:3000      # Your app URL
 
 # Database (for user sessions and threads)
 DATABASE_URL=postgres://user:pass@host:5432/dbname
@@ -72,7 +73,7 @@ OPENAI_API_KEY=sk-...
 | `BACKEND_URL` | Base URL of the FastAPI agent service | ✅ |
 | `BACKEND_AUTH_TOKEN` | Authentication token for backend API | Optional |
 | `BETTER_AUTH_SECRET` | Secret key for session encryption | ✅ |
-| `BETTER_AUTH_URL` | Public URL of your application | ✅ |
+| `NEXT_PUBLIC_BETTER_AUTH_URL` | Public URL of your application | ✅ |
 | `DATABASE_URL` | PostgreSQL connection string for user data | ✅ |
 | `POSTGRES_URL` | Alternative PostgreSQL connection string | Optional |
 | `OPENAI_API_KEY` | OpenAI API key (client-side fallback only) | Optional |
@@ -152,7 +153,6 @@ pnpm dev          # Start development server with hot reload
 pnpm build        # Build for production
 pnpm start        # Start production server
 pnpm lint         # Run ESLint
-pnpm type-check   # Run TypeScript type checking
 
 # Database
 pnpm db:generate  # Generate Prisma client
@@ -201,6 +201,20 @@ Tool calls are automatically rendered with contextual icons. To add custom tool 
 
 1. Add tool icons to `components/ui/tool-fallback.tsx`
 2. Implement custom rendering in `components/assistant-ui/thread.tsx`
+
+### Message Input Limits
+
+The message composer includes a smart character limit system:
+
+- **Default Limit**: 560 characters (equivalent to 2 tweets)
+- **Visual Feedback**: Real-time character counter with color-coded warnings
+- **Input Validation**: Border color changes and send button disabled when over limit
+- **Warning Thresholds**: 
+  - Yellow warning when 50 or fewer characters remain
+  - Red error state when limit exceeded
+- **Buffer Zone**: Input allows 50 extra characters beyond limit for user awareness
+
+To customize the character limit, modify the `maxCharacters` constant in `components/assistant-ui/thread.tsx`.
 
 ### Thread Management
 
@@ -269,7 +283,7 @@ Contributions are welcome! Please see the main project's contributing guidelines
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run tests: `pnpm lint && pnpm type-check`
+4. Run tests: `pnpm lint`
 5. Submit a pull request
 
 ## 📝 License

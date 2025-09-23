@@ -43,6 +43,17 @@ export interface BackendStreamEvent {
   messageId?: string; // For token events to identify which message they belong to
 }
 
+// Rate limiting types
+export interface RateLimitErrorResponse {
+  error: 'Rate limit exceeded';
+  details: {
+    limit: number;
+    currentCount: number;
+    resetTime: string;
+    remainingMessages: number;
+  };
+}
+
 export interface BackendAgentInfo {
   key: string;
   description: string;

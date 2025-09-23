@@ -57,9 +57,9 @@ export function AgentSelect({
         value={selectedAgentId || serviceInfo.default_agent || ""}
         onValueChange={onAgentChange}
       >
-        <SelectTrigger className="h-6.5 text-xs m-0 px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20">
+        <SelectTrigger className="h-6.5 max-w-33 sm:max-w-50 text-xs m-0 px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20">
           <Bot className="h-3 w-3 text-muted-foreground" />
-          <SelectValue placeholder="Agent" className="truncate" />
+          <SelectValue placeholder="Agent" className="truncate text-clip" />
         </SelectTrigger>
         <SelectContent>
           {serviceInfo.agents.map((agent) => (

@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
 import { Pool } from "pg";
+import { rateLimiter } from "./rate-limiter";
 
 // Create PostgreSQL connection pool for auth
 const pool = new Pool({
@@ -77,6 +78,15 @@ export const auth = betterAuth({
             // Don't throw here to prevent blocking the account linking process
           } finally {
             client.release();
+          }
+
+          // Transfer rate limiting data (message counts) from anonymous user to authenticated user
+          try {
+            await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
+            console.log(`Successfully transferred rate limit data from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
+          } catch (error) {
+            console.error("Error transferring rate limit data during account linking:", error);
+            // Don't throw here to prevent blocking the account linking process
           }
         } catch (error) {
           console.error("Error in onLinkAccount callback:", error);

@@ -56,9 +56,9 @@ export function ModelSelect({
   return (
     <div className={className}>
       <Select value={currentModel || ""} onValueChange={onModelChange}>
-        <SelectTrigger className="h-6.5 text-xs px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20">
+        <SelectTrigger className="h-6.5 max-w-30 sm:max-w-50 text-xs px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20">
           <Brain className="h-3 w-3 text-muted-foreground" />
-          <SelectValue placeholder="Model" className="truncate" />
+          <SelectValue placeholder="Model" className="truncate text-clip" />
         </SelectTrigger>
         <SelectContent className="text-sm">
           {serviceInfo.models.map((model) => (
