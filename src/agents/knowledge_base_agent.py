@@ -151,6 +151,16 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
 
     response = await model_runnable.ainvoke(state, config)
 
+    if state["remaining_steps"] < 10 and getattr(response, 'tool_calls', None):
+        return {
+            "messages": [
+                AIMessage(
+                    id=response.id,
+                    content="Sorry, need more steps to process this request.",
+                )
+            ]
+        }
+
     return {"messages": [response]}
 
 

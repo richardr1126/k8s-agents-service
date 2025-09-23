@@ -2,9 +2,11 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase s### Next.js Chat UI (`ui/`)
+A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance.
 
-The repository now contains a second, production-focused chat interface built with **Next.js 15**, **React 19**, **assistant-ui**, and **Tailwind CSS 4**. This UI features enhanced tool visualization with contextual icons, transfer tool components for agent handoffs, and improved user experience with intelligent routing feedback. The interface is designed to be the primary deployable frontend, while the existing **Streamlit app remains a lightweight reference interface for local development and quick experimentation**.em with intelligent RAG-based assistance.
+### Next.js Chat UI (`ui/`)
+
+The repository now contains a second, production-focused chat interface built with **Next.js 15**, **React 19**, **assistant-ui**, and **Tailwind CSS 4**. This UI features enhanced tool visualization with contextual icons, transfer tool components for agent handoffs, smart input limits with visual feedback (560 character limit equivalent to 2 tweets), and improved user experience with intelligent routing feedback. The interface is designed to be the primary deployable frontend, while the existing **Streamlit app remains a lightweight reference interface for local development and quick experimentation**.
 
 This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including dual Helm charts for service/UI separation, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
 
@@ -59,7 +61,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
 1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content for comprehensive information gathering
 1. **Enhanced Tool Communication**: Improved agent handoff system with visual UI components and contextual routing
-1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, and enhanced tool visualization
+1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, enhanced tool visualization, and smart input limits with real-time character counting (560 character limit)
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
 1. **Smart Search**: Intelligent filtering and source attribution in resume and project searches
 
@@ -92,7 +94,7 @@ docker compose watch
 
 ```sh
 # uv is the recommended way to install dependencies
-curl -LsSf https://astral.sh/uv/0.7.19/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install dependencies and run
 uv sync --frozen
@@ -182,6 +184,7 @@ To customize the agent for your own use case:
 - **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent and web research agent based on question context
 - **resume-agent**: Professional resume assistant that searches through resume information and project repositories
 - **web-rag-agent**: Web research assistant that can browse the internet and summarize articles
+- **postgres-mcp-agent**: PostgreSQL MCP agent that can utilize tools from a PostgreSQL MCP server for database management and analysis
 - **chatbot**: Simple conversational agent for general purpose chat
 
 

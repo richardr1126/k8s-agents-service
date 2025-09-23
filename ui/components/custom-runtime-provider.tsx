@@ -15,6 +15,7 @@ import { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
 import { generateThreadTitle } from "@/lib/thread-utils";
 import { useUser } from "@/components/auth-user-provider";
 import { useServiceInfo } from "@/components/service-info-provider";
+import { useRateLimit } from "@/components/rate-limit-provider";
 
 // Convert our ChatMessage format to ThreadMessageLike
 const convertMessage = (message: ChatMessage): ThreadMessageLike => {
@@ -229,6 +230,7 @@ function ChatWithThreads({
   } = useThreadContext();
   
   const { serviceInfo } = useServiceInfo();
+  const { incrementCount, onMessageStart, onMessageComplete } = useRateLimit();
   
   const { 
     userData, 
@@ -303,6 +305,12 @@ function ChatWithThreads({
     const updatedMessages = [...currentMessages, userMessage];
     setThreads(prev => new Map(prev).set(currentThreadId, updatedMessages));
     setRunningThreads(prev => new Set(prev).add(currentThreadId));
+
+    // Update rate limit count immediately (optimistic update)
+    incrementCount();
+    
+    // Notify rate limit provider that a message is starting
+    onMessageStart();
 
     // Update thread activity
     updateThreadActivity(currentThreadId, userMessageText.substring(0, 50) + (userMessageText.length > 50 ? '...' : ''));
@@ -496,8 +504,11 @@ function ChatWithThreads({
         next.delete(currentThreadId);
         return next;
       });
+      
+      // Notify rate limit provider that the message is complete
+      onMessageComplete();
     }
-  }, [currentThreadId, currentMessages, userId, selectedAgentId, selectedModelId, serviceInfo, setThreads, setRunningThreads, updateThreadActivity, updateThreadTitle, userData]);
+  }, [currentThreadId, currentMessages, userId, selectedAgentId, selectedModelId, serviceInfo, setThreads, setRunningThreads, updateThreadActivity, updateThreadTitle, userData, incrementCount, onMessageStart, onMessageComplete]);
 
   const threadListAdapter: ExternalStoreThreadListAdapter = {
     threadId: currentThreadId || '',

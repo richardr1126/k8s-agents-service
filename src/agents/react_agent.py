@@ -12,7 +12,7 @@ from agents.tools import get_mcp_tools
 
 class AgentState(MessagesState, total=False):
     """State for the React agent."""
-    pass
+    remaining_steps: RemainingSteps
 
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -27,6 +27,16 @@ async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     
     # Call the model
     response = await bound_model.ainvoke(state["messages"], config)
+    
+    if state["remaining_steps"] < 10 and response.tool_calls:
+        return {
+            "messages": [
+                AIMessage(
+                    id=response.id,
+                    content="Sorry, need more steps to process this request.",
+                )
+            ]
+        }
     
     return {"messages": [response]}
 

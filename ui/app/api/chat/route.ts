@@ -3,6 +3,7 @@ import { ChatRequest, ChatMessage, BackendMessage, BackendStreamEvent } from '@/
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { Pool } from 'pg';
+import { rateLimiter } from '@/lib/rate-limiter';
 
 // Create PostgreSQL connection pool
 const pool = new Pool({
@@ -26,6 +27,26 @@ export async function POST(req: NextRequest) {
 
     // Use authenticated user ID instead of client-provided userId
     const userId = session.user.id;
+
+    // Check rate limiting before processing the message
+    const userInfo = {
+      id: userId,
+      isAnonymous: session.user.isAnonymous || false
+    };
+
+    const rateLimitResult = await rateLimiter.checkAndIncrementLimit(userInfo);
+
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json({ 
+        error: 'Rate limit exceeded',
+        details: {
+          limit: rateLimitResult.limit,
+          currentCount: rateLimitResult.currentCount,
+          resetTime: rateLimitResult.resetTime,
+          remainingMessages: rateLimitResult.remainingMessages
+        }
+      }, { status: 429 });
+    }
 
     // If threadId is provided, validate user ownership
     if (threadId) {

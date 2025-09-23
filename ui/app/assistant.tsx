@@ -11,6 +11,7 @@ import { CustomRuntimeProvider } from "@/components/custom-runtime-provider";
 import { TaskToolUI } from "@/components/task-ui";
 import { UserProvider } from "@/components/auth-user-provider";
 import { ServiceInfoProvider } from "@/components/service-info-provider";
+import { RateLimitProvider } from "@/components/rate-limit-provider";
 import { useSession, signIn } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -36,20 +37,22 @@ function AuthenticatedContent() {
   return (
     <ServiceInfoProvider>
       <UserProvider>
-        <CustomRuntimeProvider>
-          <SidebarProvider>
-            <div className="flex h-dvh w-full pr-0.5">
-              <AppSidebar />
-              <SidebarInset>
-                <div className="min-h-0 relative flex-1">
-                  <AssistantFloatingTrigger />
-                  <Thread />
-                  <TaskToolUI />
-                </div>
-              </SidebarInset>
-            </div>
-          </SidebarProvider>
-        </CustomRuntimeProvider>
+        <RateLimitProvider>
+          <CustomRuntimeProvider>
+            <SidebarProvider>
+              <div className="flex h-dvh w-full pr-0.5">
+                <AppSidebar />
+                <SidebarInset>
+                  <div className="min-h-0 relative flex-1">
+                    <AssistantFloatingTrigger />
+                    <Thread />
+                    <TaskToolUI />
+                  </div>
+                </SidebarInset>
+              </div>
+            </SidebarProvider>
+          </CustomRuntimeProvider>
+        </RateLimitProvider>
       </UserProvider>
     </ServiceInfoProvider>
   );
