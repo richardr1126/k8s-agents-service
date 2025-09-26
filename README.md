@@ -2,7 +2,7 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance.
+A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance and specialized database analysis capabilities.
 
 ### Next.js Chat UI (`ui/`)
 
@@ -26,12 +26,14 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 - **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures across service and streamlit containers
 - **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry with separate image streams
 - **🔧 Deployment Scripts**: Comprehensive deployment automation with database setup, secrets management, and dependency updates
+- **🔌 MCP Integration**: Model Context Protocol server support for advanced database analysis and tool execution
+- **🔍 Enhanced Search**: DuckDuckGo search integration for improved web research capabilities
 
 ## Overview
 
 ### Core Features (from original toolkit)
 
-1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.3 features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor` with intelligent auto-routing capabilities.
+1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.6+ features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor` with intelligent auto-routing capabilities.
 1. **FastAPI Service**: Serves the agent with both streaming and non-streaming endpoints.
 1. **Advanced Streaming**: A novel approach to support both token-based and message-based streaming.
 1. **Streamlit Interface**: Simple reference UI for local testing & debugging (kept intentionally lightweight).
@@ -40,6 +42,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
 1. **RAG Agent**: RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
+1. **MCP Integration**: Model Context Protocol (MCP) server integration for database analysis and tool execution.
 1. **Thread Management**: Complete thread lifecycle management with proper deletion from both conversation memory (checkpointer) and long-term memory (store).
 1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
 1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
@@ -54,12 +57,14 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
 1. **Automated Cron Jobs**: Kubernetes CronJob support for scheduled tasks like vector database updates and maintenance
+1. **MCP Server Integration**: Model Context Protocol server support for advanced database analysis and external tool integration
 
 ### Resume & Portfolio Features
 
-1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between specialized agents based on context
+1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between specialized agents based on context, now including database analysis capabilities
 1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
-1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content for comprehensive information gathering
+1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content using DuckDuckGo search integration
+1. **Database Analyst Agent**: Specialized MCP-powered agent for analyzing the Cosmere Feed database, providing insights into user engagement, content trends, and feed performance metrics
 1. **Enhanced Tool Communication**: Improved agent handoff system with visual UI components and contextual routing
 1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, enhanced tool visualization, and smart input limits with real-time character counting (560 character limit)
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
@@ -158,7 +163,7 @@ The repository is structured as follows:
    ```
 
 2. Set up environment variables:
-   Create a `.env` file in the root directory. At least one LLM API key or configuration is required. See the [`.env.example` file](./.env.example) for a full list of available environment variables, including a variety of model provider API keys, header-based authentication, LangSmith tracing, testing and development modes, and OpenWeatherMap API key.
+   Create a `.env` file in the root directory. At least one LLM API key or configuration is required. See the [`.env.example` file](./.env.example) for a full list of available environment variables, including a variety of model provider API keys, header-based authentication, LangSmith tracing, testing and development modes, OpenWeatherMap API key, and PostgreSQL MCP URL configuration.
 
 3. You can now run the agent service and the Streamlit app locally, either with Docker or just using Python. The Docker setup is recommended for simpler environment setup and immediate reloading of the services when you make changes to your code.
 
@@ -181,10 +186,10 @@ To customize the agent for your own use case:
 
 ### Current Available Agents
 
-- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent and web research agent based on question context
+- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent, web research agent, and database analyst based on context
 - **resume-agent**: Professional resume assistant that searches through resume information and project repositories
 - **web-rag-agent**: Web research assistant that can browse the internet and summarize articles
-- **postgres-mcp-agent**: PostgreSQL MCP agent that can utilize tools from a PostgreSQL MCP server for database management and analysis
+- **postgres-mcp-agent**: Database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content. Analyzes PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance
 - **chatbot**: Simple conversational agent for general purpose chat
 
 
@@ -254,6 +259,9 @@ OPENROUTER_API_KEY=your-openrouter-key
 LANGSMITH_API_KEY=your-langsmith-key  
 AZURE_OPENAI_API_KEY=your-azure-openai-key
 GITHUB_PAT=your-github-token-for-container-registry
+
+# MCP Configuration (for database analysis agent)
+POSTGRES_MCP_URL=http://host.docker.internal:8000/sse
 ```
 
 #### Quick Deploy with Helm
@@ -343,6 +351,7 @@ cronjob:
 - `GDRIVE_DOC_ID`: Google Drive document ID for resume data
 - All database connection variables for vector storage
 - `AZURE_OPENAI_API_KEY`: For generating embeddings
+- `POSTGRES_MCP_URL`: For database analysis capabilities (if using MCP agent)
 
 #### Database Support
 
@@ -377,7 +386,7 @@ For local development, we recommend using [docker compose watch](https://docs.do
 
 4. The services will now automatically update when you make changes to your code:
    - Changes in the relevant python files and directories will trigger updates for the relevant services.
-   - NOTE: If you make changes to the `pyproject.toml` or `uv.lock` files, you will need to rebuild the services by running `docker compose up --build`.
+   - NOTE: If you make changes to the `pyproject.toml` or `uv.lock` files (such as adding new dependencies like `ddgs` for search capabilities), you will need to rebuild the services by running `docker compose up --build`.
 
 5. Access the Streamlit app by navigating to `http://localhost:8501` in your web browser.
 

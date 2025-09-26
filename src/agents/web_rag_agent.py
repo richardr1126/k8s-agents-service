@@ -221,11 +221,9 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
         model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
         
         # Use structured output for search query generation
-        model_name = getattr(model, 'deployment_name', getattr(model, 'name', 'unknown'))
-        logger.info(f"Using model: {model_name}")
         structured_model = model.with_structured_output(
             SearchQuery, 
-            **({"method": "function_calling"} if model_name == "gpt-5-chat" else {})
+            **({"method": "function_calling"})
         )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -415,11 +413,9 @@ async def check_first_run_search_need_node(state: WebRagState, config: RunnableC
         model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
         
         # Use structured output for first run search decision
-        model_name = getattr(model, 'deployment_name', getattr(model, 'name', 'unknown'))
-        logger.info(f"Using model: {model_name}")
         structured_model = model.with_structured_output(
             FirstRunSearchDecision, 
-            **({"method": "function_calling"} if model_name == "gpt-5-chat" else {})
+            **({"method": "function_calling"})
         )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -508,11 +504,9 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
         model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
 
         # Use structured output for relevance decision
-        model_name = getattr(model, 'deployment_name', getattr(model, 'name', 'unknown'))
-        logger.info(f"Using model: {model_name}")
         structured_model = model.with_structured_output(
             RelevanceDecision, 
-            **({"method": "function_calling"} if model_name == "gpt-5-chat" else {})
+            **({"method": "function_calling"})
         )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
