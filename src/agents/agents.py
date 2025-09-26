@@ -35,7 +35,7 @@ agents: dict[str, Agent] = {
     #     description="A research assistant with web search and calculator.", graph=research_assistant
     # ),
     "auto-router": Agent(
-        description="Hello! I'm an agent that routes between Richard's resume assistant or a web research agent.",
+        description="Hello! I'm an agent that routes between a resume assistant, a web research assistant, and a database analyst.",
         graph=langgraph_supervisor_agent
     ),
     "resume-agent": Agent(
