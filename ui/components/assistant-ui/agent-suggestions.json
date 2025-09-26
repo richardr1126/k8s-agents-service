@@ -3,17 +3,17 @@
     {
       "title": "Overview of Richard's Cloud Computing Skills",
       "label": "Uses Resume Agent",
-      "action": "Provide an overview of Richard's skills in cloud computing; linking to his projects."
-    },
-    {
-      "title": "What's the news today?",
-      "label": "Uses Web Agent",
-      "action": "What is the biggest news that happened today?"
+      "action": "Provide an overview of Richard's skills in cloud computing and link them to his projects."
     },
     {
       "title": "Are Richard's skills in demand?",
       "label": "Uses Resume Agent + Web Agent",
       "action": "What skills does Richard have that are in demand right now?"
+    },
+    {
+      "title": "Social media feed performance",
+      "label": "Uses Web Agent + Postgres Agent",
+      "action": "What's the latest news about Brandon Sanderson or his books, and how is the Cosmere feed performing in response to recent events?"
     },
     {
       "title": "What is Richard's most technical project?",
@@ -67,24 +67,24 @@
   ],
   "postgres-mcp-agent": [
     {
-      "title": "Database performance optimization",
-      "label": "Performance Tuning",
-      "action": "How can I optimize PostgreSQL database performance for large datasets?"
+      "title": "Analyze feed engagement metrics",
+      "label": "User Analytics",
+      "action": "Show me the engagement metrics for the Cosmere feed - how many requests and active users do we have?"
     },
     {
-      "title": "Advanced PostgreSQL queries",
-      "label": "SQL Development",
-      "action": "Show me some advanced PostgreSQL query techniques and best practices."
+      "title": "Popular Cosmere content trends",
+      "label": "Content Analysis",
+      "action": "What are the most popular posts on the Cosmere feed? What Cosmere-related content gets the most engagement?"
     },
     {
-      "title": "Database schema design",
-      "label": "Architecture",
-      "action": "What are the best practices for designing efficient PostgreSQL database schemas?"
+      "title": "User activity patterns",
+      "label": "Behavioral Insights",
+      "action": "Analyze user activity patterns - when are users most active on the Cosmere feed?"
     },
     {
-      "title": "Database security measures",
-      "label": "Security",
-      "action": "What security measures should I implement for a PostgreSQL database?"
+      "title": "Feed performance over time",
+      "label": "Growth Metrics",
+      "action": "How has the Cosmere feed grown over time? Show me request trends and user adoption patterns."
     }
   ],
   "chatbot": [

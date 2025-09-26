@@ -92,7 +92,9 @@ class OpenRouterModelName(StrEnum):
     """https://openrouter.ai/models"""
 
     GEMINI_25_FLASH = "google/gemini-2.5-flash"
+    GEMINI_25_PRO = "google/gemini-2.5-pro"
     QWEN_3_CODER = "qwen/qwen3-coder"
+    QWEN_3_MAX = "qwen/qwen3-max"
     KIMI_K2 = "moonshotai/kimi-k2"
     CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4"
     GPT_OSS = "openai/gpt-oss-120b"

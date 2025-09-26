@@ -10,7 +10,7 @@ from agents.interrupt_agent import interrupt_agent
 from agents.knowledge_base_agent import kb_agent
 from agents.langgraph_supervisor_agent import langgraph_supervisor_agent
 from agents.rag_assistant import rag_assistant
-from agents.react_agent import react_agent
+from agents.mcp_agent import mcp_agent
 from agents.research_assistant import research_assistant
 from agents.web_rag_agent import web_rag_agent
 from schema import AgentInfo
@@ -49,9 +49,10 @@ agents: dict[str, Agent] = {
         graph=web_rag_agent
     ),
     "postgres-mcp-agent": Agent(
-        description="""Hello! I'm a PostgreSQL MCP agent that can utilize tools from a PostgreSQL MCP server.
-        I can connect to the server, access various tools, and help you with tasks related to PostgreSQL databases. Ask me anything about database management, queries, or data analysis!""",
-        graph=react_agent
+        description="""Hello! I'm a database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content.
+        I can analyze the PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance. 
+        Ask me about user activity patterns, popular posts, engagement metrics, or any data-driven questions about the Cosmere feed!""",
+        graph=mcp_agent
     ),
     # "command-agent": Agent(description="A command agent.", graph=command_agent),
     # "bg-task-agent": Agent(description="A background task agent.", graph=bg_task_agent),
