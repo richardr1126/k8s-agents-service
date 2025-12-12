@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { rateLimiter } from '@/lib/rate-limiter';
+import { getIsAnonymous } from '@/lib/utils';
 
 export async function GET() {
   try {
@@ -16,7 +17,7 @@ export async function GET() {
 
     const userInfo = {
       id: session.user.id,
-      isAnonymous: session.user.isAnonymous || false
+      isAnonymous: getIsAnonymous(session.user)
     };
 
     const rateLimitResult = await rateLimiter.getCurrentUsage(userInfo);

@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, MessagesSquare } from "lucide-react";
+import { getIsAnonymous } from "@/lib/utils";
 import { 
   wasUserPreviouslyAuthenticated, 
   markUserAsAuthenticated, 
@@ -63,20 +64,21 @@ function AssistantContent() {
   const router = useRouter();
   const [hasAttemptedAuth, setHasAttemptedAuth] = useState(false);
   const [wasAuthenticated, setWasAuthenticated] = useState(() => wasUserPreviouslyAuthenticated());
+  const isAnonymous = getIsAnonymous(session?.user);
 
   // Track when user becomes authenticated and update activity
   useEffect(() => {
-    if (session?.user && !session.user.isAnonymous) {
+    if (session?.user && !isAnonymous) {
       markUserAsAuthenticated();
       setWasAuthenticated(true);
       updateLastActivity();
     }
-  }, [session]);
+  }, [session, isAnonymous]);
 
   // Update activity on user interaction (optional - for better session tracking)
   useEffect(() => {
     // Only attach listeners for fully authenticated (non-anonymous) users
-    if (!session?.user || session.user.isAnonymous) return;
+    if (!session?.user || isAnonymous) return;
 
     const handleActivity = () => {
       updateLastActivity();
@@ -93,7 +95,7 @@ function AssistantContent() {
         document.removeEventListener(event, handleActivity);
       });
     };
-  }, [session]);
+  }, [session, isAnonymous]);
 
   // Handle authentication state
   useEffect(() => {

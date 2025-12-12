@@ -4,6 +4,7 @@ import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { Pool } from 'pg';
 import { rateLimiter } from '@/lib/rate-limiter';
+import { getIsAnonymous } from '@/lib/utils';
 
 // Create PostgreSQL connection pool
 const pool = new Pool({
@@ -31,7 +32,7 @@ export async function POST(req: NextRequest) {
     // Check rate limiting before processing the message
     const userInfo = {
       id: userId,
-      isAnonymous: session.user.isAnonymous || false
+      isAnonymous: getIsAnonymous(session.user)
     };
 
     const rateLimitResult = await rateLimiter.checkAndIncrementLimit(userInfo);

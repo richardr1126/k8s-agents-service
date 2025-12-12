@@ -17,10 +17,6 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     requireEmailVerification: false, // Set to true in production
-    rememberMe: {
-      enabled: true,
-      durationInDays: 30, // 30 days when "remember me" is checked
-    },
     async sendResetPassword(data) {
       // Send an email to the user with a link to reset their password
       console.log("Password reset requested for:", data.user.email);
@@ -42,11 +38,13 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    generateId: () => {
-      // Generate user-friendly IDs similar to current system
-      const timestamp = Date.now();
-      const random = Math.random().toString(36).substring(2, 8);
-      return `user-${timestamp}-${random}`;
+    database: {
+      generateId: () => {
+        // Generate user-friendly IDs similar to current system
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substring(2, 8);
+        return `user-${timestamp}-${random}`;
+      },
     },
   },
   plugins: [
