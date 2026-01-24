@@ -1,6 +1,14 @@
 // Backend API types matching your FastAPI service
 
-import { ReadonlyJSONObject, ReadonlyJSONValue } from "assistant-stream/utils";
+export type ReadonlyJSONValue =
+  | string
+  | number
+  | boolean
+  | null
+  | { readonly [key: string]: ReadonlyJSONValue }
+  | readonly ReadonlyJSONValue[];
+
+export type ReadonlyJSONObject = { readonly [key: string]: ReadonlyJSONValue };
 
 export interface BackendUserInput {
   message: string;

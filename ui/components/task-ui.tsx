@@ -6,7 +6,7 @@ import { Loader2, CheckCircle, XCircle, Clock, ChevronDownIcon, ChevronUpIcon } 
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "./ui/button";
-import { ReadonlyJSONObject } from "assistant-stream/utils";
+import { ReadonlyJSONObject } from "@/lib/types";
 
 interface TaskData {
   name: string;
@@ -30,8 +30,8 @@ const getStateIcon = (state: string, result?: string | null) => {
     case "running":
       return <Loader2 className="h-4 w-4 text-blue-500 dark:text-blue-400 animate-spin" />;
     case "complete":
-      return result === "error" ? 
-        <XCircle className="h-4 w-4 text-red-500 dark:text-red-400" /> : 
+      return result === "error" ?
+        <XCircle className="h-4 w-4 text-red-500 dark:text-red-400" /> :
         <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" />;
     default:
       return <Clock className="h-4 w-4 text-muted-foreground" />;
@@ -45,8 +45,8 @@ const getStateBadge = (state: string, result?: string | null) => {
     case "running":
       return <Badge variant="outline" className="text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-800">Running</Badge>;
     case "complete":
-      return result === "error" ? 
-        <Badge variant="destructive">Error</Badge> : 
+      return result === "error" ?
+        <Badge variant="destructive">Error</Badge> :
         <Badge variant="outline" className="text-green-600 border-green-200 dark:text-green-400 dark:border-green-800">Complete</Badge>;
     default:
       return <Badge variant="outline">Unknown</Badge>;
@@ -60,7 +60,7 @@ const formatTaskData = (data: ReadonlyJSONObject) => {
     <div className="space-y-2">
       {Object.entries(data).map(([key, value]) => {
         if (value === null || value === undefined) return null;
-        
+
         let displayValue: string;
         if (typeof value === 'object') {
           displayValue = JSON.stringify(value, null, 2);
@@ -86,7 +86,7 @@ const formatTaskData = (data: ReadonlyJSONObject) => {
 const TaskUIComponent = ({ args }: { args: TaskArgs }) => {
   const { taskData } = args;
   const [isCollapsed, setIsCollapsed] = useState(true);
-  
+
   return (
     <div className={cn(
       "mb-4 w-full overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-background via-background to-muted/20 shadow-sm",
@@ -99,7 +99,7 @@ const TaskUIComponent = ({ args }: { args: TaskArgs }) => {
         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
           {getStateIcon(taskData.state, taskData.result)}
         </div>
-        
+
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h4 className="text-sm font-medium text-foreground truncate">
@@ -107,7 +107,7 @@ const TaskUIComponent = ({ args }: { args: TaskArgs }) => {
             </h4>
             {getStateBadge(taskData.state, taskData.result)}
           </div>
-          
+
           {taskData.data.status != null && (
             <p className="text-sm text-muted-foreground mt-1">
               {String(taskData.data.status)}
@@ -128,11 +128,11 @@ const TaskUIComponent = ({ args }: { args: TaskArgs }) => {
           )}
         </Button>
       </div>
-      
+
       {!isCollapsed && (taskData.data && Object.keys(taskData.data).length > 0) && (
         <div className="p-4">
           {formatTaskData(taskData.data)}
-          
+
           {taskData.data.error != null && (
             <div className="mt-3 p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
               <p className="text-sm text-destructive">
