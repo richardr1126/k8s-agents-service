@@ -62,6 +62,10 @@ def create_pgvector_db_for_folder(
         # Load and split document into chunks
         document = loader.load()
         chunks = text_splitter.split_documents(document)
+        chunks = [c for c in chunks if c.page_content and c.page_content.strip()]
+        if not chunks:
+            print(f"Document {filename} has no non-empty chunks. Skipping.")
+            continue
 
         # Update metadata to include the title (filename) and collection name
         for chunk in chunks:
@@ -69,9 +73,37 @@ def create_pgvector_db_for_folder(
                 chunk.metadata['title'] = os.path.basename(chunk.metadata['source'])
                 chunk.metadata['collection'] = collection_name
 
-        # Add chunks to PGVector
-        pg_vector.add_documents(chunks)
-        print(f"Document {filename} added to collection {collection_name}.")
+        # Add chunks to PGVector with fallback for transient empty embedding responses.
+        try:
+            pg_vector.add_documents(chunks)
+            print(f"Document {filename} added to collection {collection_name}.")
+        except ValueError as e:
+            if "No embedding data received" not in str(e):
+                raise
+            print(
+                f"Batch embed returned no data for {filename}. "
+                "Retrying with smaller batches."
+            )
+            added = 0
+            skipped = 0
+            batch_size = 8
+            for i in range(0, len(chunks), batch_size):
+                batch = chunks[i : i + batch_size]
+                try:
+                    pg_vector.add_documents(batch)
+                    added += len(batch)
+                except ValueError as batch_error:
+                    if "No embedding data received" not in str(batch_error):
+                        raise
+                    for chunk in batch:
+                        try:
+                            pg_vector.add_documents([chunk])
+                            added += 1
+                        except ValueError as single_error:
+                            if "No embedding data received" not in str(single_error):
+                                raise
+                            skipped += 1
+            print(f"Document {filename}: added {added} chunks, skipped {skipped}.")
 
     print(f"Vector database collection {collection_name} created in PostgreSQL.")
     return pg_vector
