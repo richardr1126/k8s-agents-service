@@ -92,14 +92,14 @@ class OpenRouterModelName(StrEnum):
     """https://openrouter.ai/models"""
 
     GEMINI_25_FLASH = "google/gemini-2.5-flash"
-    GEMINI_25_PRO = "google/gemini-2.5-pro"
-    QWEN_3_CODER = "qwen/qwen3-coder"
-    QWEN_3_MAX = "qwen/qwen3-max"
-    KIMI_K2 = "moonshotai/kimi-k2"
-    CLAUDE_SONNET_4 = "anthropic/claude-sonnet-4"
+    GEMINI_25_FLASH_LITE = "google/gemini-2.5-flash-lite"
+    GEMINI_31_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview"
+    GEMINI_31_PRO_PREVIEW = "google/gemini-3.1-pro-preview"
+    CLAUDE_SONNET_46 = "anthropic/claude-sonnet-4.6"
     GPT_OSS = "openai/gpt-oss-120b"
     GPT_OSS_20B = "openai/gpt-oss-20b"
-    GLM_4_5 = "z-ai/glm-4.5"
+    GPT_54 = "openai/gpt-5.4"
+    GLM_5 = "z-ai/glm-5"
 
 class OpenAICompatibleName(StrEnum):
     """https://platform.openai.com/docs/guides/text-generation"""

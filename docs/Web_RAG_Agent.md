@@ -59,9 +59,8 @@ User Query → Generate Search Query → Check Relevance → [Web Search & Store
 # Tavily API (Required for web search)
 TAVILY_API_KEY=your_tavily_api_key
 
-# Azure OpenAI (Required for embeddings and AI decisions)
-AZURE_OPENAI_API_KEY=your_azure_openai_key
-AZURE_OPENAI_ENDPOINT=your_azure_endpoint
+# LLM Provider (OpenRouter)
+OPENROUTER_API_KEY=your_openrouter_api_key
 
 # Database Configuration
 POSTGRES_HOST=your_postgres_host
@@ -71,7 +70,7 @@ POSTGRES_PASSWORD=your_password
 POSTGRES_DB=your_database
 
 # Model Configuration
-DEFAULT_MODEL=your_preferred_model
+DEFAULT_MODEL=google/gemini-3.1-flash-lite-preview
 ```
 
 ## Usage

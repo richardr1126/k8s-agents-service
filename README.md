@@ -89,7 +89,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 
 ```sh
 # At least one LLM API key is required
-echo 'OPENAI_API_KEY=your_openai_api_key' >> .env
+echo 'OPENROUTER_API_KEY=your_openrouter_api_key' >> .env
 
 # Run with docker compose watch for live reloading
 docker compose watch
@@ -257,7 +257,6 @@ APP_POSTGRES_PASSWORD=application-database-password
 # API Keys
 OPENROUTER_API_KEY=your-openrouter-key
 LANGSMITH_API_KEY=your-langsmith-key  
-AZURE_OPENAI_API_KEY=your-azure-openai-key
 GITHUB_PAT=your-github-token-for-container-registry
 
 # MCP Configuration (for database analysis agent)
@@ -350,7 +349,7 @@ cronjob:
 **Required Environment Variables:**
 - `GDRIVE_DOC_ID`: Google Drive document ID for resume data
 - All database connection variables for vector storage
-- `AZURE_OPENAI_API_KEY`: For generating embeddings
+- `OPENROUTER_API_KEY`: For model inference
 - `POSTGRES_MCP_URL`: For database analysis capabilities (if using MCP agent)
 
 #### Database Support
@@ -367,7 +366,7 @@ For local development, we recommend using [docker compose watch](https://docs.do
 
 1. Make sure you have Docker and Docker Compose (>=[2.23.0](https://docs.docker.com/compose/release-notes/#2230)) installed on your system.
 
-2. Create a `.env` file from the `.env.example`. At minimum, you need to provide an LLM API key (e.g., OPENAI_API_KEY).
+2. Create a `.env` file from the `.env.example`. At minimum, you need to provide an LLM API key (e.g., OPENROUTER_API_KEY).
    ```sh
    cp .env.example .env
    # Edit .env to add your API keys
