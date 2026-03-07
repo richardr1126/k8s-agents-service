@@ -14,7 +14,6 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "APP_POSTGRES_PASSWORD=your_postgres_password"
   echo "OPENROUTER_API_KEY=your_openrouter_api_key"
   echo "LANGSMITH_API_KEY=your_langsmith_api_key"
-  echo "AZURE_OPENAI_API_KEY=your_azure_openai_api_key"
   echo "TAVILY_API_KEY=your_tavily_api_key"
   exit 1
 fi
@@ -26,7 +25,7 @@ source "$ENV_FILE"
 set +a  # stop automatically exporting
 
 # Validate that required variables are set
-required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AZURE_OPENAI_API_KEY" "AUTH_SECRET" "TAVILY_API_KEY" "GDRIVE_DOC_ID")
+required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AUTH_SECRET" "TAVILY_API_KEY" "GDRIVE_DOC_ID")
 for var in "${required_vars[@]}"; do
   if [ -z "${!var}" ]; then
     echo "Error: $var is not set in .env file"
@@ -54,15 +53,11 @@ kubectl create secret generic app-secrets \
   --from-literal=POSTGRES_PORT=5433 \
   --from-literal=POSTGRES_DB=agentsservice \
   --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
-  --from-literal=DEFAULT_MODEL="gpt-5-chat" \
+  --from-literal=DEFAULT_MODEL="google/gemini-3.1-flash-lite-preview" \
   --from-literal=LANGSMITH_TRACING=true \
   --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY}" \
   --from-literal=LANGSMITH_PROJECT=default \
   --from-literal=TAVILY_API_KEY="${TAVILY_API_KEY}" \
-  --from-literal=AZURE_OPENAI_API_KEY="${AZURE_OPENAI_API_KEY}" \
-  --from-literal=AZURE_OPENAI_ENDPOINT="https://k8s-agents-service.openai.azure.com/" \
-  --from-literal=AZURE_OPENAI_API_VERSION="2025-04-01-preview" \
-  --from-literal=AZURE_OPENAI_DEPLOYMENT_MAP='{"gpt-4o": "gpt-4o", "gpt-4.1": "gpt-4.1", "gpt-5-chat": "gpt-5-chat"}' \
   --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}" \
   --from-literal=POSTGRES_MCP_URL="http://postgres-mcp.default.svc.cluster.local:8000/sse"
 

@@ -3,7 +3,7 @@ from typing import Any, Literal, NotRequired
 from pydantic import BaseModel, Field, SerializeAsAny
 from typing_extensions import TypedDict
 
-from schema.models import AllModelEnum, AzureOpenAIModelName, OpenRouterModelName
+from schema.models import AllModelEnum, OpenRouterModelName
 
 
 class AgentInfo(BaseModel):
@@ -47,8 +47,11 @@ class UserInput(BaseModel):
     model: SerializeAsAny[AllModelEnum] | None = Field(
         title="Model",
         description="LLM Model to use for the agent.",
-        default=AzureOpenAIModelName.AZURE_GPT_41,
-        examples=[AzureOpenAIModelName.AZURE_GPT_41, OpenRouterModelName.KIMI_K2],
+        default=OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
+        examples=[
+            OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
+            OpenRouterModelName.KIMI_K2,
+        ],
     )
     thread_id: str | None = Field(
         description="Thread ID to persist and continue a multi-turn conversation.",
