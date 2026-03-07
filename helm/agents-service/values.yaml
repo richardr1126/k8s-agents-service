@@ -175,4 +175,4 @@ affinity: {}
 
 # Configuration for the agents-streamlit subchart
 agents-streamlit:
-  enabled: true
+  enabled: false
