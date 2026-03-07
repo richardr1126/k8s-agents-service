@@ -231,15 +231,49 @@ def create_pgvector_collection(
         print(f"Reset collection {collection_name}")
 
     if skip_chunking:
-        # Documents are already chunked, add them directly
-        pg_vector.add_documents(documents)
-        print(f"Added {len(documents)} chunks to {collection_name}")
+        # Documents are already chunked, add only non-empty content.
+        docs_to_add = [d for d in documents if d.page_content and d.page_content.strip()]
     else:
-        # Split documents into chunks
+        # Split documents into chunks, then filter empty chunks.
         splitter = RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
         split_docs = splitter.split_documents(documents)
-        pg_vector.add_documents(split_docs)
-        print(f"Added {len(split_docs)} chunks to {collection_name}")
+        docs_to_add = [d for d in split_docs if d.page_content and d.page_content.strip()]
+
+    if not docs_to_add:
+        print(f"No non-empty documents to add for {collection_name}, skipping.")
+        return pg_vector
+
+    try:
+        pg_vector.add_documents(docs_to_add)
+        print(f"Added {len(docs_to_add)} chunks to {collection_name}")
+    except ValueError as e:
+        if "No embedding data received" not in str(e):
+            raise
+        print(
+            f"Batch embed returned no data for {collection_name}. "
+            "Retrying with smaller batches."
+        )
+        added = 0
+        skipped = 0
+        batch_size = 8
+        for i in range(0, len(docs_to_add), batch_size):
+            batch = docs_to_add[i : i + batch_size]
+            try:
+                pg_vector.add_documents(batch)
+                added += len(batch)
+            except ValueError as batch_error:
+                if "No embedding data received" not in str(batch_error):
+                    raise
+                for doc in batch:
+                    try:
+                        pg_vector.add_documents([doc])
+                        added += 1
+                    except ValueError as single_error:
+                        if "No embedding data received" not in str(single_error):
+                            raise
+                        skipped += 1
+
+        print(f"Added {added} chunks to {collection_name}; skipped {skipped} problematic chunks")
     
     return pg_vector
 
