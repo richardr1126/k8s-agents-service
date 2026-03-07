@@ -1,5 +1,6 @@
+import logging
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage
@@ -8,12 +9,20 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnableSerializable,
 )
+from langchain_core.tools import BaseTool
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.sessions import StreamableHttpConnection
 from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.managed import RemainingSteps
 from langgraph.prebuilt import ToolNode
 
+from agents.configurable_model_graph import ConfigurableModelGraph
+from agents.lazy_agent import LazyLoadingAgent
 from core import get_model, settings
-from agents.tools import get_mcp_tools
+from schema.models import AllModelEnum
+
+logger = logging.getLogger(__name__)
 
 
 class AgentState(MessagesState, total=False):
@@ -66,7 +75,9 @@ instructions = f"""
     """
 
 
-async def wrap_model(model: BaseChatModel, tools: list) -> RunnableSerializable[AgentState, AIMessage]:
+def wrap_model(
+    model: BaseChatModel, tools: list[BaseTool]
+) -> RunnableSerializable[AgentState, AIMessage]:
     """Wrap model with tools and system instructions."""
     bound_model = model.bind_tools(tools)
     preprocessor = RunnableLambda(
@@ -74,39 +85,6 @@ async def wrap_model(model: BaseChatModel, tools: list) -> RunnableSerializable[
         name="StateModifier",
     )
     return preprocessor | bound_model  # type: ignore[return-value]
-
-
-async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Call the model with tools."""
-    model = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    
-    # Get MCP tools dynamically
-    tools = await get_mcp_tools()
-    
-    # Wrap model with system instructions and tools
-    model_runnable = await wrap_model(model, tools)
-    
-    # Call the model
-    response = await model_runnable.ainvoke(state, config)
-    
-    if state["remaining_steps"] < 10 and response.tool_calls:
-        return {
-            "messages": [
-                AIMessage(
-                    id=response.id,
-                    content="Sorry, need more steps to process this request.",
-                )
-            ]
-        }
-    
-    return {"messages": [response]}
-
-
-async def acall_tools(state: AgentState, config: RunnableConfig) -> AgentState:
-    """Call tools dynamically."""
-    tools = await get_mcp_tools()
-    tool_node = ToolNode(tools)
-    return await tool_node.ainvoke(state, config)
 
 
 def pending_tool_calls(state: AgentState) -> Literal["tools", "done"]:
@@ -119,16 +97,67 @@ def pending_tool_calls(state: AgentState) -> Literal["tools", "done"]:
     return "done"
 
 
-# Define the graph
-agent = StateGraph(AgentState)
-agent.add_node("model", acall_model)
-agent.add_node("tools", acall_tools)
-agent.set_entry_point("model")
+class PostgresMCPAgent(LazyLoadingAgent):
+    """Postgres MCP agent with async tool initialization."""
 
-# Always run "model" after "tools"
-agent.add_edge("tools", "model")
+    def __init__(self) -> None:
+        super().__init__()
+        self._mcp_tools: list[BaseTool] = []
+        self._mcp_client: MultiServerMCPClient | None = None
 
-# After "model", if there are tool calls, run "tools". Otherwise END.
-agent.add_conditional_edges("model", pending_tool_calls, {"tools": "tools", "done": END})
+    async def load(self) -> None:
+        """Initialize MCP tools and create configurable graph wrapper."""
+        try:
+            connections = {
+                "postgres-mcp": StreamableHttpConnection(
+                    transport="sse",
+                    url=settings.POSTGRES_MCP_URL,
+                )
+            }
+            self._mcp_client = MultiServerMCPClient(cast(dict[str, Any], connections))
+            self._mcp_tools = await self._mcp_client.get_tools()
+            logger.info("Postgres MCP agent initialized with %s tools", len(self._mcp_tools))
+        except Exception as exc:
+            logger.warning(
+                "Could not initialize MCP tools from %s: %s",
+                settings.POSTGRES_MCP_URL,
+                exc,
+            )
+            self._mcp_tools = []
+            self._mcp_client = None
 
-mcp_agent = agent.compile(name="postgres-mcp-agent")
+        self._graph = ConfigurableModelGraph(self._create_graph)
+        self._loaded = True
+
+    def _create_graph(self, model_name: AllModelEnum) -> CompiledStateGraph:
+        """Create graph bound to one model with cached MCP tools."""
+        model = get_model(model_name)
+        model_runnable = wrap_model(model, self._mcp_tools)
+        tool_node = ToolNode(self._mcp_tools)
+
+        async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
+            response = await model_runnable.ainvoke(state, config)
+            if state["remaining_steps"] < 10 and response.tool_calls:
+                return {
+                    "messages": [
+                        AIMessage(
+                            id=response.id,
+                            content="Sorry, need more steps to process this request.",
+                        )
+                    ]
+                }
+            return {"messages": [response]}
+
+        async def acall_tools(state: AgentState, config: RunnableConfig) -> AgentState:
+            return await tool_node.ainvoke(state, config)
+
+        agent = StateGraph(AgentState)
+        agent.add_node("model", acall_model)
+        agent.add_node("tools", acall_tools)
+        agent.set_entry_point("model")
+        agent.add_edge("tools", "model")
+        agent.add_conditional_edges("model", pending_tool_calls, {"tools": "tools", "done": END})
+        return agent.compile(name="postgres-mcp-agent")
+
+
+mcp_agent = PostgresMCPAgent()
