@@ -206,7 +206,7 @@ This fork uses **YugabyteDB with pgvector** instead of the original PostgreSQL/C
 **RAG Implementation:**
 - **PGVector Integration**: Uses `langchain-postgres` with PGVector for vector storage and retrieval
 - **Multiple Collections**: Supports multiple knowledge bases (e.g., "richard-projects" collection)
-- **Azure OpenAI Embeddings**: Integration with Azure OpenAI's text-embedding-3-large model
+- **OpenRouter Embeddings**: Uses `qwen/qwen3-embedding-8b` for vector generation
 - **Automatic Setup**: Database schema and vector extensions are automatically configured
 
 The system supports three database options:
@@ -349,7 +349,7 @@ cronjob:
 **Required Environment Variables:**
 - `GDRIVE_DOC_ID`: Google Drive document ID for resume data
 - All database connection variables for vector storage
-- `OPENROUTER_API_KEY`: For model inference
+- `OPENROUTER_API_KEY`: For model inference and embeddings
 - `POSTGRES_MCP_URL`: For database analysis capabilities (if using MCP agent)
 
 #### Database Support

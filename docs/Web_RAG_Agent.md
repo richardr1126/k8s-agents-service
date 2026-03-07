@@ -48,7 +48,7 @@ User Query → Generate Search Query → Check Relevance → [Web Search & Store
 
 ### Enterprise-Grade Storage
 - **PostgreSQL with pgvector**: Vector similarity search with full SQL capabilities
-- **Azure OpenAI Embeddings**: Uses text-embedding-3-large for high-quality embeddings
+- **OpenRouter Embeddings**: Uses `qwen/qwen3-embedding-8b` for high-quality embeddings
 - **Metadata Preservation**: Maintains source URLs, timestamps, and context information
 
 ## Configuration
@@ -172,7 +172,7 @@ Customize the system prompt in `rag_response_node` for different response styles
 
 Core dependencies:
 - `langchain-postgres` - Vector database integration
-- `langchain-openai` - Azure OpenAI embeddings
+- `langchain-openai` - OpenAI-compatible embeddings via OpenRouter
 - `tavily-python` - Web search API
 - `pydantic` - Structured AI outputs
 

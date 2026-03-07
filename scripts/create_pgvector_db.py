@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_postgres import PGVector
 from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, TextLoader
-from langchain_openai.embeddings import AzureOpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -93,11 +93,13 @@ def create_pgvector_collections(
     connection_string = f"postgresql+psycopg://{pg_user}:{pg_password}@{pg_host}:{pg_port}/{pg_db}"
     
     # Initialize embeddings (shared across collections)
-    embeddings = AzureOpenAIEmbeddings(
-        api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-        azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-        azure_deployment="text-embedding-3-large",
-        api_version="2025-02-01-preview",
+    openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+    if not openrouter_api_key:
+        raise ValueError("OPENROUTER_API_KEY environment variable must be set")
+    embeddings = OpenAIEmbeddings(
+        model="qwen/qwen3-embedding-8b",
+        openai_api_base="https://openrouter.ai/api/v1",
+        openai_api_key=openrouter_api_key,
     )
 
     collections = {}

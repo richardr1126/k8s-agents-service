@@ -131,7 +131,7 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
             model=api_model_name,
             temperature=0.5,
             streaming=True,
-            base_url="https://openrouter.ai/api/v1/",
+            base_url=settings.OPENROUTER_BASE_URL,
             api_key=settings.OPENROUTER_API_KEY,
         )
     if model_name in FakeModelName:
