@@ -52,6 +52,10 @@ class ConfigurableModelGraph:
             self._graphs[model_name] = graph
         return graph
 
+    def graph_for_model(self, model_name: AllModelEnum) -> Any:
+        """Get or create the graph instance for an explicit model."""
+        return self._graph_for_config({"configurable": {"model": model_name}})
+
     async def ainvoke(
         self, input: Any, config: RunnableConfig | None = None, **kwargs: Any
     ) -> Any:

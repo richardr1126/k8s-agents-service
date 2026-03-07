@@ -30,8 +30,15 @@ SUPERVISOR_PROMPT = (
 
 
 def _build_supervisor_graph(model_name: AllModelEnum):
+    sub_agents = [rag_assistant, web_rag_agent, mcp_agent.get_graph()]
+    resolved_sub_agents = [
+        agent.graph_for_model(model_name)
+        if isinstance(agent, ConfigurableModelGraph)
+        else agent
+        for agent in sub_agents
+    ]
     workflow = create_supervisor(
-        [rag_assistant, web_rag_agent, mcp_agent.get_graph()],
+        resolved_sub_agents,
         model=get_model(model_name),
         prompt=SUPERVISOR_PROMPT,
         handoff_tool_prefix="call_",
