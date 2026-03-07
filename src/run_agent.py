@@ -1,22 +1,21 @@
 import asyncio
-from typing import cast
 from uuid import uuid4
 
 from dotenv import load_dotenv
 from langchain_core.messages import HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import MessagesState
-from langgraph.graph.state import CompiledStateGraph
 
 load_dotenv()
 
-from agents import DEFAULT_AGENT, get_agent  # noqa: E402
-
-# The default agent uses StateGraph.compile() which returns CompiledStateGraph
-agent = cast(CompiledStateGraph, get_agent(DEFAULT_AGENT))
+from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info, load_agent  # noqa: E402
 
 
 async def main() -> None:
+    for agent_info in get_all_agent_info():
+        await load_agent(agent_info.key)
+
+    agent: AgentGraph = get_agent(DEFAULT_AGENT)
     inputs: MessagesState = {
         "messages": [HumanMessage("Find me a recipe for chocolate chip cookies")]
     }

@@ -18,7 +18,7 @@ from langfuse.langchain import CallbackHandler
 from langgraph.types import Command, Interrupt
 from langsmith import Client as LangsmithClient
 
-from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
+from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info, load_agent
 from core import settings
 from memory import initialize_database, initialize_store
 from schema import (
@@ -75,6 +75,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Configure agents with both memory components
             agents = get_all_agent_info()
             for a in agents:
+                try:
+                    await load_agent(a.key)
+                    logger.info(f"Agent loaded: {a.key}")
+                except Exception as e:
+                    logger.error(f"Failed to load agent {a.key}: {e}")
+                    # Continue with other agents instead of failing service startup
+                    continue
+
                 agent = get_agent(a.key)
                 # Set checkpointer for thread-scoped memory (conversation history)
                 agent.checkpointer = saver
