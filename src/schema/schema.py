@@ -50,7 +50,7 @@ class UserInput(BaseModel):
         default=OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
         examples=[
             OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
-            OpenRouterModelName.KIMI_K2,
+            OpenRouterModelName.GLM_5,
         ],
     )
     thread_id: str | None = Field(

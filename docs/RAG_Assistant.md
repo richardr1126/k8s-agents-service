@@ -54,7 +54,7 @@ The RAG assistant uses PGVector with YugabyteDB for production deployments, prov
 
 - **Vector Similarity Search**: Efficient semantic search using pgvector extensions
 - **Multiple Collections**: Support for different knowledge bases (e.g., "richard-projects", "acme")
-- **Azure OpenAI Embeddings**: Uses text-embedding-3-large for high-quality embeddings
+- **OpenRouter Embeddings**: Uses `qwen/qwen3-embedding-8b` for high-quality embeddings
 - **Production Scalability**: YugabyteDB's distributed architecture handles large document collections
 
 The database connection and embedding configuration is handled automatically through the application settings.

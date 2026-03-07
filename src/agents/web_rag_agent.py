@@ -6,7 +6,6 @@ from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_postgres import PGVector
-from langchain_openai.embeddings import AzureOpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import StreamWriter

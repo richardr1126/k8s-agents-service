@@ -1,13 +1,13 @@
 import math
 import re
 from datetime import datetime
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any
 import logging
 
 import numexpr
 from langchain_core.tools import BaseTool, tool
 from langchain_postgres import PGVector
-from langchain_openai.embeddings import AzureOpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from core import settings
@@ -160,11 +160,12 @@ def build_keyword_filter(query: str, collection_type: str) -> Dict[str, Any]:
 
 def get_embeddings():
     """Get the embeddings model."""
-    return AzureOpenAIEmbeddings(
-        api_key=settings.AZURE_OPENAI_API_KEY.get_secret_value(),
-        azure_endpoint=settings.AZURE_OPENAI_ENDPOINT,
-        azure_deployment="text-embedding-3-large",
-        api_version="2025-02-01-preview",
+    if not settings.OPENROUTER_API_KEY:
+        raise ValueError("OPENROUTER_API_KEY must be set for embeddings")
+    return OpenAIEmbeddings(
+        model=settings.OPENROUTER_EMBEDDING_MODEL,
+        openai_api_base=settings.OPENROUTER_BASE_URL,
+        openai_api_key=settings.OPENROUTER_API_KEY,
     )
 
 
