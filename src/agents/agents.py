@@ -15,6 +15,7 @@ from agents.rag_assistant import rag_assistant
 from agents.mcp_agent import mcp_agent
 from agents.research_assistant import research_assistant
 from agents.web_rag_agent import web_rag_agent
+from agents.workflow_agent import workflow_agent
 from schema import AgentInfo
 
 DEFAULT_AGENT = "auto-router"
@@ -53,9 +54,13 @@ agents: dict[str, Agent] = {
     ),
     "postgres-mcp-agent": Agent(
         description="""Hello! I'm a database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content.
-        I can analyze the PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance. 
+        I can analyze the PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance.
         Ask me about user activity patterns, popular posts, engagement metrics, or any data-driven questions about the Cosmere feed!""",
         graph=mcp_agent
+    ),
+    "workflow-agent": Agent(
+        description="""Hello! I'm a workflow-driven assistant. I expose a small tool surface (list_capabilities, read_capability, run_workflow_cli) that fronts a library of pregenerated CLI-style workflows. Ask me what I can do, or give me a task and I'll discover the right workflow and run it.""",
+        graph=workflow_agent
     ),
     # "command-agent": Agent(description="A command agent.", graph=command_agent),
     # "bg-task-agent": Agent(description="A background task agent.", graph=bg_task_agent),

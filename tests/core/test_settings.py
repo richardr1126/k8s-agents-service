@@ -176,7 +176,8 @@ def test_settings_azure_invalid_deployment_map():
         {
             "AZURE_OPENAI_API_KEY": "test_key",
             "AZURE_OPENAI_ENDPOINT": "https://test.openai.azure.com",
-            "AZURE_OPENAI_DEPLOYMENT_MAP": '{"gpt-4o": "deploy1"}',  # Missing required model
+            # Map exists but does not contain the required `gpt-4o` deployment.
+            "AZURE_OPENAI_DEPLOYMENT_MAP": '{"some-other-model": "deploy1"}',
         },
         clear=True,
     ):

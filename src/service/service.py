@@ -52,6 +52,8 @@ def verify_bearer(
     if not settings.AUTH_SECRET:
         return
     auth_secret = settings.AUTH_SECRET.get_secret_value()
+    if not auth_secret:
+        return
     if not http_auth or http_auth.credentials != auth_secret:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
