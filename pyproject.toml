@@ -47,7 +47,7 @@ dependencies = [
     "pandas ~=2.3.2",
     "psycopg[binary,pool] ~=3.3.3",
     "pyarrow ~=21.0.0",
-    "pydantic ~=2.12.2",
+    "pydantic ~=2.13.3",
     "pydantic-settings ~=2.11.0",
     "pypdf ~=6.10.2",
     "pyowm ~=3.5.0",
@@ -81,7 +81,7 @@ dev = [
 # To install run: `uv sync --frozen --only-group client`
 client = [
     "httpx ~=0.28.1",
-    "pydantic ~=2.12.2",
+    "pydantic ~=2.13.3",
     "python-dotenv ~=1.2.2",
     "streamlit ~=1.50.0",
 ]
