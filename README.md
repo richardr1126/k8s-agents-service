@@ -170,7 +170,6 @@ The repository is structured as follows:
 ### Additional setup for specific AI providers
 
 - [Setting up Ollama](docs/Ollama.md)
-- [Setting up VertexAI](docs/VertexAI.md)
 - [Setting up RAG with PGVector](docs/RAG_Assistant.md)
 - [Thread Deletion API](docs/Thread_Deletion.md)
 

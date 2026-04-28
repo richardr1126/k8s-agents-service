@@ -3,7 +3,7 @@
 As you develop your agents, you might discover that you have credentials that you need to store on disk that you don't want stored in your Git Repo or baked into your container image.
 
 Examples:
-- File based LLM Credentials Files (e.g. Google Vertex)
+- File based service account credentials
 - Certificates or private keys needed for communication with external APIs
 
 
@@ -40,13 +40,13 @@ For each file based credential, do the following:
 
 ### Examples
 
-#### Google Vertex
-Google Vertex SDK uses the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to locate your credentials file.
+#### Google Cloud Service Account
+Some Google SDKs can use a JSON service-account key file.
 
 Do the following:
-1. Put `service-account-key.json` (or `google-credentials.json`)  into the `privatecredentials/` folder
-2. In your `.env` file, define `GOOGLE_APPLICATION_CREDENTIALS=/privatecredentials/service-account-key.json`
-3. Vertex SDK automatically references the `GOOGLE_APPLICATION_CREDENTIALS` environment variable.
+1. Put `service-account-key.json` (or `google-credentials.json`) into the `privatecredentials/` folder
+2. In your `.env` file, define an env var your code reads (for example `GCP_SERVICE_ACCOUNT_FILE=/privatecredentials/service-account-key.json`)
+3. In your agent code, pass that file path to the SDK/client that needs it.
 
 
 
@@ -72,5 +72,4 @@ There are a number of approaches:
 - Use the secrets management feature of your cloud hosting environment (Google Cloud Secrets, AWS Secrets Manager, etc)
 - Use a 3rd party secrets management platform
 - Manually place the credentials on your Docker hosts and mount volumes to map the credentials to the container (Less secure)
-
 
