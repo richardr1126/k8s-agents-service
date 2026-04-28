@@ -1,3 +1,6 @@
+from typing import Any, cast
+
+from langgraph.pregel import Pregel
 from langgraph_supervisor import create_supervisor
 
 from agents.configurable_model_graph import ConfigurableModelGraph
@@ -31,12 +34,15 @@ SUPERVISOR_PROMPT = (
 
 def _build_supervisor_graph(model_name: AllModelEnum):
     sub_agents = [rag_assistant, web_rag_agent, mcp_agent.get_graph()]
-    resolved_sub_agents = [
+    resolved_sub_agents = cast(
+        list[Pregel[Any, None, Any, Any]],
+        [
         agent.graph_for_model(model_name)
         if isinstance(agent, ConfigurableModelGraph)
         else agent
         for agent in sub_agents
-    ]
+        ],
+    )
     workflow = create_supervisor(
         resolved_sub_agents,
         model=get_model(model_name),

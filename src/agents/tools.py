@@ -81,7 +81,7 @@ def build_keyword_filter(query: str, collection_type: str) -> dict[str, Any]:
     Uses simple keyword matching as recommended for enterprise RAG systems.
     More reliable than LLM-based metadata extraction.
     """
-    filter_dict = {}
+    filter_dict: dict[str, Any] = {}
     query_lower = query.lower()
     
     if collection_type == "projects":
@@ -187,7 +187,12 @@ def create_pgvector_instance(collection_name: str, async_mode: bool = False):
         async_mode=async_mode,
     )
 
-async def web_vector_search(query: str, collection_name: str, k: int = 5, score_threshold: float = None) -> str:
+async def web_vector_search(
+    query: str,
+    collection_name: str,
+    k: int = 5,
+    score_threshold: float | None = None,
+) -> str:
     """Search a temporary web collection for relevant documents.
     
     Args:
@@ -268,7 +273,7 @@ async def projects_search(query: str) -> str:
     filter_dict = build_keyword_filter(query, collection_type="projects")
     
     # Create search kwargs with filter
-    search_kwargs = {"k": 5}
+    search_kwargs: dict[str, Any] = {"k": 5}
     if filter_dict:
         search_kwargs["filter"] = filter_dict
     
@@ -301,7 +306,7 @@ async def resume_search(query: str) -> str:
     filter_dict = build_keyword_filter(query, collection_type="resume")
     
     # Create search kwargs with filter
-    search_kwargs = {"k": 5}
+    search_kwargs: dict[str, Any] = {"k": 5}
     if filter_dict:
         search_kwargs["filter"] = filter_dict
     

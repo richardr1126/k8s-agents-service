@@ -109,9 +109,12 @@ class PostgresMCPAgent(LazyLoadingAgent):
         """Initialize MCP tools and create configurable graph wrapper."""
         try:
             connections = {
-                "postgres-mcp": StreamableHttpConnection(
-                    transport="sse",
-                    url=settings.POSTGRES_MCP_URL,
+                "postgres-mcp": cast(
+                    StreamableHttpConnection,
+                    {
+                        "transport": "sse",
+                        "url": settings.POSTGRES_MCP_URL,
+                    },
                 )
             }
             self._mcp_client = MultiServerMCPClient(cast(dict[str, Any], connections))
