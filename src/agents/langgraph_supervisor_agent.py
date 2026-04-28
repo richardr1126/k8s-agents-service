@@ -1,10 +1,10 @@
 from langgraph_supervisor import create_supervisor
 
 from agents.configurable_model_graph import ConfigurableModelGraph
-from core import get_model
-from agents.rag_assistant import rag_assistant
 from agents.mcp_agent import mcp_agent
+from agents.rag_assistant import rag_assistant
 from agents.web_rag_agent import web_rag_agent
+from core import get_model
 from schema.models import AllModelEnum
 
 SUPERVISOR_PROMPT = (

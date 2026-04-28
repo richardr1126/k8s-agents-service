@@ -8,7 +8,13 @@ from langgraph.graph import MessagesState
 
 load_dotenv()
 
-from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info, load_agent  # noqa: E402
+from agents import (  # noqa: E402
+    DEFAULT_AGENT,
+    AgentGraph,
+    get_agent,
+    get_all_agent_info,
+    load_agent,
+)
 
 
 async def main() -> None:

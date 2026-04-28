@@ -1,23 +1,19 @@
+import logging
 from datetime import datetime
-from typing import Literal, List
+from typing import Literal
 
 from langchain_community.tools import TavilySearchResults
 from langchain_core.documents import Document
-from langchain_core.messages import AIMessage, SystemMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
-from langchain_postgres import PGVector
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import StreamWriter
 from pydantic import BaseModel, Field
-import logging
 
-from core import get_model, settings
-from agents.tools import (
-    web_vector_search,
-    create_pgvector_instance
-)
 from agents.bg_task_agent.task import Task
+from agents.tools import create_pgvector_instance, web_vector_search
+from core import get_model, settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -63,7 +59,7 @@ async def perform_web_search(query: str, max_results: int = 5):
         raise RuntimeError(f"Web search failed: {str(e)}")
 
 
-async def store_search_results_in_vector_db(search_results: List[str], collection_name: str) -> int:
+async def store_search_results_in_vector_db(search_results: list[str], collection_name: str) -> int:
     """Store search results in a vector database collection.
     
     Args:
@@ -265,7 +261,7 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
             "optimized_query": optimized_query,
         }
         
-    except Exception as e:
+    except Exception:
         # Fallback to user query if optimization fails
         optimized_query = user_query
         
@@ -561,7 +557,7 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
             #"messages": [AIMessage(content=decision.reasoning)],
         }
         
-    except RuntimeError as e:
+    except RuntimeError:
         # If vector search fails (e.g., collection doesn't exist), we definitely need to search
         return {
             "is_search_relevant": False,
