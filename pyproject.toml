@@ -56,7 +56,7 @@ dependencies = [
     "streamlit ~=1.50.0",
     "tavily-python ~=0.7.24",
     "tiktoken ~=0.12.0",
-    "uvicorn ~=0.37.0",
+    "uvicorn ~=0.46.0",
     "langchain-mcp-adapters ~=0.1.10",
     "ddgs>=9.6.0",
 ]
