@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import pytest
 from langchain_core.messages import AIMessage, ToolCall, ToolMessage
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, MessagesState, StateGraph
@@ -79,8 +80,14 @@ agent.add_edge("static_messages", END)
 static_agent = agent.compile(checkpointer=MemorySaver())
 
 
+@pytest.mark.docker
 def test_agent_stream(mock_httpx):
-    """Test that streaming from our static agent works correctly with token streaming."""
+    """Test that streaming from our static agent works correctly with token streaming.
+
+    Marked `docker` because instantiating the FastAPI TestClient runs the service
+    lifespan, which connects to the configured database backend (Postgres by default
+    via .env). Skipped unless `--run-docker` is passed.
+    """
     agent_meta = Agent(description="A static agent.", graph=static_agent)
     with patch.dict("agents.agents.agents", {"static-agent": agent_meta}, clear=True):
         client = AgentClient(agent="static-agent")

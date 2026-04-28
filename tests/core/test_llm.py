@@ -22,7 +22,7 @@ def test_get_model_openai():
     with patch.dict(os.environ, {"OPENAI_API_KEY": "test_key"}):
         model = get_model(OpenAIModelName.GPT_4O_MINI)
         assert isinstance(model, ChatOpenAI)
-        assert model.model_name == "gpt-4o-mini"
+        assert model.model_name == OpenAIModelName.GPT_4O_MINI.value
         assert model.temperature == 0.5
         assert model.streaming is True
 

@@ -7,6 +7,18 @@ from langchain_core.messages import AIMessage
 from service import app
 
 
+@pytest.fixture(autouse=True)
+def _disable_auth_secret():
+    """Clear AUTH_SECRET so service endpoints don't require a Bearer token in tests.
+
+    The .env file ships a real AUTH_SECRET for local development; pytest-env can't unset
+    it (pydantic-settings treats `""` as missing). Patching the imported settings here
+    keeps the production check intact while letting unauthenticated test requests through.
+    """
+    with patch("service.service.settings.AUTH_SECRET", None):
+        yield
+
+
 @pytest.fixture
 def test_client():
     """Fixture to create a FastAPI test client."""
