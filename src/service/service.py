@@ -4,13 +4,14 @@ import logging
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core._api import LangChainBetaWarning
+from langchain_core.callbacks.base import BaseCallbackHandler
 from langchain_core.messages import AIMessage, AIMessageChunk, AnyMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langfuse import Langfuse
@@ -123,10 +124,10 @@ async def _handle_input(user_input: UserInput, agent: AgentGraph) -> tuple[dict[
 
     configurable = {"thread_id": thread_id, "model": user_input.model, "user_id": user_id}
 
-    callbacks = []
+    callbacks: list[BaseCallbackHandler] = []
     if settings.LANGFUSE_TRACING:
         # Initialize Langfuse CallbackHandler for Langchain (tracing)
-        langfuse_handler = CallbackHandler()
+        langfuse_handler = cast(BaseCallbackHandler, CallbackHandler())
 
         callbacks.append(langfuse_handler)
 
@@ -450,14 +451,15 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
         # Get the default agent to access checkpointer and store
         agent: AgentGraph = get_agent(DEFAULT_AGENT)
         
-        if not agent.checkpointer:
+        checkpointer = agent.checkpointer
+        if not checkpointer or checkpointer is True:
             raise HTTPException(status_code=500, detail="Checkpointer not available")
         
         # Delete from checkpointer (conversation memory) using built-in method
         try:
             # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver, AsyncMongoDBSaver) 
             # support the adelete_thread method for proper thread deletion
-            await agent.checkpointer.adelete_thread(input.thread_id)
+            await checkpointer.adelete_thread(input.thread_id)
             logger.info(f"Successfully deleted thread {input.thread_id} from checkpointer")
         except Exception as e:
             logger.error(f"Error deleting thread {input.thread_id} from checkpointer: {e}")
@@ -466,9 +468,9 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
         
         # Delete from store (long-term memory)
         try:
-            if agent.store and hasattr(agent.store, 'adelete'):
+            if agent.store and hasattr(agent.store, "adelete"):
                 # Delete any store data associated with this thread
-                await agent.store.adelete(namespace=["threads", input.thread_id])
+                await agent.store.adelete(namespace=("threads",), key=input.thread_id)
                 logger.info(f"Successfully deleted thread {input.thread_id} from store")
             elif agent.store:
                 logger.info(f"Store does not support deletion for thread {input.thread_id}")

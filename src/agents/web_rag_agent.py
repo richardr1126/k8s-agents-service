@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from langchain_community.tools import TavilySearchResults
 from langchain_core.documents import Document
@@ -147,10 +147,17 @@ class WebRagState(MessagesState, total=False):
     documentation: https://typing.readthedocs.io/en/latest/spec/typeddict.html#totality
     """
     
-    is_search_relevant: bool = False  # Track if we have relevant context (from search or existing data)
-    optimized_query: str = ""  # Store the optimized search query
-    is_first_run: bool = True  # Track if this is the first execution
-    has_search_data: bool = False  # Track if we actually have search data in vector store
+    is_search_relevant: bool  # Track if we have relevant context (from search or existing data)
+    optimized_query: str  # Store the optimized search query
+    is_first_run: bool  # Track if this is the first execution
+    has_search_data: bool  # Track if we actually have search data in vector store
+
+
+WebRagUpdate = dict[str, object]
+
+
+def _message_to_text(content: Any, default: str = "latest information") -> str:
+    return content if isinstance(content, str) else default
 
 
 def get_collection_name_from_thread(config: RunnableConfig) -> str:
@@ -189,12 +196,12 @@ def get_collection_name_from_thread(config: RunnableConfig) -> str:
     return f"web_search_{thread_id}"
 
 
-async def generate_search_query_node(state: WebRagState, config: RunnableConfig) -> WebRagState:
+async def generate_search_query_node(state: WebRagState, config: RunnableConfig) -> WebRagUpdate:
     """Generate an optimized search query for the user's question."""
     # Get the user's latest message
     last_message = state["messages"][-1]
     if isinstance(last_message, HumanMessage):
-        user_query = last_message.content
+        user_query = _message_to_text(last_message.content)
     else:
         user_query = "latest information"
     
@@ -206,9 +213,9 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
         history_parts = []
         for msg in recent_messages:
             if isinstance(msg, HumanMessage):
-                history_parts.append(f"User: {msg.content}")
+                history_parts.append(f"User: {_message_to_text(msg.content)}")
             elif isinstance(msg, AIMessage):
-                history_parts.append(f"Assistant: {msg.content}")
+                history_parts.append(f"Assistant: {_message_to_text(msg.content)}")
         conversation_history = "\n".join(history_parts)
     
     # Generate optimized search query using AI model
@@ -217,8 +224,8 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
         
         # Use structured output for search query generation
         structured_model = model.with_structured_output(
-            SearchQuery, 
-            **({"method": "function_calling"})
+            SearchQuery,
+            method="function_calling",
         )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -251,9 +258,12 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
             tags=["skip_stream"]
         )
         
-        search_result = await structured_model.ainvoke(
+        search_result = cast(
+            SearchQuery,
+            await structured_model.ainvoke(
             [SystemMessage(content=search_query_prompt)], 
             internal_config
+            ),
         )
         optimized_query = search_result.optimized_query
         
@@ -271,10 +281,12 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
         }
 
 
-async def web_search_and_store_node(state: WebRagState, config: RunnableConfig, *, writer: StreamWriter) -> WebRagState:
+async def web_search_and_store_node(
+    state: WebRagState, config: RunnableConfig, *, writer: StreamWriter
+) -> WebRagUpdate:
     """Search the web and store results in vector database."""
     # Use the optimized query from state
-    optimized_query = state.get("optimized_query", "latest information")
+    optimized_query = cast(str, state.get("optimized_query", "latest information"))
     
     # Create collection name based on thread_id for persistence across conversation
     collection_name = get_collection_name_from_thread(config)
@@ -319,7 +331,7 @@ async def web_search_and_store_node(state: WebRagState, config: RunnableConfig, 
     }
 
 
-async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRagState:
+async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRagUpdate:
     """Generate a response using RAG on the stored search results or general knowledge."""
     # Check if we have actual search data available in vector store
     has_search_data = state.get("has_search_data", False)
@@ -332,7 +344,7 @@ async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRa
         last_human_message = None
         for message in reversed(state["messages"]):
             if isinstance(message, HumanMessage):
-                last_human_message = message.content
+                last_human_message = _message_to_text(message.content)
                 break
         
         user_query = last_human_message or "latest information"
@@ -391,16 +403,18 @@ async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRa
     return {"messages": [response]}
 
 
-async def check_first_run_search_need_node(state: WebRagState, config: RunnableConfig) -> WebRagState:
+async def check_first_run_search_need_node(
+    state: WebRagState, config: RunnableConfig
+) -> WebRagUpdate:
     """On first run, analyze if the user's prompt actually needs web search. On subsequent runs, route to search query generation."""
     # If not first run, just pass through - this will route to generate_search_query
     if not state.get("is_first_run", True):
-        return state
+        return {}
     
     # Get the user's latest message
     last_message = state["messages"][-1]
     if isinstance(last_message, HumanMessage):
-        user_query = last_message.content
+        user_query = _message_to_text(last_message.content)
     else:
         user_query = "latest information"
     
@@ -409,8 +423,8 @@ async def check_first_run_search_need_node(state: WebRagState, config: RunnableC
         
         # Use structured output for first run search decision
         structured_model = model.with_structured_output(
-            FirstRunSearchDecision, 
-            **({"method": "function_calling"})
+            FirstRunSearchDecision,
+            method="function_calling",
         )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -457,9 +471,12 @@ async def check_first_run_search_need_node(state: WebRagState, config: RunnableC
             tags=["skip_stream"]
         )
         
-        decision = await structured_model.ainvoke(
+        decision = cast(
+            FirstRunSearchDecision,
+            await structured_model.ainvoke(
             [SystemMessage(content=first_run_prompt)], 
             internal_config
+            ),
         )
 
         return {
@@ -476,16 +493,16 @@ async def check_first_run_search_need_node(state: WebRagState, config: RunnableC
         }
 
 
-async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> WebRagState:
+async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> WebRagUpdate:
     """Use AI model to intelligently decide if existing context is sufficient or if new search is needed."""
-    optimized_query = state.get("optimized_query", "")
+    optimized_query = cast(str, state.get("optimized_query", ""))
     collection_name = get_collection_name_from_thread(config)
     
     # Get user's current question for context
     last_human_message = None
     for message in reversed(state["messages"]):
         if isinstance(message, HumanMessage):
-            last_human_message = message.content
+            last_human_message = _message_to_text(message.content)
             break
     
     user_query = last_human_message or "latest information"
@@ -500,8 +517,8 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
 
         # Use structured output for relevance decision
         structured_model = model.with_structured_output(
-            RelevanceDecision, 
-            **({"method": "function_calling"})
+            RelevanceDecision,
+            method="function_calling",
         )
 
         current_date = datetime.now().strftime("%Y-%m-%d")
@@ -546,9 +563,12 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
             tags=["skip_stream"]
         )
         
-        decision = await structured_model.ainvoke(
+        decision = cast(
+            RelevanceDecision,
+            await structured_model.ainvoke(
             [SystemMessage(content=relevance_prompt)], 
             internal_config
+            ),
         )
 
         return {
@@ -565,7 +585,7 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
         }
     except Exception as e:
         # Fallback: if AI decision fails, use simple heuristic
-        context_exists = existing_context and len(existing_context.strip()) > 100
+        context_exists = bool(existing_context and len(existing_context.strip()) > 100)
         return {
             "is_search_relevant": context_exists,
             "has_search_data": context_exists,
