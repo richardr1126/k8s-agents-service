@@ -9,7 +9,6 @@ class Provider(StrEnum):
     DEEPSEEK = auto()
     ANTHROPIC = auto()
     GOOGLE = auto()
-    VERTEXAI = auto()
     GROQ = auto()
     AWS = auto()
     OLLAMA = auto()
@@ -53,16 +52,6 @@ class GoogleModelName(StrEnum):
     GEMINI_20_FLASH = "gemini-2.0-flash"
     GEMINI_20_FLASH_LITE = "gemini-2.0-flash-lite"
     GEMINI_25_FLASH = "gemini-2.5-flash"
-    GEMINI_25_PRO = "gemini-2.5-pro"
-
-
-class VertexAIModelName(StrEnum):
-    """https://cloud.google.com/vertex-ai/generative-ai/docs/models"""
-
-    GEMINI_15_PRO = "gemini-1.5-pro"
-    GEMINI_20_FLASH = "gemini-2.0-flash"
-    GEMINI_20_FLASH_LITE = "models/gemini-2.0-flash-lite"
-    GEMINI_25_FLASH = "models/gemini-2.5-flash"
     GEMINI_25_PRO = "gemini-2.5-pro"
 
 
@@ -120,7 +109,6 @@ AllModelEnum: TypeAlias = (
     | DeepseekModelName
     | AnthropicModelName
     | GoogleModelName
-    | VertexAIModelName
     | GroqModelName
     | AWSModelName
     | OllamaModelName

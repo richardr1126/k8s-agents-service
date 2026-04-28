@@ -5,7 +5,6 @@ from langchain_anthropic import ChatAnthropic
 from langchain_aws import ChatBedrock
 from langchain_community.chat_models import FakeListChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_google_vertexai import ChatVertexAI
 from langchain_groq import ChatGroq
 from langchain_ollama import ChatOllama
 from langchain_openai import AzureChatOpenAI, ChatOpenAI
@@ -24,7 +23,6 @@ from schema.models import (
     OpenAICompatibleName,
     OpenAIModelName,
     OpenRouterModelName,
-    VertexAIModelName,
 )
 
 _MODEL_TABLE = (
@@ -34,7 +32,6 @@ _MODEL_TABLE = (
     | {m: m.value for m in DeepseekModelName}
     | {m: m.value for m in AnthropicModelName}
     | {m: m.value for m in GoogleModelName}
-    | {m: m.value for m in VertexAIModelName}
     | {m: m.value for m in GroqModelName}
     | {m: m.value for m in AWSModelName}
     | {m: m.value for m in OllamaModelName}
@@ -56,7 +53,6 @@ ModelT: TypeAlias = (
     | ChatOpenAI
     | ChatAnthropic
     | ChatGoogleGenerativeAI
-    | ChatVertexAI
     | ChatGroq
     | ChatBedrock
     | ChatOllama
@@ -110,8 +106,6 @@ def get_model(model_name: AllModelEnum, /) -> ModelT:
         return ChatAnthropic(model=api_model_name, temperature=0.5, streaming=True)
     if model_name in GoogleModelName:
         return ChatGoogleGenerativeAI(model=api_model_name, temperature=0.5, streaming=True)
-    if model_name in VertexAIModelName:
-        return ChatVertexAI(model=api_model_name, temperature=0.5, streaming=True)
     if model_name in GroqModelName:
         if model_name == GroqModelName.LLAMA_GUARD_4_12B:
             return ChatGroq(model=api_model_name, temperature=0.0)
