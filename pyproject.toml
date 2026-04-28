@@ -43,7 +43,7 @@ dependencies = [
     "numexpr ~=2.14.1",
     "numpy ~=1.26.4; python_version <= '3.12'",
     "numpy ~=2.3.3; python_version >= '3.13'",
-    "onnxruntime ~=1.23.0",
+    "onnxruntime ~=1.25.1",
     "pandas ~=2.3.2",
     "psycopg[binary,pool] ~=3.3.3",
     "pyarrow ~=21.0.0",
@@ -58,7 +58,7 @@ dependencies = [
     "tiktoken ~=0.12.0",
     "uvicorn ~=0.46.0",
     "langchain-mcp-adapters ~=0.1.10",
-    "ddgs>=9.6.0",
+    "ddgs ~=9.14.1",
 ]
 
 [dependency-groups]
