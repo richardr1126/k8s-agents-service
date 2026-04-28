@@ -3,17 +3,12 @@ from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.pregel import Pregel
 
-from agents.bg_task_agent.bg_task_agent import bg_task_agent
 from agents.chatbot import chatbot
-from agents.command_agent import command_agent
 from agents.configurable_model_graph import ConfigurableModelGraph
-from agents.interrupt_agent import interrupt_agent
-from agents.knowledge_base_agent import kb_agent
 from agents.langgraph_supervisor_agent import langgraph_supervisor_agent
 from agents.lazy_agent import LazyLoadingAgent
-from agents.rag_assistant import rag_assistant
 from agents.mcp_agent import mcp_agent
-from agents.research_assistant import research_assistant
+from agents.rag_assistant import rag_assistant
 from agents.web_rag_agent import web_rag_agent
 from agents.workflow_agent import workflow_agent
 from schema import AgentInfo

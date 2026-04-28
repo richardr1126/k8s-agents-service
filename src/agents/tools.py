@@ -1,14 +1,13 @@
+import logging
 import math
 import re
-from datetime import datetime
-from typing import Dict, Any
-import logging
+from typing import Any
 
 import numexpr
 from langchain_core.tools import BaseTool, tool
-from langchain_postgres import PGVector
-from langchain_openai import OpenAIEmbeddings
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
 
 from core import settings
 
@@ -76,7 +75,7 @@ def format_contexts(docs):
     return "\n\n".join(doc.page_content for doc in docs)
 
 
-def build_keyword_filter(query: str, collection_type: str) -> Dict[str, Any]:
+def build_keyword_filter(query: str, collection_type: str) -> dict[str, Any]:
     """Build metadata filter dictionary based on keywords found in the query.
     
     Uses simple keyword matching as recommended for enterprise RAG systems.
