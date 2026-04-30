@@ -11,8 +11,8 @@ import {
   useMessage,
   useComposer,
 } from "@assistant-ui/react";
-import type { FC } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { FC, PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownIcon,
   CalculatorIcon,
@@ -37,9 +37,17 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { MarkdownText } from "./markdown-text";
 import { ToolFallback } from "./tool-fallback";
 import { ReasoningPart } from "./reasoning";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { TaskToolUI } from "@/components/task-ui";
 import {
   convertMessage,
@@ -190,16 +198,25 @@ const NOOP_ON_NEW = async () => {
   throw new Error("Sub-agent side panel is read-only");
 };
 
+const DEFAULT_SUBAGENT_PANEL_WIDTH = 42 * 16;
+const MIN_SUBAGENT_PANEL_WIDTH = 24 * 16;
+const MIN_MAIN_THREAD_WIDTH = 22 * 16;
+
 const SubAgentSidePanel: FC = () => {
   const {
     currentThreadId,
     threads,
     runningThreads,
     isSubAgentPanelOpen,
+    setSubAgentPanelOpen,
     selectedSubAgentBranchId,
     setSelectedSubAgentBranchId,
     closeSubAgentPanel,
   } = useThreadContext();
+  const isMobile = useIsMobile();
+  const [desktopPanelWidth, setDesktopPanelWidth] = useState(DEFAULT_SUBAGENT_PANEL_WIDTH);
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
 
   const allMessages = useMemo(
     () => (currentThreadId ? (threads.get(currentThreadId) ?? []) : []),
@@ -220,7 +237,8 @@ const SubAgentSidePanel: FC = () => {
   }, [allMessages]);
 
   const activeBranchId = useMemo(() => {
-    if (selectedSubAgentBranchId && branchIds.includes(selectedSubAgentBranchId)) {
+    // Preserve explicit selection even before first branch message arrives.
+    if (selectedSubAgentBranchId) {
       return selectedSubAgentBranchId;
     }
     return branchIds[0] ?? null;
@@ -242,7 +260,8 @@ const SubAgentSidePanel: FC = () => {
   }, [activeBranchId]);
 
   useEffect(() => {
-    if (!activeBranchId || selectedSubAgentBranchId === activeBranchId) return;
+    // Only auto-select when nothing is selected yet.
+    if (selectedSubAgentBranchId || !activeBranchId) return;
     setSelectedSubAgentBranchId(activeBranchId);
   }, [activeBranchId, selectedSubAgentBranchId, setSelectedSubAgentBranchId]);
 
@@ -262,12 +281,74 @@ const SubAgentSidePanel: FC = () => {
   );
   const branchRuntime = useExternalStoreRuntime(branchRuntimeAdapter);
 
-  if (!isSubAgentPanelOpen) {
-    return null;
-  }
+  const clampDesktopWidth = useCallback((width: number) => {
+    if (typeof window === "undefined") {
+      return Math.max(MIN_SUBAGENT_PANEL_WIDTH, width);
+    }
+    const maxWidth = Math.max(
+      MIN_SUBAGENT_PANEL_WIDTH,
+      window.innerWidth - MIN_MAIN_THREAD_WIDTH,
+    );
+    return Math.min(Math.max(width, MIN_SUBAGENT_PANEL_WIDTH), maxWidth);
+  }, []);
 
-  return (
-    <aside className="bg-background border-l border-border/70 flex h-full w-[42rem] min-w-[30rem] flex-col overflow-hidden">
+  useEffect(() => {
+    if (isSubAgentPanelOpen) return;
+    setDesktopPanelWidth(DEFAULT_SUBAGENT_PANEL_WIDTH);
+    setIsResizing(false);
+    resizeStartRef.current = null;
+  }, [isSubAgentPanelOpen]);
+
+  useEffect(() => {
+    if (!isSubAgentPanelOpen || isMobile) return;
+    const onWindowResize = () => {
+      setDesktopPanelWidth((width) => clampDesktopWidth(width));
+    };
+    window.addEventListener("resize", onWindowResize);
+    onWindowResize();
+    return () => window.removeEventListener("resize", onWindowResize);
+  }, [clampDesktopWidth, isMobile, isSubAgentPanelOpen]);
+
+  useEffect(() => {
+    if (!isResizing) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const resizeStart = resizeStartRef.current;
+      if (!resizeStart) return;
+      const dragDelta = resizeStart.x - event.clientX;
+      const nextWidth = resizeStart.width + dragDelta;
+      setDesktopPanelWidth(clampDesktopWidth(nextWidth));
+    };
+    const stopResizing = () => {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+    };
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", stopResizing);
+    window.addEventListener("pointercancel", stopResizing);
+    document.body.style.userSelect = "none";
+    document.body.style.cursor = "col-resize";
+
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", stopResizing);
+      window.removeEventListener("pointercancel", stopResizing);
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+  }, [clampDesktopWidth, isResizing]);
+
+  const onResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    resizeStartRef.current = {
+      x: event.clientX,
+      width: clampDesktopWidth(desktopPanelWidth),
+    };
+    setIsResizing(true);
+  };
+
+  const panelContent = (
+    <>
       <div className="border-b border-border/60 px-4 py-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="text-sm font-semibold">{activeBranchLabel}</div>
@@ -285,7 +366,7 @@ const SubAgentSidePanel: FC = () => {
       <AssistantRuntimeProvider runtime={branchRuntime}>
         <TaskToolUI />
         <ThreadPrimitive.Root
-          className="flex min-h-0 flex-1 min-w-0 flex-col"
+          className="flex min-h-0 min-w-0 flex-1 flex-col"
           style={{
             ["--thread-max-width" as string]: "100%",
             ["--thread-padding-x" as string]: "0.8rem",
@@ -310,6 +391,50 @@ const SubAgentSidePanel: FC = () => {
           </ThreadPrimitive.Viewport>
         </ThreadPrimitive.Root>
       </AssistantRuntimeProvider>
+    </>
+  );
+
+  if (isMobile) {
+    return (
+      <Sheet open={isSubAgentPanelOpen} onOpenChange={setSubAgentPanelOpen}>
+        <SheetContent
+          side="right"
+          className="bg-background border-l border-border/70 flex h-full w-[85vw] max-w-[42rem] min-w-0 flex-col gap-0 p-0 [&>button]:hidden"
+        >
+          <SheetHeader className="sr-only">
+            <SheetTitle>Sub-agent panel</SheetTitle>
+            <SheetDescription>
+              Displays the active sub-agent stream and branch events.
+            </SheetDescription>
+          </SheetHeader>
+          {panelContent}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  if (!isSubAgentPanelOpen) {
+    return null;
+  }
+
+  return (
+    <aside
+      className="bg-background border-l border-border/70 relative flex h-full min-w-0 shrink-0 flex-col overflow-hidden"
+      style={{ width: `${desktopPanelWidth}px` }}
+    >
+      <div
+        className="absolute top-0 left-0 z-20 h-full w-2 -translate-x-1/2 cursor-col-resize touch-none"
+        onPointerDown={onResizePointerDown}
+        aria-hidden="true"
+      />
+      <div
+        className={cn(
+          "bg-border/60 absolute inset-y-0 left-0 w-px",
+          isResizing && "bg-primary/80",
+        )}
+        aria-hidden="true"
+      />
+      {panelContent}
     </aside>
   );
 };

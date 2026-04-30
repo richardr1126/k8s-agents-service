@@ -23,6 +23,7 @@ import { generateThreadTitle } from "@/lib/thread-utils";
 import { useUser } from "@/components/auth-user-provider";
 import { useServiceInfo } from "@/components/service-info-provider";
 import { useRateLimit } from "@/components/rate-limit-provider";
+import { useIsMobile } from "@/hooks/use-mobile";
 const DEBUG_TASK_BRANCH_MAP = process.env.NEXT_PUBLIC_DEBUG_TASK_BRANCH_MAP === "1";
 export { ROOT_BRANCH_ID } from "@/lib/types";
 
@@ -710,11 +711,11 @@ function ChatWithThreads({
 
   const { serviceInfo } = useServiceInfo();
   const { incrementCount, onMessageStart, onMessageComplete } = useRateLimit();
+  const isMobile = useIsMobile();
   const streamedToolResultsRef = useRef<Map<string, ReadonlyJSONValue>>(new Map());
-  // True once the first sub-agent of the current turn has auto-opened the side panel.
-  // Reset at the start of each onNew so each turn picks the first task tool call,
-  // and gated on task_branch_map (one-per-subagent) so parallel token streams can't toggle it.
-  const didAutoOpenSubAgentForTurnRef = useRef(false);
+  // Tracks task tool_call IDs already auto-opened for the current user turn.
+  // This prevents repeated branch-map events for the same tool call from flipping selection.
+  const autoOpenedTaskToolCallsRef = useRef<Set<string>>(new Set());
 
   const applyStreamedToolResults = useCallback((message: ChatMessage): ChatMessage => {
     if (!message.toolCalls?.length) return message;
@@ -797,7 +798,7 @@ function ChatWithThreads({
 
     const userMessageText = message.content[0].text;
     streamedToolResultsRef.current = new Map();
-    didAutoOpenSubAgentForTurnRef.current = false;
+    autoOpenedTaskToolCallsRef.current = new Set();
 
     // Add user message optimistically
     const userMessage: ChatMessage = {
@@ -862,9 +863,15 @@ function ChatWithThreads({
             next.set(currentThreadId, threadTaskMap);
             return next;
           });
-          if (!didAutoOpenSubAgentForTurnRef.current) {
-            didAutoOpenSubAgentForTurnRef.current = true;
-            openSubAgentBranch(mappedBranchId);
+          const hasAutoOpenedForToolCall = autoOpenedTaskToolCallsRef.current.has(mapping.toolCallId);
+          if (!hasAutoOpenedForToolCall) {
+            autoOpenedTaskToolCallsRef.current.add(mapping.toolCallId);
+            const isSmallViewport = typeof window !== "undefined"
+              ? window.innerWidth < 768
+              : isMobile;
+            if (!isSmallViewport) {
+              openSubAgentBranch(mappedBranchId);
+            }
           }
           continue;
         }
@@ -1071,7 +1078,7 @@ function ChatWithThreads({
       // Notify rate limit provider that the message is complete
       onMessageComplete();
     }
-  }, [currentThreadId, currentMessages, userId, selectedAgentId, selectedModelId, serviceInfo, setThreads, setRunningThreads, updateThreadActivity, updateThreadTitle, userData, incrementCount, onMessageStart, onMessageComplete, setAvailableBranchByThread, setTaskBranchMapByThread, applyStreamedToolResults, openSubAgentBranch]);
+  }, [currentThreadId, currentMessages, userId, selectedAgentId, selectedModelId, serviceInfo, setThreads, setRunningThreads, updateThreadActivity, updateThreadTitle, userData, incrementCount, onMessageStart, onMessageComplete, setAvailableBranchByThread, setTaskBranchMapByThread, applyStreamedToolResults, openSubAgentBranch, isMobile]);
 
   const threadListAdapter: ExternalStoreThreadListAdapter = {
     threadId: currentThreadId || '',
