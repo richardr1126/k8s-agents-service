@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 from fastapi.testclient import TestClient
 from langchain_core.messages import AIMessage
+from langgraph.types import StateSnapshot
 
 from service import app
 
@@ -31,6 +32,19 @@ def mock_agent():
     agent_mock = AsyncMock()
     agent_mock.ainvoke = AsyncMock(
         return_value=[("values", {"messages": [AIMessage(content="Test response")]})]
+    )
+    # Keep streaming and invoke paths deterministic and non-coroutine-like for test internals.
+    agent_mock.aget_state = AsyncMock(
+        return_value=StateSnapshot(
+            values={"messages": []},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        )
     )
     agent_mock.get_state = Mock()  # Default empty mock for get_state
     with patch("service.service.get_agent", Mock(return_value=agent_mock)):

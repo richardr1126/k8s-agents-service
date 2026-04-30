@@ -5,31 +5,48 @@ import {
   ActionBarPrimitive,
   BranchPickerPrimitive,
   ErrorPrimitive,
+  AssistantRuntimeProvider,
+  ExternalStoreAdapter,
+  useExternalStoreRuntime,
   useMessage,
   useComposer,
 } from "@assistant-ui/react";
 import type { FC } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowDownIcon,
+  CalculatorIcon,
+  ChevronDownIcon,
+  CloudIcon,
   CopyIcon,
   CheckIcon,
   PencilIcon,
+  SearchIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  XIcon,
   Square,
   SendHorizontalIcon,
+  WrenchIcon,
 } from "lucide-react";
 import { useServiceInfo } from "@/components/service-info-provider";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MarkdownText } from "./markdown-text";
 import { ToolFallback } from "./tool-fallback";
-import { useThreadContext } from "@/components/custom-runtime-provider";
+import { ReasoningPart } from "./reasoning";
+import { TaskToolUI } from "@/components/task-ui";
+import {
+  convertMessage,
+  ROOT_BRANCH_ID,
+  useThreadContext,
+} from "@/components/custom-runtime-provider";
+import { ChatMessage } from "@/lib/types";
 import { AgentSelect } from "@/components/agent-select";
 import { ModelSelect } from "@/components/model-select";
 import { useUser } from "@/components/auth-user-provider";
@@ -39,7 +56,7 @@ import agentSuggestions from "./agent-suggestions.json";
 
 export const Thread: FC = () => {
   const { isLoading: userLoading } = useUser();
-  const { currentThreadId, threads } = useThreadContext();
+  const { currentThreadId, threads, isSubAgentPanelOpen } = useThreadContext();
   
   // Show thread skeleton when:
   // 1. User is still loading (authentication)
@@ -63,34 +80,41 @@ export const Thread: FC = () => {
   }
 
   return (
-    <ThreadPrimitive.Root
-      // aui-thread-root
-      className="bg-background flex h-full flex-col pb-2 sm:pb-0"
-      style={{
-        ["--thread-max-width" as string]: "48rem",
-        ["--thread-padding-x" as string]: "0.7rem",
-      }}
-    >
-      {/* aui-thread-viewport */}
-      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
-        <ThreadWelcome />
+    <div className="bg-background flex h-full min-w-0">
+      <ThreadPrimitive.Root
+        // aui-thread-root
+        className={cn(
+          "bg-background flex h-full min-w-0 flex-col pb-2 sm:pb-0",
+          isSubAgentPanelOpen ? "flex-1" : "w-full",
+        )}
+        style={{
+          ["--thread-max-width" as string]: "48rem",
+          ["--thread-padding-x" as string]: "0.7rem",
+        }}
+      >
+        {/* aui-thread-viewport */}
+        <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
+          <ThreadWelcome />
 
-        <ThreadPrimitive.Messages
-          components={{
-            UserMessage,
-            EditComposer,
-            AssistantMessage,
-          }}
-        />
+          <ThreadPrimitive.Messages
+            components={{
+              UserMessage,
+              EditComposer,
+              AssistantMessage,
+            }}
+          />
 
-        <ThreadPrimitive.If empty={false}>
-          {/* aui-thread-viewport-spacer */}
-          <motion.div className="min-h-6 min-w-6 shrink-0" />
-        </ThreadPrimitive.If>
-      </ThreadPrimitive.Viewport>
+          <ThreadPrimitive.If empty={false}>
+            {/* aui-thread-viewport-spacer */}
+            <motion.div className="min-h-6 min-w-6 shrink-0" />
+          </ThreadPrimitive.If>
+        </ThreadPrimitive.Viewport>
 
-      <Composer />
-    </ThreadPrimitive.Root>
+        <Composer />
+      </ThreadPrimitive.Root>
+
+      <SubAgentSidePanel />
+    </div>
   );
 };
 
@@ -159,6 +183,134 @@ const ThreadLoadingSkeleton: FC = () => {
         </motion.div>
       </div>
     </div>
+  );
+};
+
+const NOOP_ON_NEW = async () => {
+  throw new Error("Sub-agent side panel is read-only");
+};
+
+const SubAgentSidePanel: FC = () => {
+  const {
+    currentThreadId,
+    threads,
+    runningThreads,
+    isSubAgentPanelOpen,
+    selectedSubAgentBranchId,
+    setSelectedSubAgentBranchId,
+    closeSubAgentPanel,
+  } = useThreadContext();
+
+  const allMessages = useMemo(
+    () => (currentThreadId ? (threads.get(currentThreadId) ?? []) : []),
+    [currentThreadId, threads],
+  );
+
+  const branchIds = useMemo(() => {
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+    for (const message of allMessages) {
+      const branchId = message.branchId;
+      if (!branchId || branchId === ROOT_BRANCH_ID) continue;
+      if (seen.has(branchId)) continue;
+      seen.add(branchId);
+      ordered.push(branchId);
+    }
+    return ordered;
+  }, [allMessages]);
+
+  const activeBranchId = useMemo(() => {
+    if (selectedSubAgentBranchId && branchIds.includes(selectedSubAgentBranchId)) {
+      return selectedSubAgentBranchId;
+    }
+    return branchIds[0] ?? null;
+  }, [selectedSubAgentBranchId, branchIds]);
+
+  const activeBranchLabel = useMemo(() => {
+    if (!activeBranchId) return "Sub-agent Stream";
+    const prefix = activeBranchId.split(":")[0] || activeBranchId;
+    switch (prefix) {
+      case "resume":
+        return "Resume Agent";
+      case "web":
+        return "Web Research Agent";
+      case "postgres":
+        return "Postgres Agent";
+      default:
+        return "Sub-agent Stream";
+    }
+  }, [activeBranchId]);
+
+  useEffect(() => {
+    if (!activeBranchId || selectedSubAgentBranchId === activeBranchId) return;
+    setSelectedSubAgentBranchId(activeBranchId);
+  }, [activeBranchId, selectedSubAgentBranchId, setSelectedSubAgentBranchId]);
+
+  const branchMessages = useMemo(
+    () => (activeBranchId ? allMessages.filter((message) => message.branchId === activeBranchId) : []),
+    [activeBranchId, allMessages],
+  );
+
+  const branchRuntimeAdapter = useMemo<ExternalStoreAdapter<ChatMessage>>(
+    () => ({
+      messages: branchMessages,
+      isRunning: Boolean(currentThreadId && activeBranchId && runningThreads.has(currentThreadId)),
+      onNew: NOOP_ON_NEW,
+      convertMessage,
+    }),
+    [activeBranchId, branchMessages, currentThreadId, runningThreads],
+  );
+  const branchRuntime = useExternalStoreRuntime(branchRuntimeAdapter);
+
+  if (!isSubAgentPanelOpen) {
+    return null;
+  }
+
+  return (
+    <aside className="bg-background border-l border-border/70 flex h-full w-[42rem] min-w-[30rem] flex-col overflow-hidden">
+      <div className="border-b border-border/60 px-4 py-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-semibold">{activeBranchLabel}</div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            onClick={closeSubAgentPanel}
+            aria-label="Close sub-agent panel"
+          >
+            <XIcon className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+      <AssistantRuntimeProvider runtime={branchRuntime}>
+        <TaskToolUI />
+        <ThreadPrimitive.Root
+          className="flex min-h-0 flex-1 min-w-0 flex-col"
+          style={{
+            ["--thread-max-width" as string]: "100%",
+            ["--thread-padding-x" as string]: "0.8rem",
+          }}
+        >
+          <ThreadPrimitive.Viewport className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-4">
+            <ThreadPrimitive.Empty>
+              <div className="text-muted-foreground px-4 py-6 text-sm">
+                Waiting for branch events...
+              </div>
+            </ThreadPrimitive.Empty>
+            <ThreadPrimitive.Messages
+              components={{
+                UserMessage: UserSidebarMessage,
+                EditComposer,
+                AssistantMessage: AssistantSidebarMessage,
+              }}
+            />
+            <ThreadPrimitive.If empty={false}>
+              <motion.div className="min-h-5 min-w-5 shrink-0" />
+            </ThreadPrimitive.If>
+          </ThreadPrimitive.Viewport>
+        </ThreadPrimitive.Root>
+      </AssistantRuntimeProvider>
+    </aside>
   );
 };
 
@@ -463,27 +615,102 @@ const MessageError: FC = () => {
 };
 
 const ToolFallbackWrapper: FC<React.ComponentProps<typeof ToolFallback>> = (props) => {
-  const message = useMessage();
-  
-  // Check if message has text content (to add margin below tools)
-  const hasTextContent = message.content.some(part => 
-    part.type === 'text' && part.text.trim().length > 0
-  );
-
   return (
-    <div className={cn(hasTextContent && "mb-6")}>
+    <div className="mb-3">
       <ToolFallback {...props} />
     </div>
   );
 };
 
-const AssistantMessage: FC = () => {
+const getGroupToolIcon = (toolName: string) => {
+  const name = toolName.toLowerCase();
+  if (name.includes("search") || name.includes("web")) {
+    return <SearchIcon className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />;
+  }
+  if (name.includes("calculator") || name.includes("math")) {
+    return <CalculatorIcon className="h-3.5 w-3.5 text-green-500 dark:text-green-400" />;
+  }
+  if (name.includes("weather") || name.includes("climate")) {
+    return <CloudIcon className="h-3.5 w-3.5 text-cyan-500 dark:text-cyan-400" />;
+  }
+  return <WrenchIcon className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />;
+};
+
+const getGroupToolDisplayName = (toolName: string) =>
+  toolName.replace(/[_-]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+
+const ParallelToolGroup: FC<
+  React.PropsWithChildren<{ startIndex: number; endIndex: number }>
+> = ({ startIndex, endIndex, children }) => {
+  const message = useMessage();
+
+  const toolParts = useMemo(() => {
+    return message.content
+      .slice(startIndex, endIndex + 1)
+      .filter((part): part is Extract<typeof part, { type: "tool-call" }> => part.type === "tool-call");
+  }, [endIndex, message.content, startIndex]);
+
+  const shouldGroup = useMemo(() => {
+    if (toolParts.length <= 1) return false;
+    return toolParts.every(
+      (part) => part.toolName !== "task" && part.toolName !== "task_update",
+    );
+  }, [toolParts]);
+
+  if (!shouldGroup) {
+    return <>{children}</>;
+  }
+
+  const completedCount = toolParts.filter((part) => part.result !== undefined).length;
+  const isRunning = completedCount < toolParts.length;
+  const groupTools = toolParts.map((part, index) => ({
+    key: `${part.toolCallId || part.toolName}-${index}`,
+    name: part.toolName,
+  }));
+
+  return (
+    <details className="mb-3 overflow-hidden rounded-lg border border-border/50 bg-muted/20">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-1.5 px-2.5 py-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          {groupTools.map((tool) => (
+            <span
+              key={tool.key}
+              className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/70 px-2 py-1 text-xs font-normal text-foreground leading-none"
+            >
+              {getGroupToolIcon(tool.name)}
+              <span>{getGroupToolDisplayName(tool.name)}</span>
+            </span>
+          ))}
+        </div>
+        <div className="shrink-0 flex items-center">
+          {isRunning ? (
+            <Spinner className="text-muted-foreground" />
+          ) : (
+            <ChevronDownIcon className="h-4 w-4 text-muted-foreground transition-transform [&::-webkit-details-marker]:hidden [&_details[open]_&]:rotate-180" />
+          )}
+        </div>
+      </summary>
+      <div className="space-y-1.5 border-t border-border/40 p-2.5">
+        {children}
+      </div>
+    </details>
+  );
+};
+
+const AssistantMessageBase: FC<{ showBranchPicker: boolean }> = ({ showBranchPicker }) => {
   const message = useMessage();
   
-  // Check if message has text content to add margin to the message
+  // Check if message has text content for action controls only.
   const hasTextContent = message.content.some(part => 
     part.type === 'text' && part.text.trim().length > 0
   );
+
+  const hasToolContent = message.content.some(part => part.type === 'tool-call');
+  const hasReasoningContent = message.content.some(part => part.type === 'reasoning');
+  const hasBodyContent = hasTextContent || hasToolContent || hasReasoningContent;
+  if (!hasBodyContent) {
+    return null;
+  }
 
   return (
     <MessagePrimitive.Root asChild>
@@ -491,7 +718,7 @@ const AssistantMessage: FC = () => {
         // aui-assistant-message-root
         className={cn(
           "relative mx-auto grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] px-[var(--thread-padding-x)] py-4",
-          hasTextContent && "mb-4"
+          hasBodyContent && "mb-4"
         )}
         initial={{ y: 5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
@@ -507,7 +734,9 @@ const AssistantMessage: FC = () => {
           <MessagePrimitive.Content
             components={{
               Text: MarkdownText,
+              Reasoning: ReasoningPart,
               tools: { Fallback: ToolFallbackWrapper },
+              ToolGroup: ParallelToolGroup,
             }}
           />
           <MessageError />
@@ -515,12 +744,17 @@ const AssistantMessage: FC = () => {
 
         <AssistantActionBar />
 
-        {/* aui-assistant-branch-picker */}
-        <BranchPicker className="col-start-2 row-start-2 mr-2 -ml-2" />
+        {showBranchPicker ? (
+          <BranchPicker className="col-start-2 row-start-2 mr-2 -ml-2" />
+        ) : null}
       </motion.div>
     </MessagePrimitive.Root>
   );
 };
+
+const AssistantMessage: FC = () => <AssistantMessageBase showBranchPicker={true} />;
+
+const AssistantSidebarMessage: FC = () => <AssistantMessageBase showBranchPicker={false} />;
 
 const AssistantActionBar: FC = () => {
   const message = useMessage();
@@ -576,6 +810,24 @@ const UserMessage: FC = () => {
 
         {/* aui-user-branch-picker */}
         <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" />
+      </motion.div>
+    </MessagePrimitive.Root>
+  );
+};
+
+const UserSidebarMessage: FC = () => {
+  return (
+    <MessagePrimitive.Root asChild>
+      <motion.div
+        className="mx-auto grid w-full max-w-[var(--thread-max-width)] auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-1 px-[var(--thread-padding-x)] py-4 [&:where(>*)]:col-start-2"
+        initial={{ y: 5, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        data-role="user"
+      >
+        <UserActionBar />
+        <div className="bg-muted text-foreground col-start-2 rounded-3xl px-5 py-2.5 break-words">
+          <MessagePrimitive.Content components={{ Text: MarkdownText }} />
+        </div>
       </motion.div>
     </MessagePrimitive.Root>
   );

@@ -8,7 +8,7 @@
     {
       "title": "Are Richard's skills in demand?",
       "label": "Uses Resume Agent + Web Agent",
-      "action": "What skills does Richard have that are in demand right now?"
+      "action": "What skills does Richard have that are in demand in the current software engineering landscape? Can you provide recent job postings that align with his skill set?"
     },
     {
       "title": "Social media feed performance",

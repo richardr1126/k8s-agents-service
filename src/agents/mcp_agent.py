@@ -21,6 +21,7 @@ from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.lazy_agent import LazyLoadingAgent
 from core import get_model, settings
 from schema.models import AllModelEnum
+from service.utils import normalize_messages_for_replay
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +82,8 @@ def wrap_model(
     """Wrap model with tools and system instructions."""
     bound_model = model.bind_tools(tools)
     preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)] + state["messages"],
+        lambda state: [SystemMessage(content=instructions)]
+        + normalize_messages_for_replay(state["messages"]),
         name="StateModifier",
     )
     return preprocessor | bound_model  # type: ignore[return-value]

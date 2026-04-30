@@ -1,5 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ChatRequest, ChatMessage, BackendMessage, BackendStreamEvent } from '@/lib/types';
+import {
+  ChatRequest,
+  ChatMessage,
+  BackendMessage,
+  BackendStreamEvent,
+  normalizeBranchId,
+  TaskBranchMapContent,
+  isTaskData,
+} from '@/lib/types';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { Pool } from 'pg';
@@ -11,6 +19,7 @@ const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
+const DEBUG_TASK_BRANCH_MAP = process.env.DEBUG_TASK_BRANCH_MAP === "1";
 
 export async function POST(req: NextRequest) {
   try {
@@ -109,7 +118,50 @@ export async function POST(req: NextRequest) {
         async start(controller) {
           try {
             let messageCounter = 0;
-            let streamingMessageId: string | null = null;
+            const branchMessageIds = new Map<string, string>();
+            const toolCallBranchIds = new Map<string, string>();
+
+            const emit = (payload: Record<string, unknown>): void => {
+              const chunk = encoder.encode(`data: ${JSON.stringify(payload)}\n\n`);
+              controller.enqueue(chunk);
+            };
+
+            const toBranchKey = (branchId?: string): string => normalizeBranchId(branchId);
+            const toBranchSlug = (branchId?: string): string =>
+              toBranchKey(branchId).replace(/[^a-zA-Z0-9_-]/g, "_");
+            const toScopedMessageId = (branchId: string, rawId?: string): string =>
+              rawId
+                ? `m-${toBranchSlug(branchId)}-${rawId}`
+                : `msg-${toBranchSlug(branchId)}-${Date.now()}-${++messageCounter}`;
+
+            const ensureBranchMessage = (
+              branchId?: string,
+              preferredMessageId?: string,
+            ): string => {
+              const key = toBranchKey(branchId);
+              const scopedPreferredId = toScopedMessageId(key, preferredMessageId);
+              let nextMessageId = branchMessageIds.get(key);
+              if (!nextMessageId || (preferredMessageId && nextMessageId !== scopedPreferredId)) {
+                nextMessageId = scopedPreferredId;
+                branchMessageIds.set(key, nextMessageId);
+              }
+              return nextMessageId;
+            };
+
+            const closeBranchMessage = (branchId?: string): void => {
+              const key = toBranchKey(branchId);
+              branchMessageIds.delete(key);
+            };
+            const rememberToolCallBranch = (toolCallId?: string, branchId?: string): void => {
+              if (!toolCallId) return;
+              toolCallBranchIds.set(toolCallId, toBranchKey(branchId));
+            };
+            const closeToolCallMessage = (toolCallId?: string): void => {
+              if (!toolCallId) return;
+              const branchId = toolCallBranchIds.get(toolCallId);
+              if (!branchId) return;
+              closeBranchMessage(branchId);
+            };
 
             const reader = backendResponse.body?.getReader();
             if (!reader) {
@@ -129,114 +181,187 @@ export async function POST(req: NextRequest) {
                 buffer = lines.pop() || '';
 
                 for (const line of lines) {
-                  if (line.startsWith('data: ')) {
-                    const data = line.slice(6).trim();
-                    
-                    if (data === '[DONE]') {
-                      const doneChunk = encoder.encode('data: [DONE]\n\n');
-                      controller.enqueue(doneChunk);
-                      controller.close();
-                      return;
-                    }
+                  if (!line.startsWith('data: ')) {
+                    continue;
+                  }
+                  const data = line.slice(6).trim();
 
-                    try {
-                      const event = JSON.parse(data) as BackendStreamEvent;
-                      
-                      if (event.type === 'message' && typeof event.content === 'object') {
-                        const backendMessage = event.content as BackendMessage;
-                        
-                        // Handle custom messages (task updates)
-                        if (backendMessage.type === 'custom' && backendMessage.custom_data) {
-                          // Forward custom messages directly - they'll be handled by the frontend
-                          const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'message', content: backendMessage })}\n\n`);
-                          controller.enqueue(chunk);
-                          continue;
-                        }
-                        
-                        // Handle tool result messages - emit as separate tool result events
-                        if (backendMessage.type === 'tool' && backendMessage.tool_call_id) {
-                          const chunk = encoder.encode(`data: ${JSON.stringify({ 
-                            type: 'tool_result', 
+                  if (data === '[DONE]') {
+                    const doneChunk = encoder.encode('data: [DONE]\n\n');
+                    controller.enqueue(doneChunk);
+                    controller.close();
+                    return;
+                  }
+
+                  try {
+                    const event = JSON.parse(data) as BackendStreamEvent;
+                    const branchId = toBranchKey(event.branch_id);
+                    const runId = typeof event.run_id === "string" ? event.run_id : undefined;
+                    const messageIdFromEventRaw = event.message_id || event.messageId;
+                    const messageIdFromEvent = messageIdFromEventRaw
+                      ? toScopedMessageId(branchId, messageIdFromEventRaw)
+                      : undefined;
+
+                    if (event.type === 'message' && typeof event.content === 'object') {
+                      const backendMessage = event.content as BackendMessage;
+
+                      if (backendMessage.type === 'custom' && backendMessage.custom_data) {
+                        if (isTaskData(backendMessage.custom_data)) {
+                          const taskData = backendMessage.custom_data;
+                          const taskMessageId = ensureBranchMessage(branchId, `task-${taskData.run_id}`);
+                          emit({
+                            type: 'tool_call',
                             content: {
-                              toolCallId: backendMessage.tool_call_id,
-                              result: backendMessage.content
-                            }
-                          })}\n\n`);
-                          controller.enqueue(chunk);
+                              id: `task-${taskData.run_id}`,
+                              name: 'task_update',
+                              args: { taskData },
+                            },
+                            messageId: taskMessageId,
+                            branchId,
+                            runId,
+                          });
+                          continue;
+                        }
+                        emit({
+                          type: 'message',
+                          content: backendMessage,
+                          messageId: messageIdFromEvent,
+                          branchId,
+                          branchLabel: event.branch_label,
+                          runId,
+                        });
+                        continue;
+                      }
+
+                      if (backendMessage.type === 'tool' && backendMessage.tool_call_id) {
+                        const toolResultMessageId = ensureBranchMessage(branchId, messageIdFromEventRaw);
+                        emit({
+                          type: 'tool_result',
+                          content: {
+                            toolCallId: backendMessage.tool_call_id,
+                            result: backendMessage.content
+                          },
+                          messageId: toolResultMessageId,
+                          branchId,
+                          runId,
+                        });
+                        closeToolCallMessage(backendMessage.tool_call_id);
+                        closeBranchMessage(branchId);
+                        continue;
+                      }
+
+                      if (backendMessage.type === 'ai' || backendMessage.type === 'human') {
+                        const role = backendMessage.type === 'human' ? 'user' : 'assistant';
+                        const messageId = role === 'assistant'
+                          ? (messageIdFromEvent || ensureBranchMessage(branchId, messageIdFromEventRaw))
+                          : (messageIdFromEvent || toScopedMessageId(branchId));
+                        const hasTextContent = (backendMessage.content || '').trim().length > 0;
+                        const hasReasoning = Boolean(backendMessage.reasoning_content && backendMessage.reasoning_content.length > 0);
+                        const hasToolCalls = Boolean(backendMessage.tool_calls && backendMessage.tool_calls.length > 0);
+                        if (role === 'assistant' && !hasTextContent && !hasReasoning && hasToolCalls) {
+                          // Tool calls are streamed as dedicated `tool_call` events; skip this empty wrapper AI message.
+                          closeBranchMessage(branchId);
                           continue;
                         }
 
-                        // Handle AI messages (both tool calls and regular responses)
-                        if (backendMessage.type === 'ai') {
-                          if (backendMessage.tool_calls && backendMessage.tool_calls.length > 0) {
-                            // Emit each tool call as a separate event in the stream
-                            for (const tc of backendMessage.tool_calls) {
-                              const toolCallEvent = {
-                                type: 'tool_call',
-                                content: {
-                                  id: tc.id || `tool-${Date.now()}-${Math.random()}`,
-                                  name: tc.name,
-                                  args: tc.args,
-                                }
-                              };
-                              const chunk = encoder.encode(`data: ${JSON.stringify(toolCallEvent)}\n\n`);
-                              controller.enqueue(chunk);
-                            }
-                          } 
-                          
-                          // Handle AI messages with content (final response)
-                          if (backendMessage.content) {
-                            // This is a final response message - create a new text message
-                            const textMessage: ChatMessage = {
-                              id: streamingMessageId || `msg-${Date.now()}-${++messageCounter}`,
-                              role: 'assistant',
-                              content: backendMessage.content,
-                              timestamp: Date.now(),
-                              runId: backendMessage.run_id,
-                            };
+                        const chatMessage: ChatMessage = {
+                          id: messageId,
+                          role,
+                          content: backendMessage.content || '',
+                          reasoningContent: backendMessage.reasoning_content,
+                          partOrder: backendMessage.content ? ['text'] : undefined,
+                          branchId,
+                          branchLabel: event.branch_label || (branchId === "root" ? "main" : branchId),
+                          timestamp: Date.now(),
+                          runId: backendMessage.run_id || runId,
+                        };
+                        emit({
+                          type: 'message',
+                          content: chatMessage,
+                          messageId,
+                          branchId,
+                          branchLabel: event.branch_label,
+                          runId,
+                        });
 
-                            const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'message', content: textMessage })}\n\n`);
-                            controller.enqueue(chunk);
-                            streamingMessageId = null; // Reset for next message
-                          }
-                        } else if (backendMessage.type === 'human') {
-                          // Handle human messages (shouldn't happen in streaming but just in case)
-                          const chatMessage: ChatMessage = {
-                            id: `msg-${Date.now()}-${++messageCounter}`,
-                            role: 'user',
-                            content: backendMessage.content,
-                            timestamp: Date.now(),
-                            runId: backendMessage.run_id,
-                          };
-
-                          const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'message', content: chatMessage })}\n\n`);
-                          controller.enqueue(chunk);
+                        if (role === 'assistant' && backendMessage.content) {
+                          closeBranchMessage(branchId);
                         }
-                      } else if (event.type === 'token') {
-                        // Create a streaming message placeholder if we don't have one
-                        if (!streamingMessageId) {
-                          streamingMessageId = `msg-${Date.now()}-${++messageCounter}`;
-                          const placeholder: ChatMessage = {
-                            id: streamingMessageId,
-                            role: 'assistant',
-                            content: '',
-                            timestamp: Date.now(),
-                          };
-                          const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'message', content: placeholder })}\n\n`);
-                          controller.enqueue(chunk);
-                        }
-                        
-                        // Forward token updates
-                        const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'token', content: event.content, messageId: streamingMessageId })}\n\n`);
-                        controller.enqueue(chunk);
-                      } else if (event.type === 'error') {
-                        const chunk = encoder.encode(`data: ${JSON.stringify({ type: 'error', content: event.content })}\n\n`);
-                        controller.enqueue(chunk);
                       }
-                    } catch {
-                      console.error('Failed to parse SSE data:', data);
-                      continue;
+                    } else if (event.type === 'task_branch_map') {
+                      const mapping = event.content as TaskBranchMapContent;
+                      const mappedBranchId = toBranchKey(mapping.branchId);
+                      if (DEBUG_TASK_BRANCH_MAP) {
+                        console.log(
+                          `[task-branch-map] route toolCallId=${mapping.toolCallId} branchId=${mappedBranchId}`
+                        );
+                      }
+                      emit({
+                        type: 'task_branch_map',
+                        content: {
+                          toolCallId: mapping.toolCallId,
+                          branchId: mappedBranchId,
+                        },
+                        branchId: mappedBranchId,
+                        runId,
+                      });
+                    } else if (event.type === 'token') {
+                      const messageId = ensureBranchMessage(branchId, messageIdFromEventRaw);
+                      emit({
+                        type: 'token',
+                        content: event.content,
+                        messageId,
+                        branchId,
+                        branchLabel: event.branch_label,
+                        runId,
+                      });
+                    } else if (event.type === 'reasoning') {
+                      const messageId = ensureBranchMessage(branchId, messageIdFromEventRaw);
+                      emit({
+                        type: 'reasoning',
+                        content: event.content,
+                        messageId,
+                        branchId,
+                        branchLabel: event.branch_label,
+                        runId,
+                      });
+                    } else if (event.type === 'tool_call') {
+                      const messageId = ensureBranchMessage(branchId, messageIdFromEventRaw);
+                      const toolCall = event.content as { id?: string };
+                      rememberToolCallBranch(toolCall.id, branchId);
+                      emit({
+                        type: 'tool_call',
+                        content: event.content,
+                        messageId,
+                        branchId,
+                        branchLabel: event.branch_label,
+                        runId,
+                      });
+                    } else if (event.type === 'tool_result') {
+                      const messageId = ensureBranchMessage(branchId, messageIdFromEventRaw);
+                      const result = event.content as { toolCallId?: string };
+                      emit({
+                        type: 'tool_result',
+                        content: event.content,
+                        messageId,
+                        branchId,
+                        branchLabel: event.branch_label,
+                        runId,
+                      });
+                      closeToolCallMessage(result.toolCallId);
+                      closeBranchMessage(branchId);
+                    } else if (event.type === 'error') {
+                      emit({
+                        type: 'error',
+                        content: event.content,
+                        branchId,
+                        branchLabel: event.branch_label,
+                        runId,
+                      });
                     }
+                  } catch {
+                    console.error('Failed to parse SSE data:', data);
+                    continue;
                   }
                 }
               }
@@ -285,17 +410,27 @@ export async function POST(req: NextRequest) {
         id: `msg-${Date.now()}-${Math.random()}`,
         role: response.type === 'human' ? 'user' : 'assistant',
         content: response.content,
+        reasoningContent: response.reasoning_content,
+        partOrder: response.type === 'ai' ? ['text'] : undefined,
         timestamp: Date.now(),
         runId: response.run_id,
       };
 
       // Handle tool calls in non-streaming mode
       if (response.tool_calls && response.tool_calls.length > 0) {
+        const batchId = response.tool_calls.length > 1
+          ? `tool-batch-${chatMessage.id}`
+          : undefined;
         chatMessage.toolCalls = response.tool_calls.map(tc => ({
           id: tc.id || `tool-${Date.now()}-${Math.random()}`,
           name: tc.name,
           args: tc.args,
+          groupId: batchId,
         }));
+        chatMessage.partOrder = [
+          ...(chatMessage.partOrder ?? []),
+          ...chatMessage.toolCalls.map(tc => `tool:${tc.id}`),
+        ];
       }
 
       return NextResponse.json(chatMessage);

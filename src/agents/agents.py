@@ -5,8 +5,8 @@ from langgraph.pregel import Pregel
 
 from agents.chatbot import chatbot
 from agents.configurable_model_graph import ConfigurableModelGraph
-from agents.langgraph_supervisor_agent import langgraph_supervisor_agent
 from agents.lazy_agent import LazyLoadingAgent
+from agents.main_agent import main_agent
 from agents.mcp_agent import mcp_agent
 from agents.rag_assistant import rag_assistant
 from agents.web_rag_agent import web_rag_agent
@@ -35,7 +35,7 @@ agents: dict[str, Agent] = {
     # ),
     "auto-router": Agent(
         description="Hello! I'm an agent that routes between a resume assistant, a web research assistant, and a database analyst.",
-        graph=langgraph_supervisor_agent
+        graph=main_agent
     ),
     "resume-agent": Agent(
         description="""Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.

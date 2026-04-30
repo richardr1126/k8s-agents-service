@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { ChatMessage, ToolCall, BackendChatHistory } from '@/lib/types';
+import { ChatMessage, ToolCall, BackendChatHistory, ROOT_BRANCH_ID, isTaskData } from '@/lib/types';
 import { auth } from '@/lib/auth';
 import { headers } from 'next/headers';
 import { Pool } from 'pg';
@@ -9,6 +9,36 @@ const pool = new Pool({
   connectionString: process.env.POSTGRES_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
+
+type BranchMetadata = {
+  branchId?: string;
+  branchLabel?: string;
+};
+
+const extractBranchMetadata = (responseMetadata: unknown): BranchMetadata => {
+  if (!responseMetadata || typeof responseMetadata !== "object") {
+    return {};
+  }
+
+  const metadata = responseMetadata as Record<string, unknown>;
+  const explicitBranchId = typeof metadata.branch_id === "string" ? metadata.branch_id : undefined;
+  const pathBranchId = Array.isArray(metadata.langgraph_path)
+    ? metadata.langgraph_path.filter((item): item is string => typeof item === "string").join("/")
+    : undefined;
+
+  const branchId = explicitBranchId || pathBranchId || undefined;
+  if (!branchId) return {};
+
+  const explicitLabel = typeof metadata.branch_label === "string" ? metadata.branch_label : undefined;
+  const inferredLabel = branchId === ROOT_BRANCH_ID
+    ? "main"
+    : (branchId.split("/").pop()?.split(":")[0] || branchId);
+
+  return {
+    branchId,
+    branchLabel: explicitLabel || inferredLabel,
+  };
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -85,15 +115,44 @@ export async function POST(req: NextRequest) {
     const messages: ChatMessage[] = history.messages
       .filter(msg => msg.type !== 'tool') // Filter out standalone tool result messages
       .map((msg, index) => {
+        const branchMeta = extractBranchMetadata(msg.response_metadata);
+
+        if (msg.type === 'custom' && isTaskData(msg.custom_data)) {
+          const taskData = msg.custom_data;
+          const taskToolCallId = `task-${taskData.run_id}`;
+          return {
+            id: `msg-task-${index}-${Date.now()}`,
+            role: 'assistant' as const,
+            content: '',
+            reasoningContent: undefined,
+            partOrder: [`tool:${taskToolCallId}`],
+            timestamp: Date.now(),
+            runId: msg.run_id,
+            branchId: branchMeta.branchId,
+            branchLabel: branchMeta.branchLabel,
+            toolCalls: [
+              {
+                id: taskToolCallId,
+                name: 'task_update',
+                args: { taskData },
+              },
+            ],
+          };
+        }
+
         let toolCalls: ToolCall[] | undefined;
         
         // If this AI message has tool calls, associate the results
         if (msg.tool_calls && msg.tool_calls.length > 0) {
+          const batchId = msg.tool_calls.length > 1
+            ? `tool-batch-history-${threadId}-${index}`
+            : undefined;
           toolCalls = msg.tool_calls.map(tc => ({
             id: tc.id || `tool-${index}-${Math.random()}`,
             name: tc.name,
             args: tc.args,
             result: tc.id ? toolResults.get(tc.id) : undefined, // Associate the tool result
+            groupId: batchId,
           }));
         }
 
@@ -101,8 +160,18 @@ export async function POST(req: NextRequest) {
           id: `msg-${index}-${Date.now()}`,
           role: msg.type === 'human' ? 'user' : 'assistant',
           content: msg.content,
+          reasoningContent: msg.reasoning_content,
+          partOrder: msg.type === 'ai'
+            ? [
+                ...(msg.reasoning_content?.length ? ['reasoning'] : []),
+                ...(toolCalls?.map(tc => `tool:${tc.id}`) ?? []),
+                ...(msg.content ? ['text'] : []),
+              ]
+            : undefined,
           timestamp: Date.now(),
           runId: msg.run_id,
+          branchId: branchMeta.branchId,
+          branchLabel: branchMeta.branchLabel,
           toolCalls,
         };
       });

@@ -1,11 +1,11 @@
 "use client";
 
 import { makeAssistantToolUI } from "@assistant-ui/react";
-import { Badge } from "./ui/badge";
-import { Loader2, CheckCircle, XCircle, Clock, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
+import { CheckCircle, XCircle, Clock, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
 import { Button } from "./ui/button";
+import { Spinner } from "./ui/spinner";
 import { ReadonlyJSONObject } from "@/lib/types";
 
 interface TaskData {
@@ -28,28 +28,13 @@ const getStateIcon = (state: string, result?: string | null) => {
     case "new":
       return <Clock className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
     case "running":
-      return <Loader2 className="h-4 w-4 text-blue-500 dark:text-blue-400 animate-spin" />;
+      return <Spinner className="text-blue-500 dark:text-blue-400" />;
     case "complete":
       return result === "error" ?
         <XCircle className="h-4 w-4 text-red-500 dark:text-red-400" /> :
         <CheckCircle className="h-4 w-4 text-green-500 dark:text-green-400" />;
     default:
       return <Clock className="h-4 w-4 text-muted-foreground" />;
-  }
-};
-
-const getStateBadge = (state: string, result?: string | null) => {
-  switch (state) {
-    case "new":
-      return <Badge variant="outline" className="text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-800">Started</Badge>;
-    case "running":
-      return <Badge variant="outline" className="text-blue-600 border-blue-200 dark:text-blue-400 dark:border-blue-800">Running</Badge>;
-    case "complete":
-      return result === "error" ?
-        <Badge variant="destructive">Error</Badge> :
-        <Badge variant="outline" className="text-green-600 border-green-200 dark:text-green-400 dark:border-green-800">Complete</Badge>;
-    default:
-      return <Badge variant="outline">Unknown</Badge>;
   }
 };
 
@@ -86,6 +71,7 @@ const formatTaskData = (data: ReadonlyJSONObject) => {
 const TaskUIComponent = ({ args }: { args: TaskArgs }) => {
   const { taskData } = args;
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const isLoading = taskData.state !== "complete";
 
   return (
     <div className={cn(
@@ -101,32 +87,29 @@ const TaskUIComponent = ({ args }: { args: TaskArgs }) => {
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h4 className="text-sm font-medium text-foreground truncate">
-              {taskData.name}
-            </h4>
-            {getStateBadge(taskData.state, taskData.result)}
-          </div>
-
-          {taskData.data.status != null && (
-            <p className="text-sm text-muted-foreground mt-1">
-              {String(taskData.data.status)}
-            </p>
-          )}
+          <h4 className="text-sm font-medium text-foreground truncate">
+            {taskData.name}
+          </h4>
         </div>
 
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsCollapsed(!isCollapsed)}
-          className="h-8 w-8 p-0 hover:bg-muted/50"
-        >
-          {isCollapsed ? (
-            <ChevronDownIcon className="h-4 w-4" />
-          ) : (
-            <ChevronUpIcon className="h-4 w-4" />
-          )}
-        </Button>
+        {isLoading ? (
+          <div className="flex h-8 w-8 items-center justify-center">
+            <Spinner className="text-muted-foreground" />
+          </div>
+        ) : (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="h-8 w-8 p-0 hover:bg-muted/50"
+          >
+            {isCollapsed ? (
+              <ChevronDownIcon className="h-4 w-4" />
+            ) : (
+              <ChevronUpIcon className="h-4 w-4" />
+            )}
+          </Button>
+        )}
       </div>
 
       {!isCollapsed && (taskData.data && Object.keys(taskData.data).length > 0) && (

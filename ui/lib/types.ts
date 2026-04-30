@@ -9,6 +9,41 @@ export type ReadonlyJSONValue =
   | readonly ReadonlyJSONValue[];
 
 export type ReadonlyJSONObject = { readonly [key: string]: ReadonlyJSONValue };
+export const ROOT_BRANCH_ID = "root";
+
+export interface TaskBranchMapContent {
+  toolCallId: string;
+  branchId: string;
+}
+
+export const isInternalBranchId = (branchId: string): boolean =>
+  branchId.startsWith("__") || branchId.startsWith("branch:");
+
+export const normalizeBranchId = (branchId?: string | null): string => {
+  if (!branchId || !branchId.trim()) return ROOT_BRANCH_ID;
+  const normalized = branchId.trim();
+  return isInternalBranchId(normalized) ? ROOT_BRANCH_ID : normalized;
+};
+
+export type TaskData = {
+  name: string;
+  run_id: string;
+  state: "new" | "running" | "complete";
+  result?: "success" | "error" | null;
+  data: Record<string, unknown>;
+};
+
+export const isTaskData = (value: unknown): value is TaskData => {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<TaskData>;
+  return (
+    typeof candidate.name === "string"
+    && typeof candidate.run_id === "string"
+    && (candidate.state === "new" || candidate.state === "running" || candidate.state === "complete")
+    && typeof candidate.data === "object"
+    && candidate.data !== null
+  );
+};
 
 export interface BackendUserInput {
   message: string;
@@ -36,19 +71,29 @@ export interface BackendMessage {
   tool_call_id?: string;
   run_id?: string;
   response_metadata?: ReadonlyJSONObject;
+  reasoning_content?: string[];
   custom_data?: ReadonlyJSONObject;
 }
 
 export interface BackendStreamEvent {
-  type: 'message' | 'token' | 'error' | 'tool_call' | 'tool_result';
+  type: 'message' | 'token' | 'reasoning' | 'error' | 'tool_call' | 'tool_result' | 'task_branch_map';
   content: string | BackendMessage | {
     id?: string;
     name?: string;
     args?: ReadonlyJSONObject;
+    batchId?: string;
     toolCallId?: string;
+    branchId?: string;
     result?: ReadonlyJSONValue;
   };
   messageId?: string; // For token events to identify which message they belong to
+  message_id?: string;
+  run_id?: string;
+  branch_id?: string;
+  branch_path?: string[];
+  branch_label?: string;
+  branchId?: string;
+  branchLabel?: string;
 }
 
 // Rate limiting types
@@ -93,12 +138,17 @@ export interface ToolCall {
   name: string;
   args: ReadonlyJSONObject;
   result?: ReadonlyJSONValue;
+  groupId?: string;
 }
 
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  reasoningContent?: string[];
+  partOrder?: string[];
+  branchId?: string;
+  branchLabel?: string;
   timestamp: number;
   runId?: string;
   toolCalls?: ToolCall[];

@@ -3,9 +3,8 @@ from unittest.mock import AsyncMock, patch
 
 import langsmith
 import pytest
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
-from langgraph.pregel.types import StateSnapshot
-from langgraph.types import Interrupt
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
+from langgraph.types import Interrupt, StateSnapshot
 
 from agents.agents import DEFAULT_AGENT, Agent
 from schema import ChatHistory, ChatMessage, ServiceMetadata
@@ -246,6 +245,374 @@ async def test_stream(test_client, mock_agent) -> None:
         assert len(final_messages) == 1
         assert final_messages[0]["content"]["content"] == FINAL_ANSWER
         assert final_messages[0]["content"]["type"] == "ai"
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_reasoning_events(test_client, mock_agent) -> None:
+    QUESTION = "How would you solve this?"
+    FINAL_ANSWER = "Here is the final answer."
+
+    events = [
+        (
+            "messages",
+            (
+                AIMessageChunk(content="", additional_kwargs={"reasoning_content": "Plan first."}),
+                {"tags": []},
+            ),
+        ),
+        (
+            "messages",
+            (
+                AIMessageChunk(content="Here", additional_kwargs={"reasoning_content": "Plan first."}),
+                {"tags": []},
+            ),
+        ),
+        (
+            "updates",
+            {"chat_model": {"messages": [AIMessage(content=FINAL_ANSWER)]}},
+        ),
+    ]
+
+    async def mock_astream(**kwargs):
+        for event in events:
+            yield event
+
+    mock_agent.astream = mock_astream
+
+    with test_client.stream(
+        "POST", "/stream", json={"message": QUESTION, "stream_tokens": True}
+    ) as response:
+        assert response.status_code == 200
+        messages = []
+        for line in response.iter_lines():
+            if line and line.strip() != "data: [DONE]":
+                messages.append(json.loads(line.lstrip("data: ")))
+
+        reasoning_messages = [msg for msg in messages if msg["type"] == "reasoning"]
+        assert len(reasoning_messages) == 1
+        assert reasoning_messages[0]["type"] == "reasoning"
+        assert reasoning_messages[0]["content"] == "Plan first."
+        assert reasoning_messages[0]["branch_id"] == "root"
+        assert "run_id" in reasoning_messages[0]
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_branch_aware_tool_call_and_result_events(test_client, mock_agent) -> None:
+    QUESTION = "Use tools."
+    tool_call_id = "call_parallel_1"
+    events = [
+        (
+            ("tools:task-a",),
+            "updates",
+            {
+                "tools": {
+                    "messages": [
+                        AIMessage(
+                            content="",
+                            tool_calls=[
+                                {
+                                    "name": "task",
+                                    "args": {"description": "subtask"},
+                                    "id": tool_call_id,
+                                }
+                            ],
+                        )
+                    ]
+                }
+            },
+        ),
+        (
+            ("tools:task-a",),
+            "updates",
+            {
+                "tools": {
+                    "messages": [ToolMessage(content="subtask complete", tool_call_id=tool_call_id)]
+                }
+            },
+        ),
+    ]
+
+    async def mock_astream(**kwargs):
+        for event in events:
+            yield event
+
+    mock_agent.astream = mock_astream
+
+    with test_client.stream(
+        "POST", "/stream", json={"message": QUESTION, "stream_tokens": False}
+    ) as response:
+        assert response.status_code == 200
+        messages = []
+        for line in response.iter_lines():
+            if line and line.strip() != "data: [DONE]":
+                messages.append(json.loads(line.lstrip("data: ")))
+
+        tool_call_events = [msg for msg in messages if msg["type"] == "tool_call"]
+        tool_result_events = [msg for msg in messages if msg["type"] == "tool_result"]
+        assert len(tool_call_events) == 1
+        assert len(tool_result_events) == 1
+
+        tool_call_event = tool_call_events[0]
+        tool_result_event = tool_result_events[0]
+        assert tool_call_event["content"]["id"] == tool_call_id
+        assert tool_result_event["content"]["toolCallId"] == tool_call_id
+        assert tool_call_event["branch_id"] == "tools:task-a"
+        assert tool_result_event["branch_id"] == "tools:task-a"
+        assert messages.index(tool_call_event) < messages.index(tool_result_event)
+
+
+@pytest.mark.asyncio
+async def test_stream_catches_up_persisted_tool_results_missing_from_updates(
+    test_client, mock_agent
+) -> None:
+    QUESTION = "Use parallel tasks."
+    tool_call_id = "call_parent_task"
+    tool_call_message = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "task",
+                "args": {"description": "subtask", "subagent_type": "resume"},
+                "id": tool_call_id,
+            }
+        ],
+    )
+    final_tool_message = ToolMessage(
+        content="parent task complete",
+        tool_call_id=tool_call_id,
+    )
+    events = [
+        (
+            "updates",
+            {
+                "model": {
+                    "messages": [tool_call_message],
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "model": {
+                    "messages": [AIMessage(content="final answer")],
+                }
+            },
+        ),
+    ]
+
+    async def mock_astream(**kwargs):
+        for event in events:
+            yield event
+
+    mock_agent.astream = mock_astream
+    mock_agent.aget_state.side_effect = [
+        StateSnapshot(
+            values={"messages": []},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"messages": []},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"messages": [tool_call_message, final_tool_message]},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        ),
+    ]
+
+    with test_client.stream(
+        "POST", "/stream", json={"message": QUESTION, "stream_tokens": False}
+    ) as response:
+        assert response.status_code == 200
+        messages = []
+        for line in response.iter_lines():
+            if line and line.strip() != "data: [DONE]":
+                messages.append(json.loads(line.lstrip("data: ")))
+
+        tool_result_events = [msg for msg in messages if msg["type"] == "tool_result"]
+        assert len(tool_result_events) == 1
+        assert tool_result_events[0]["content"] == {
+            "toolCallId": tool_call_id,
+            "result": "parent task complete",
+        }
+        assert tool_result_events[0]["branch_id"] == "root"
+
+
+@pytest.mark.asyncio
+async def test_stream_closes_parent_task_when_branch_final_message_arrives(
+    test_client, mock_agent
+) -> None:
+    QUESTION = "Use parallel tasks."
+    tool_call_id = "call_parent_task"
+    root_tool_call = AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "name": "task",
+                "args": {"description": "subtask", "subagent_type": "resume"},
+                "id": tool_call_id,
+            }
+        ],
+    )
+    branch_final = AIMessage(content="branch answer")
+    main_final = AIMessage(content="main answer")
+    events = [
+        (
+            "updates",
+            {
+                "model": {
+                    "messages": [root_tool_call],
+                }
+            },
+        ),
+        (
+            ("tools:branch-a",),
+            "updates",
+            {
+                "model": {
+                    "messages": [branch_final],
+                }
+            },
+        ),
+        (
+            "updates",
+            {
+                "model": {
+                    "messages": [main_final],
+                }
+            },
+        ),
+    ]
+
+    async def mock_astream(**kwargs):
+        for event in events:
+            yield event
+
+    mock_agent.astream = mock_astream
+    mock_agent.aget_state.side_effect = [
+        StateSnapshot(
+            values={"messages": []},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"messages": []},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        ),
+        StateSnapshot(
+            values={"messages": []},
+            next=(),
+            config={},
+            metadata=None,
+            created_at=None,
+            parent_config=None,
+            tasks=(),
+            interrupts=(),
+        ),
+    ]
+
+    with test_client.stream(
+        "POST", "/stream", json={"message": QUESTION, "stream_tokens": False}
+    ) as response:
+        assert response.status_code == 200
+        messages = []
+        for line in response.iter_lines():
+            if line and line.strip() != "data: [DONE]":
+                messages.append(json.loads(line.lstrip("data: ")))
+
+        tool_result_events = [msg for msg in messages if msg["type"] == "tool_result"]
+        final_main_messages = [
+            msg
+            for msg in messages
+            if msg["type"] == "message"
+            and msg["branch_id"] == "root"
+            and msg["content"]["type"] == "ai"
+            and msg["content"]["content"] == "main answer"
+        ]
+
+        assert len(tool_result_events) == 1
+        assert tool_result_events[0]["branch_id"] == "root"
+        assert tool_result_events[0]["content"] == {
+            "toolCallId": tool_call_id,
+            "result": "branch answer",
+        }
+        assert messages.index(tool_result_events[0]) < messages.index(final_main_messages[0])
+
+
+@pytest.mark.asyncio
+async def test_stream_emits_distinct_branch_ids_for_interleaved_tokens(test_client, mock_agent) -> None:
+    QUESTION = "Run branches."
+    events = [
+        (
+            ("tools:branch-a",),
+            "messages",
+            (
+                AIMessageChunk(content="A", id="chunk-a"),
+                {"tags": [], "langgraph_path": ["tools:branch-a"]},
+            ),
+        ),
+        (
+            ("tools:branch-b",),
+            "messages",
+            (
+                AIMessageChunk(content="B", id="chunk-b"),
+                {"tags": [], "langgraph_path": ["tools:branch-b"]},
+            ),
+        ),
+    ]
+
+    async def mock_astream(**kwargs):
+        for event in events:
+            yield event
+
+    mock_agent.astream = mock_astream
+
+    with test_client.stream(
+        "POST", "/stream", json={"message": QUESTION, "stream_tokens": True}
+    ) as response:
+        assert response.status_code == 200
+        messages = []
+        for line in response.iter_lines():
+            if line and line.strip() != "data: [DONE]":
+                messages.append(json.loads(line.lstrip("data: ")))
+
+        token_events = [msg for msg in messages if msg["type"] == "token"]
+        assert len(token_events) == 2
+        assert token_events[0]["content"] == "A"
+        assert token_events[0]["branch_id"] == "tools:branch-a"
+        assert token_events[0]["message_id"] == "chunk-a"
+        assert token_events[1]["content"] == "B"
+        assert token_events[1]["branch_id"] == "tools:branch-b"
+        assert token_events[1]["message_id"] == "chunk-b"
 
 
 @pytest.mark.asyncio

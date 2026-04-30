@@ -14,6 +14,7 @@ from langgraph.prebuilt import ToolNode
 
 from agents.tools import projects_search, resume_search
 from core import get_model, settings
+from service.utils import normalize_messages_for_replay
 
 
 class AgentState(MessagesState, total=False):
@@ -55,7 +56,8 @@ instructions = f"""
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
     bound_model = model.bind_tools(tools)
     preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)] + state["messages"],
+        lambda state: [SystemMessage(content=instructions)]
+        + normalize_messages_for_replay(state["messages"]),
         name="StateModifier",
     )
     return preprocessor | bound_model  # type: ignore[return-value]

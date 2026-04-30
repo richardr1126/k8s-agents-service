@@ -1,6 +1,7 @@
 import json
 import os
 from collections.abc import AsyncGenerator, Generator
+from enum import Enum, auto
 from typing import Any
 
 import httpx
@@ -16,8 +17,21 @@ from schema import (
 )
 
 
+class _StreamSignal(Enum):
+    DONE = auto()
+
+
 class AgentClientError(Exception):
     pass
+
+
+def _format_stream_error_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content
+    try:
+        return json.dumps(content, ensure_ascii=False)
+    except Exception:
+        return str(content)
 
 
 class AgentClient:
@@ -174,12 +188,12 @@ class AgentClient:
 
         return ChatMessage.model_validate(response.json())
 
-    def _parse_stream_line(self, line: str) -> ChatMessage | str | None:
+    def _parse_stream_line(self, line: str) -> ChatMessage | str | _StreamSignal | None:
         line = line.strip()
         if line.startswith("data: "):
             data = line[6:]
             if data == "[DONE]":
-                return None
+                return _StreamSignal.DONE
             try:
                 parsed = json.loads(data)
             except Exception as e:
@@ -195,8 +209,15 @@ class AgentClient:
                     # Yield the str token directly
                     return parsed["content"]
                 case "error":
-                    error_msg = "Error: " + parsed["content"]
+                    error_msg = "Error: " + _format_stream_error_content(parsed.get("content"))
                     return ChatMessage(type="ai", content=error_msg)
+                case "reasoning":
+                    reasoning = parsed.get("content")
+                    if not isinstance(reasoning, str) or reasoning == "":
+                        return None
+                    return ChatMessage(type="ai", content="", reasoning_content=[reasoning])
+                case _:
+                    return None
         return None
 
     def stream(
@@ -250,8 +271,10 @@ class AgentClient:
                 for line in response.iter_lines():
                     if line.strip():
                         parsed = self._parse_stream_line(line)
-                        if parsed is None:
+                        if parsed is _StreamSignal.DONE:
                             break
+                        if parsed is None:
+                            continue
                         yield parsed
         except httpx.HTTPError as e:
             raise AgentClientError(f"Error: {e}")
@@ -308,8 +331,10 @@ class AgentClient:
                     async for line in response.aiter_lines():
                         if line.strip():
                             parsed = self._parse_stream_line(line)
-                            if parsed is None:
+                            if parsed is _StreamSignal.DONE:
                                 break
+                            if parsed is None:
+                                continue
                             yield parsed
             except httpx.HTTPError as e:
                 raise AgentClientError(f"Error: {e}")

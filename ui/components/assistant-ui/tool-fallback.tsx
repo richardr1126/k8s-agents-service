@@ -2,10 +2,10 @@ import { ToolCallContentPartComponent } from "@assistant-ui/react";
 import { ChevronDownIcon, ChevronUpIcon, WrenchIcon, SearchIcon, CalculatorIcon, CloudIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../ui/button";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { MarkdownString } from "./markdown-string";
 import { TransferToolFallback } from "../transfer-tool-ui";
 import { cn } from "@/lib/utils";
+import { Spinner } from "../ui/spinner";
 
 const getToolIcon = (toolName: string) => {
   const name = toolName.toLowerCase();
@@ -45,9 +45,11 @@ const getToolDisplayName = (toolName: string) => {
 export const ToolFallback: ToolCallContentPartComponent = (props) => {
   const { toolName, argsText, result } = props;
   const [isCollapsed, setIsCollapsed] = useState(true);
-  
-  // Check if this is a transfer tool and use the custom component
-  if (toolName.startsWith("call_")) {
+  const hasDetails = Boolean(argsText || result !== undefined);
+  const isLoading = result === undefined;
+
+  // Main-agent dispatch tool uses a dedicated transfer card.
+  if (toolName === "task") {
     return <TransferToolFallback {...props} />;
   }
   
@@ -60,30 +62,39 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
 
   return (
     <div className={cn(
-      "w-full overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-background via-background to-muted/20 shadow-sm",
+      "w-full overflow-hidden rounded-lg border border-border/50 bg-gradient-to-br from-background via-background to-muted/20 shadow-sm",
       "border-l-4",
       getToolBorderColor(toolName)
     )}>
-      <div className="flex items-center gap-3 bg-muted/30 px-4 py-3 border-b border-border/30">
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+      <div className={cn(
+        "flex items-center gap-2 bg-muted/30 px-3",
+        isCollapsed ? "py-2" : "py-3 border-b border-border/30"
+      )}>
+        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
           {getToolIcon(toolName)}
         </div>
         
         <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-medium text-foreground truncate">
+          <h4 className="truncate text-sm font-medium text-foreground">
             {getToolDisplayName(toolName)}
           </h4>
-          <p className="text-sm text-muted-foreground mt-1">
-            ReAct agentic tool execution {result !== undefined ? 'completed' : 'in progress'}
-          </p>
+          {!isCollapsed && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              ReAct agentic tool execution {result !== undefined ? 'completed' : 'in progress'}
+            </p>
+          )}
         </div>
-        
-        {(argsText || result !== undefined) && (
+
+        {isLoading ? (
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center">
+            <Spinner className="text-muted-foreground" />
+          </div>
+        ) : hasDetails ? (
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="h-8 w-8 p-0 hover:bg-muted/50"
+            className="h-7 w-7 p-0 hover:bg-muted/50"
           >
             {isCollapsed ? (
               <ChevronDownIcon className="h-4 w-4" />
@@ -91,10 +102,10 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
               <ChevronUpIcon className="h-4 w-4" />
             )}
           </Button>
-        )}
+        ) : null}
       </div>
       
-      {!isCollapsed && (argsText || result !== undefined) && (
+      {!isCollapsed && hasDetails && (
         <div className="divide-y divide-border/30">
           {argsText && (
             <div className="p-4">
@@ -115,35 +126,7 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
                 Result
               </p>
               <div className="rounded-lg bg-muted/50 p-3 max-h-96 overflow-y-auto">
-                <div className="prose prose-sm max-w-none dark:prose-invert prose-pre:bg-background prose-pre:border prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
-                  <ReactMarkdown 
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      pre: ({ children, ...props }) => (
-                        <pre {...props} className="bg-background border rounded p-3 overflow-x-auto">
-                          {children}
-                        </pre>
-                      ),
-                      code: ({ children, className, ...props }) => {
-                        const isInline = !className;
-                        return (
-                          <code
-                            className={`${
-                              isInline 
-                                ? "bg-muted px-1 py-0.5 rounded text-sm" 
-                                : "block"
-                            } font-mono`}
-                            {...props}
-                          >
-                            {children}
-                          </code>
-                        );
-                      },
-                    }}
-                  >
-                    {formatResult(result)}
-                  </ReactMarkdown>
-                </div>
+                <MarkdownString>{formatResult(result)}</MarkdownString>
               </div>
             </div>
           )}
