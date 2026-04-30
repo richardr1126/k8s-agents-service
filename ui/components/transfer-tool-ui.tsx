@@ -15,6 +15,7 @@ import { Spinner } from "./ui/spinner";
 import { MarkdownString } from "./assistant-ui/markdown-string";
 import { cn } from "@/lib/utils";
 import { useThreadContext } from "@/components/custom-runtime-provider";
+import { useContainerBreakpoint } from "@/hooks/use-container-breakpoint";
 
 const SUBAGENT_TYPE_TO_AGENT: Record<string, string> = {
   resume: "resume-agent",
@@ -92,6 +93,7 @@ export const TransferToolFallback: ToolCallContentPartComponent = ({
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(true);
   const { openSubAgentBranch, resolveTaskBranchId, canOpenTaskBranch } = useThreadContext();
+  const { containerRef, isNarrow } = useContainerBreakpoint<HTMLDivElement>(560);
 
   const { subagentType, description: taskDescription } = parseTaskArgs(argsText);
   const agentName = subagentType
@@ -106,77 +108,123 @@ export const TransferToolFallback: ToolCallContentPartComponent = ({
 
   return (
     <div
+      ref={containerRef}
       className={cn(
-        "w-full overflow-hidden rounded-xl border border-border/50 bg-gradient-to-br from-background via-background to-muted/20 shadow-sm",
+        "w-full overflow-hidden rounded-lg border border-border/50 bg-gradient-to-br from-background via-background to-muted/20 shadow-sm",
         "border-l-4 border-l-purple-500",
       )}
     >
       <div
         className={cn(
-          "flex items-center gap-3 bg-muted/30 px-4",
-          isCollapsed ? "py-3" : "py-3 border-b border-border/30",
+          "flex flex-col gap-1 bg-muted/30 px-2.5 sm:px-3",
+          isCollapsed ? "py-1.5" : "border-b border-border/30 py-1.5",
         )}
       >
-        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
-          {getAgentIcon(agentName)}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-medium text-foreground truncate">
-            Transferred to {getAgentDisplayName(agentName)}
-          </h4>
-
-          <p className="text-sm text-muted-foreground mt-1">
-            {description}
-          </p>
-        </div>
-
-        {branchId ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => openSubAgentBranch(branchId)}
-            className="h-7 px-2 text-xs hover:bg-muted/50"
-            disabled={!canOpenBranch}
-            title="Show sub-agent stream"
-            aria-label="Open sub-agent stream"
-          >
-            <ArrowRightIcon className="h-4 w-4 text-muted-foreground mr-1" />
-            Show sub-agent
-          </Button>
-        ) : (
-          <ArrowRightIcon className="h-4 w-4 text-muted-foreground" />
-        )}
-
-        {canExpandDetails ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="h-7 w-7 p-0 hover:bg-muted/50"
-          >
-            {isCollapsed ? (
-              <ChevronDownIcon className="h-4 w-4" />
-            ) : (
-              <ChevronUpIcon className="h-4 w-4" />
-            )}
-          </Button>
-        ) : (
-          <div className="flex h-7 w-7 items-center justify-center">
-            <Spinner className="text-muted-foreground" />
+        <div className={cn("flex min-w-0 gap-2", isNarrow ? "items-start" : "items-center")}>
+          <div className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10",
+            isNarrow ? "mt-0.5" : "mt-0",
+          )}>
+            {getAgentIcon(agentName)}
           </div>
-        )}
+
+          <div className="min-w-0 flex-1">
+            <h4 className="text-sm font-medium text-foreground break-words sm:truncate">
+              Transferred to {getAgentDisplayName(agentName)}
+            </h4>
+
+            <p className="mt-0 text-xs leading-tight text-muted-foreground break-words">
+              {description}
+            </p>
+          </div>
+
+          <div className={cn("shrink-0 items-center gap-0.5", isNarrow ? "hidden" : "flex")}>
+            {branchId && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => openSubAgentBranch(branchId)}
+                className="h-5 justify-center px-1.5 text-[11px] hover:bg-muted/50"
+                disabled={!canOpenBranch}
+                title="Show sub-agent stream"
+                aria-label="Open sub-agent stream"
+              >
+                <ArrowRightIcon className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                Show sub-agent
+              </Button>
+            )}
+
+            {canExpandDetails ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsCollapsed(!isCollapsed)}
+                className="h-5 w-5 p-0 hover:bg-muted/50"
+              >
+                {isCollapsed ? (
+                  <ChevronDownIcon className="h-3.5 w-3.5" />
+                ) : (
+                  <ChevronUpIcon className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            ) : (
+              <div className="flex h-5 w-5 items-center justify-center">
+                <Spinner className="text-muted-foreground" />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={cn(
+          "mt-0 w-full items-center justify-end gap-0.5",
+          isNarrow ? "flex" : "hidden",
+        )}>
+          {branchId && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => openSubAgentBranch(branchId)}
+              className="h-5 flex-1 justify-center px-1.5 text-[11px] hover:bg-muted/50"
+              disabled={!canOpenBranch}
+              title="Show sub-agent stream"
+              aria-label="Open sub-agent stream"
+            >
+              <ArrowRightIcon className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              Show sub-agent
+            </Button>
+          )}
+
+          {canExpandDetails ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="h-5 w-5 p-0 hover:bg-muted/50"
+            >
+              {isCollapsed ? (
+                <ChevronDownIcon className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronUpIcon className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          ) : (
+            <div className="flex h-5 w-5 items-center justify-center">
+              <Spinner className="text-muted-foreground" />
+            </div>
+          )}
+        </div>
+
       </div>
 
       {!isCollapsed && canExpandDetails && (
         <div className="divide-y divide-border/30">
           {argsText && (
-            <div className="p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="p-3">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Arguments
               </p>
-              <div className="rounded-lg bg-muted/50 p-3">
-                <pre className="text-sm text-muted-foreground overflow-x-auto whitespace-pre-wrap font-mono">
+              <div className="rounded-md bg-muted/50 p-2.5">
+                <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-muted-foreground">
                   {argsText}
                 </pre>
               </div>
@@ -184,11 +232,11 @@ export const TransferToolFallback: ToolCallContentPartComponent = ({
           )}
 
           {result !== undefined && (
-            <div className="p-4">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="p-3">
+              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Sub-agent Final Message
               </p>
-              <div className="rounded-lg bg-muted/50 p-3 max-h-96 overflow-y-auto">
+              <div className="max-h-72 overflow-y-auto rounded-md bg-muted/50 p-2.5">
                 <MarkdownString>{formatResult(result)}</MarkdownString>
               </div>
             </div>
