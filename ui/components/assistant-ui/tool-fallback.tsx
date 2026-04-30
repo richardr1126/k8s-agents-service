@@ -79,6 +79,8 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
   const isLoading = result === undefined;
   const searchQuery = isSearchTool(toolName) ? extractSearchQuery(argsText) : null;
   const { containerRef, isNarrow } = useContainerBreakpoint<HTMLDivElement>(560);
+  const hasSecondaryHeaderLine = Boolean(searchQuery || (!searchQuery && !isCollapsed));
+  const useTopAlignedHeader = isNarrow && hasSecondaryHeaderLine;
 
   // Main-agent dispatch tool uses a dedicated transfer card.
   if (toolName === "task") {
@@ -102,10 +104,10 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
         "bg-muted/30 px-2.5",
         isCollapsed ? "py-1.5" : "border-b border-border/30 py-1.5"
       )}>
-        <div className={cn("flex min-w-0 gap-1.5", isNarrow ? "items-start" : "items-center")}>
+        <div className={cn("flex min-w-0 gap-1.5", useTopAlignedHeader ? "items-start" : "items-center")}>
           <div className={cn(
             "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10",
-            isNarrow ? "mt-0.5" : "mt-0",
+            useTopAlignedHeader ? "mt-0.5" : "mt-0",
           )}>
             {getToolIcon(toolName)}
           </div>
