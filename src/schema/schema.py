@@ -50,7 +50,6 @@ class UserInput(BaseModel):
         default=OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
         examples=[
             OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
-            OpenRouterModelName.GLM_5,
         ],
     )
     thread_id: str | None = Field(
@@ -119,6 +118,10 @@ class ChatMessage(BaseModel):
     response_metadata: dict[str, Any] = Field(
         description="Response metadata. For example: response headers, logprobs, token counts.",
         default={},
+    )
+    reasoning_content: list[str] = Field(
+        description="Reasoning/thinking snippets extracted from the provider response.",
+        default=[],
     )
     custom_data: dict[str, Any] = Field(
         description="Custom message data.",

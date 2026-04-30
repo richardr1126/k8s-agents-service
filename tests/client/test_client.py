@@ -193,15 +193,19 @@ async def test_astream(agent_client):
             yield event
 
     # Mock the streaming response
-    mock_response = AsyncMock()
+    mock_response = Mock()
     mock_response.status_code = 200
     mock_response.request = Request("POST", "http://test/stream")
     mock_response.aiter_lines = Mock(return_value=async_events())
-    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_response.raise_for_status = Mock()
+    mock_response_ctx = AsyncMock()
+    mock_response_ctx.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_response_ctx.__aexit__ = AsyncMock(return_value=None)
 
     mock_client = AsyncMock()
-    mock_client.__aenter__.return_value = mock_client
-    mock_client.stream = Mock(return_value=mock_response)
+    mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+    mock_client.__aexit__ = AsyncMock(return_value=None)
+    mock_client.stream = Mock(return_value=mock_response_ctx)
 
     with patch("httpx.AsyncClient", return_value=mock_client):
         # Collect all streamed responses
@@ -224,10 +228,11 @@ async def test_astream(agent_client):
     error_response = Response(
         500, text="Internal Server Error", request=Request("POST", "http://test/stream")
     )
-    error_response_mock = AsyncMock()
-    error_response_mock.__aenter__ = AsyncMock(return_value=error_response)
+    error_response_ctx = AsyncMock()
+    error_response_ctx.__aenter__ = AsyncMock(return_value=error_response)
+    error_response_ctx.__aexit__ = AsyncMock(return_value=None)
 
-    mock_client.stream.return_value = error_response_mock
+    mock_client.stream.return_value = error_response_ctx
 
     with patch("httpx.AsyncClient", return_value=mock_client):
         with pytest.raises(AgentClientError) as exc:
@@ -332,3 +337,51 @@ def test_info(agent_client):
     with pytest.raises(AgentClientError) as exc:
         agent_client.invoke("test")
     assert "No agent selected. Use update_agent() to select an agent." in str(exc.value)
+
+
+def test_parse_stream_line_reasoning_event() -> None:
+    client = AgentClient(get_info=False)
+    parsed = client._parse_stream_line(
+        'data: {"type":"reasoning","content":"Plan before action."}'
+    )
+
+    assert isinstance(parsed, ChatMessage)
+    assert parsed.type == "ai"
+    assert parsed.content == ""
+    assert parsed.reasoning_content == ["Plan before action."]
+
+
+def test_parse_stream_line_reasoning_event_preserves_space_token() -> None:
+    client = AgentClient(get_info=False)
+    parsed = client._parse_stream_line('data: {"type":"reasoning","content":" "}')
+
+    assert isinstance(parsed, ChatMessage)
+    assert parsed.type == "ai"
+    assert parsed.content == ""
+    assert parsed.reasoning_content == [" "]
+
+
+def test_parse_stream_line_unknown_event_is_ignored() -> None:
+    client = AgentClient(get_info=False)
+    parsed = client._parse_stream_line('data: {"type":"tool_call","content":{"id":"x"}}')
+    assert parsed is None
+
+
+def test_parse_stream_line_error_event_string_payload() -> None:
+    client = AgentClient(get_info=False)
+    parsed = client._parse_stream_line('data: {"type":"error","content":"Internal server error"}')
+
+    assert isinstance(parsed, ChatMessage)
+    assert parsed.type == "ai"
+    assert parsed.content == "Error: Internal server error"
+
+
+def test_parse_stream_line_error_event_object_payload() -> None:
+    client = AgentClient(get_info=False)
+    parsed = client._parse_stream_line(
+        'data: {"type":"error","content":{"type":"ValueError","message":"boom"}}'
+    )
+
+    assert isinstance(parsed, ChatMessage)
+    assert parsed.type == "ai"
+    assert parsed.content == 'Error: {"type": "ValueError", "message": "boom"}'

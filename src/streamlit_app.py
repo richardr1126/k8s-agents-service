@@ -1,4 +1,5 @@
 import asyncio
+import difflib
 import os
 import urllib.parse
 import uuid
@@ -26,6 +27,76 @@ from schema.task_data import TaskData, TaskDataStatus
 APP_TITLE = "Agent Service Toolkit"
 APP_ICON = "🧰"
 USER_ID_COOKIE = "user_id"
+
+
+def append_streamed_reasoning(current: str, chunk: str) -> str:
+    """Append streamed reasoning while handling partial overlap and snapshot updates."""
+    if chunk == "":
+        return current
+    if not current:
+        return chunk
+    if chunk == current:
+        return current
+    if chunk.startswith(current):
+        return chunk
+    if current.startswith(chunk):
+        return current
+
+    normalized_current = " ".join(current.split())
+    normalized_chunk = " ".join(chunk.split())
+    if normalized_current and normalized_chunk:
+        if normalized_chunk == normalized_current:
+            return current
+        if normalized_chunk.startswith(normalized_current):
+            return chunk
+        if normalized_current.startswith(normalized_chunk):
+            return current
+        if len(normalized_current) >= 40 and len(normalized_chunk) >= 40:
+            shared_prefix = 0
+            for left, right in zip(normalized_current, normalized_chunk):
+                if left != right:
+                    break
+                shared_prefix += 1
+            similarity = difflib.SequenceMatcher(None, normalized_current, normalized_chunk).ratio()
+            if (
+                shared_prefix >= 24
+                and similarity >= 0.82
+                and len(normalized_chunk) >= int(len(normalized_current) * 0.9)
+            ):
+                return chunk
+
+    overlap = 0
+    max_overlap = min(len(current), len(chunk))
+    for size in range(max_overlap, 1, -1):
+        if current[-size:] == chunk[:size]:
+            overlap = size
+            break
+    if overlap:
+        tail = chunk[overlap:]
+        if not tail:
+            return current
+        return f"{current}{tail}"
+
+    return f"{current}{chunk}"
+
+
+def combine_reasoning_chunks(reasoning_content: list[str]) -> str:
+    """Merge multiple reasoning chunks into one display block."""
+    merged = ""
+    for chunk in reasoning_content:
+        merged = append_streamed_reasoning(merged, chunk)
+    return merged
+
+
+def render_reasoning_dropdowns(reasoning_content: list[str], expanded: bool = False) -> None:
+    """Render model reasoning/thinking blocks in collapsible sections."""
+    if not reasoning_content:
+        return
+    merged_reasoning = combine_reasoning_chunks(reasoning_content)
+    if not merged_reasoning:
+        return
+    with st.expander("Thinking", expanded=expanded):
+        st.write(merged_reasoning)
 
 
 def get_or_create_user_id() -> str:
@@ -108,6 +179,9 @@ async def main() -> None:
                 messages = []
         st.session_state.messages = messages
         st.session_state.thread_id = thread_id
+    if "expand_reasoning" not in st.session_state:
+        st.session_state.expand_reasoning = False
+    expand_reasoning = bool(st.session_state.get("expand_reasoning", False))
 
     # Config options
     with st.sidebar:
@@ -143,6 +217,10 @@ async def main() -> None:
             # Store the selected agent in session state for use in welcome message
             st.session_state.current_agent = selected_agent
             use_streaming = st.toggle("Stream results", value=True)
+            expand_reasoning = st.toggle(
+                "Expand thinking by default",
+                key="expand_reasoning",
+            )
 
             # Display user ID (for debugging or user information)
             st.text_input("User ID (read-only)", value=user_id, disabled=True)
@@ -207,7 +285,7 @@ async def main() -> None:
         for m in messages:
             yield m
 
-    await draw_messages(amessage_iter())
+    await draw_messages(amessage_iter(), expand_reasoning=expand_reasoning)
 
     # Generate new message if the user provided new input
     if user_input := st.chat_input():
@@ -221,7 +299,7 @@ async def main() -> None:
                     thread_id=st.session_state.thread_id,
                     user_id=user_id,
                 )
-                await draw_messages(stream, is_new=True)
+                await draw_messages(stream, is_new=True, expand_reasoning=expand_reasoning)
             else:
                 response = await agent_client.ainvoke(
                     message=user_input,
@@ -230,7 +308,13 @@ async def main() -> None:
                     user_id=user_id,
                 )
                 messages.append(response)
-                st.chat_message("ai").write(response.content)
+                with st.chat_message("ai"):
+                    if response.reasoning_content:
+                        render_reasoning_dropdowns(
+                            response.reasoning_content,
+                            expanded=expand_reasoning,
+                        )
+                    st.write(response.content)
             st.rerun()  # Clear stale containers
         except AgentClientError as e:
             st.error(f"Error generating response: {e}")
@@ -245,6 +329,7 @@ async def main() -> None:
 async def draw_messages(
     messages_agen: AsyncGenerator[ChatMessage | str, None],
     is_new: bool = False,
+    expand_reasoning: bool = False,
 ) -> None:
     """
     Draws a set of chat messages - either replaying existing messages
@@ -268,14 +353,27 @@ async def draw_messages(
     last_message_type = None
     st.session_state.last_message = None
 
-    # Placeholder for intermediate streaming tokens
+    # Placeholders for streaming tokens and thinking text.
     streaming_content = ""
     streaming_placeholder = None
+    waiting_placeholder = None
+    active_reasoning_text = ""
+    active_reasoning_placeholder = None
+
+    if is_new:
+        last_message_type = "ai"
+        st.session_state.last_message = st.chat_message("ai")
+        with st.session_state.last_message:
+            waiting_placeholder = st.empty()
+            waiting_placeholder.markdown("_Thinking..._")
 
     # Iterate over the messages and draw them
     while msg := await anext(messages_agen, None):
         # str message represents an intermediate token being streamed
         if isinstance(msg, str):
+            if waiting_placeholder:
+                waiting_placeholder.empty()
+                waiting_placeholder = None
             # If placeholder is empty, this is the first token of a new message
             # being streamed. We need to do setup.
             if not streaming_placeholder:
@@ -302,6 +400,29 @@ async def draw_messages(
             # A message from the agent is the most complex case, since we need to
             # handle streaming tokens and tool calls.
             case "ai":
+                is_reasoning_only_stream_event = (
+                    is_new and bool(msg.reasoning_content) and not msg.content and not msg.tool_calls
+                )
+
+                if is_reasoning_only_stream_event:
+                    if last_message_type != "ai":
+                        last_message_type = "ai"
+                        st.session_state.last_message = st.chat_message("ai")
+                    with st.session_state.last_message:
+                        if waiting_placeholder:
+                            waiting_placeholder.empty()
+                            waiting_placeholder = None
+                        if not active_reasoning_placeholder:
+                            with st.expander("Thinking", expanded=expand_reasoning):
+                                active_reasoning_placeholder = st.empty()
+                            active_reasoning_text = ""
+                        for chunk in msg.reasoning_content:
+                            active_reasoning_text = append_streamed_reasoning(
+                                active_reasoning_text, chunk
+                            )
+                        active_reasoning_placeholder.write(active_reasoning_text)
+                    continue
+
                 # If we're rendering new messages, store the message in session state
                 if is_new:
                     st.session_state.messages.append(msg)
@@ -312,6 +433,23 @@ async def draw_messages(
                     st.session_state.last_message = st.chat_message("ai")
 
                 with st.session_state.last_message:
+                    if waiting_placeholder and (msg.reasoning_content or msg.content or msg.tool_calls):
+                        waiting_placeholder.empty()
+                        waiting_placeholder = None
+
+                    if msg.reasoning_content:
+                        if active_reasoning_placeholder:
+                            for chunk in msg.reasoning_content:
+                                active_reasoning_text = append_streamed_reasoning(
+                                    active_reasoning_text, chunk
+                                )
+                            active_reasoning_placeholder.write(active_reasoning_text)
+                        else:
+                            render_reasoning_dropdowns(
+                                msg.reasoning_content,
+                                expanded=expand_reasoning,
+                            )
+
                     # If the message has content, write it out.
                     # Reset the streaming variables to prepare for the next message.
                     if msg.content:
@@ -323,6 +461,9 @@ async def draw_messages(
                             st.write(msg.content)
 
                     if msg.tool_calls:
+                        if active_reasoning_placeholder and msg.content:
+                            active_reasoning_placeholder = None
+                            active_reasoning_text = ""
                         # Create a status container for each tool call and store the
                         # status container by ID to ensure results are mapped to the
                         # correct status container.

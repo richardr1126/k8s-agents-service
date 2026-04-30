@@ -260,6 +260,9 @@ GITHUB_PAT=your-github-token-for-container-registry
 
 # MCP Configuration (for database analysis agent)
 POSTGRES_MCP_URL=http://host.docker.internal:8000/sse
+
+# Temporary branch-aware stream debug logging (set to true only while debugging)
+PARALLEL_BRANCH_DEBUG=false
 ```
 
 #### Quick Deploy with Helm

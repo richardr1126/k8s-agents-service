@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from agents.bg_task_agent.task import Task
 from agents.tools import create_pgvector_instance, web_vector_search
 from core import get_model, settings
+from service.utils import normalize_messages_for_replay
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -396,7 +397,9 @@ async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRa
     
     # Include conversation history like in the RAG assistant
     # Prepend the system prompt to the existing conversation
-    messages = [SystemMessage(content=system_prompt)] + state["messages"]
+    messages = [SystemMessage(content=system_prompt)] + normalize_messages_for_replay(
+        state["messages"]
+    )
     
     response = await model.ainvoke(messages, config)
     

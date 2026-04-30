@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolCall, ToolMessage
 
-from service.utils import langchain_to_chat_message
+from service.utils import extract_reasoning_from_payload, langchain_to_chat_message
 
 
 def test_messages_from_langchain() -> None:
@@ -42,3 +42,42 @@ def test_messages_tool_calls() -> None:
     assert ai_message.tool_calls[0]["id"] == "call_Jja7"
     assert ai_message.tool_calls[0]["name"] == "test_tool"
     assert ai_message.tool_calls[0]["args"] == {"x": 1, "y": 2}
+
+
+def test_langchain_to_chat_message_extracts_reasoning_from_content() -> None:
+    message = AIMessage(
+        content=[
+            {
+                "type": "reasoning",
+                "text": "Need a quick plan.",
+            }
+        ]
+    )
+
+    chat_message = langchain_to_chat_message(message)
+
+    assert chat_message.reasoning_content == ["Need a quick plan."]
+
+
+def test_langchain_to_chat_message_extracts_reasoning_from_additional_kwargs() -> None:
+    message = AIMessage(content="", additional_kwargs={"reasoning_content": "First think, then answer."})
+
+    chat_message = langchain_to_chat_message(message)
+
+    assert chat_message.reasoning_content == ["First think, then answer."]
+
+
+def test_extract_reasoning_from_payload_handles_nested_summary_blocks() -> None:
+    payload = {
+        "type": "reasoning",
+        "summary": [{"type": "summary_text", "text": "Inspect the repo first."}],
+    }
+    assert extract_reasoning_from_payload(payload) == ["Inspect the repo first."]
+
+
+def test_extract_reasoning_from_payload_preserves_whitespace() -> None:
+    payload = {
+        "type": "reasoning",
+        "text": " Need a plan ",
+    }
+    assert extract_reasoning_from_payload(payload) == [" Need a plan "]

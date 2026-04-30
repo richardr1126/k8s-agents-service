@@ -80,15 +80,11 @@ class OllamaModelName(StrEnum):
 class OpenRouterModelName(StrEnum):
     """https://openrouter.ai/models"""
 
+    KIMI_K26 = "moonshotai/kimi-k2.6"
     GEMINI_25_FLASH = "google/gemini-2.5-flash"
-    GEMINI_25_FLASH_LITE = "google/gemini-2.5-flash-lite"
     GEMINI_31_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview"
-    GEMINI_31_PRO_PREVIEW = "google/gemini-3.1-pro-preview"
-    CLAUDE_SONNET_46 = "anthropic/claude-sonnet-4.6"
-    GPT_OSS = "openai/gpt-oss-120b"
-    GPT_OSS_20B = "openai/gpt-oss-20b"
-    GPT_54 = "openai/gpt-5.4"
-    GLM_5 = "z-ai/glm-5"
+    CLAUDE_HAIKU_45 = "anthropic/claude-haiku-4.5"
+    GPT_54_MINI = "openai/gpt-5.4-mini"
 
 class OpenAICompatibleName(StrEnum):
     """https://platform.openai.com/docs/guides/text-generation"""

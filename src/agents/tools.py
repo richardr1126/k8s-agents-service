@@ -1,6 +1,7 @@
 import logging
 import math
 import re
+import asyncio
 from typing import Any
 
 import numexpr
@@ -81,7 +82,7 @@ def build_keyword_filter(query: str, collection_type: str) -> dict[str, Any]:
     Uses simple keyword matching as recommended for enterprise RAG systems.
     More reliable than LLM-based metadata extraction.
     """
-    filter_dict: dict[str, Any] = {}
+    conditions: list[dict[str, Any]] = []
     query_lower = query.lower()
     
     if collection_type == "projects":
@@ -121,40 +122,42 @@ def build_keyword_filter(query: str, collection_type: str) -> dict[str, Any]:
                 matching_tags.append(tag)
         
         if matching_tags:
-            # Use $like operator to search within JSON arrays
-            # This works by treating the JSON array as a string and searching for the tag value
-            tag_filters = []
-            for tag in matching_tags:
-                tag_filters.append({"tags": {"$like": f"%{tag}%"}})
-            
-            # If multiple tags, use $or to match any of them
+            # Use $like operator to search within JSON arrays.
+            # This works by treating the JSON array as a string and searching for the tag value.
+            tag_filters = [{"tags": {"$like": f"%{tag}%"}} for tag in matching_tags]
+
+            # A multi-tag condition becomes a single $or condition.
             if len(tag_filters) == 1:
-                filter_dict.update(tag_filters[0])
+                conditions.append(tag_filters[0])
             else:
-                filter_dict["$or"] = tag_filters
+                conditions.append({"$or": tag_filters})
         
         # Content type filtering
         if "readme" in query_lower or "documentation" in query_lower or "detailed" in query_lower:
-            filter_dict["content_type"] = {"$eq": "readme"}
+            conditions.append({"content_type": {"$eq": "readme"}})
         elif "description" in query_lower or "summary" in query_lower or "overview" in query_lower:
-            filter_dict["content_type"] = {"$eq": "description"}
+            conditions.append({"content_type": {"$eq": "description"}})
     
     elif collection_type == "resume":
         # Section-based filtering for resume
         if any(keyword in query_lower for keyword in ["work", "experience", "job", "employment", "career"]):
-            filter_dict["section"] = {"$eq": "Work Experience"}
+            conditions.append({"section": {"$eq": "Work Experience"}})
         elif any(keyword in query_lower for keyword in ["education", "school", "university", "degree", "colorado", "boulder", "cu"]):
-            filter_dict["section"] = {"$eq": "Education"}
+            conditions.append({"section": {"$eq": "Education"}})
         elif any(keyword in query_lower for keyword in ["skills", "technical", "programming", "languages", "technologies"]):
-            filter_dict["section"] = {"$eq": "Skills"}
+            conditions.append({"section": {"$eq": "Skills"}})
         
         # Source-based filtering
         if "pdf" in query_lower:
-            filter_dict["source"] = {"$like": "%drive.google.com%"}
+            conditions.append({"source": {"$like": "%drive.google.com%"}})
         elif "web" in query_lower or "website" in query_lower:
-            filter_dict["source"] = {"$like": "%richardr.dev%"}
-    
-    return filter_dict
+            conditions.append({"source": {"$like": "%richardr.dev%"}})
+
+    if not conditions:
+        return {}
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"$and": conditions}
 
 
 def get_embeddings():
@@ -165,6 +168,10 @@ def get_embeddings():
         model=settings.OPENROUTER_EMBEDDING_MODEL,
         openai_api_base=settings.OPENROUTER_BASE_URL,
         openai_api_key=settings.OPENROUTER_API_KEY,
+        # OpenRouter compatibility: avoid SDK default base64 path for some providers/models.
+        model_kwargs={"encoding_format": "float"},
+        # Skip tiktoken length pre-processing for non-OpenAI embedding model ids.
+        check_embedding_ctx_length=False,
     )
 
 
@@ -224,8 +231,8 @@ async def web_vector_search(
         else:
             retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
         
-        # Retrieve relevant documents
-        relevant_docs = await retriever.ainvoke(query)
+        # Retrieve relevant documents with retry for transient empty embedding responses.
+        relevant_docs = await _retriever_ainvoke_with_embedding_retry(retriever, query)
 
         # Format the context from retrieved documents using utility function
         context = format_contexts(relevant_docs)
@@ -234,6 +241,30 @@ async def web_vector_search(
         
     except Exception as e:
         raise RuntimeError(f"Error performing web vector search: {str(e)}")
+
+
+def _is_transient_embedding_error(exc: Exception) -> bool:
+    """Return True when the error looks like a transient embedding provider response issue."""
+    msg = str(exc)
+    return "No embedding data received" in msg
+
+
+async def _retriever_ainvoke_with_embedding_retry(retriever: Any, query: str, attempts: int = 3):
+    """Retry retriever calls when embeddings occasionally return empty data."""
+    for attempt in range(1, attempts + 1):
+        try:
+            return await retriever.ainvoke(query)
+        except Exception as exc:
+            if not _is_transient_embedding_error(exc) or attempt >= attempts:
+                raise
+            delay_seconds = 0.25 * (2 ** (attempt - 1))
+            logger.warning(
+                "Transient embedding error during retrieval (attempt %s/%s): %s",
+                attempt,
+                attempts,
+                exc,
+            )
+            await asyncio.sleep(delay_seconds)
 
 
 async def cleanup_temp_collection(collection_name: str) -> bool:
@@ -278,7 +309,7 @@ async def projects_search(query: str) -> str:
         search_kwargs["filter"] = filter_dict
     
     retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = await retriever.ainvoke(query)
+    documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
     context_str = format_contexts(documents)
     return context_str
 
@@ -311,6 +342,6 @@ async def resume_search(query: str) -> str:
         search_kwargs["filter"] = filter_dict
     
     retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = await retriever.ainvoke(query)
+    documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
     context_str = format_contexts(documents)
     return context_str
