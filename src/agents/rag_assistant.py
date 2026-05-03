@@ -1,32 +1,37 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import (
     RunnableConfig,
-    RunnableLambda,
     RunnableSerializable,
 )
-from langgraph.graph import END, MessagesState, StateGraph
-from langgraph.managed import RemainingSteps
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from agents.compaction import CompactionManager
 from agents.tools import projects_search, resume_search
+from agents.tool_loop import (
+    ToolLoopState,
+    pending_tool_calls as pending_tool_calls_helper,
+    run_tool_loop_turn,
+    wrap_tool_loop_model,
+)
 from core import get_model, settings
-from service.utils import normalize_messages_for_replay
 
 
-class AgentState(MessagesState, total=False):
+class AgentState(ToolLoopState, total=False):
     """`total=False` is PEP589 specs.
 
     documentation: https://typing.readthedocs.io/en/latest/spec/typeddict.html#totality
     """
 
-    remaining_steps: RemainingSteps
+    pass
 
 
 tools = [projects_search, resume_search]
+_COMPACTION_MANAGER = CompactionManager()
 
 
 current_date = datetime.now().strftime("%B %d, %Y")
@@ -54,31 +59,40 @@ instructions = f"""
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    bound_model = model.bind_tools(tools)
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)]
-        + normalize_messages_for_replay(state["messages"]),
-        name="StateModifier",
+    return _wrap_model(model, bind_tools=True)
+
+
+def _wrap_model(
+    model: BaseChatModel, *, bind_tools: bool
+) -> RunnableSerializable[AgentState, AIMessage]:
+    return cast(
+        RunnableSerializable[AgentState, AIMessage],
+        wrap_tool_loop_model(
+            model,
+            tools=cast(list[Any], tools),
+            prompt=instructions,
+            bind_tools=bind_tools,
+            normalize_replay_messages=True,
+        ),
     )
-    return preprocessor | bound_model  # type: ignore[return-value]
 
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model_runnable = wrap_model(m)
-    response = await model_runnable.ainvoke(state, config)
+    model_runnable = _wrap_model(m, bind_tools=True)
+    model_runnable_no_tools = _wrap_model(m, bind_tools=False)
 
-    if state["remaining_steps"] < 10 and response.tool_calls:
-        return {
-            "messages": [
-                AIMessage(
-                    id=response.id,
-                    content="Sorry, need more steps to process this request.",
-                )
-            ]
-        }
-    # We return a list, because this will get added to the existing list
-    return {"messages": [response]}
+    return cast(
+        AgentState,
+        await run_tool_loop_turn(
+            state=state,
+            config=config,
+            summary_model=m,
+            model_runnable_with_tools=model_runnable,
+            model_runnable_without_tools=model_runnable_no_tools,
+            compaction_manager=_COMPACTION_MANAGER,
+        ),
+    )
 
 # Define the graph
 agent = StateGraph(AgentState)
@@ -92,12 +106,7 @@ agent.add_edge("tools", "model")
 
 # After "model", if there are tool calls, run "tools". Otherwise END.
 def pending_tool_calls(state: AgentState) -> Literal["tools", "done"]:
-    last_message = state["messages"][-1]
-    if not isinstance(last_message, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(last_message)}")
-    if last_message.tool_calls:
-        return "tools"
-    return "done"
+    return pending_tool_calls_helper(state)
 
 
 agent.add_conditional_edges("model", pending_tool_calls, {"tools": "tools", "done": END})

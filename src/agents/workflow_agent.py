@@ -1,19 +1,25 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
-from langgraph.graph import END, MessagesState, StateGraph
-from langgraph.managed import RemainingSteps
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from agents.compaction import CompactionManager
+from agents.tool_loop import (
+    ToolLoopState,
+    pending_tool_calls as pending_tool_calls_helper,
+    run_tool_loop_turn,
+    wrap_tool_loop_model,
+)
 from agents.workflow_tools import workflow_tools
 from core import get_model, settings
 
 
-class AgentState(MessagesState, total=False):
-    remaining_steps: RemainingSteps
+class AgentState(ToolLoopState, total=False):
+    pass
 
 
 current_date = datetime.now().strftime("%B %d, %Y")
@@ -41,30 +47,44 @@ Do not invent workflows or arguments that aren't in the capability docs.
 """
 
 
+_COMPACTION_MANAGER = CompactionManager()
+
+
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    bound_model = model.bind_tools(workflow_tools)
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)] + state["messages"],
-        name="StateModifier",
+    return _wrap_model(model, bind_tools=True)
+
+
+def _wrap_model(
+    model: BaseChatModel, *, bind_tools: bool
+) -> RunnableSerializable[AgentState, AIMessage]:
+    return cast(
+        RunnableSerializable[AgentState, AIMessage],
+        wrap_tool_loop_model(
+            model,
+            tools=cast(list[Any], workflow_tools),
+            prompt=instructions,
+            bind_tools=bind_tools,
+            normalize_replay_messages=False,
+        ),
     )
-    return preprocessor | bound_model  # type: ignore[return-value]
 
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model_runnable = wrap_model(m)
-    response = await model_runnable.ainvoke(state, config)
+    model_runnable = _wrap_model(m, bind_tools=True)
+    model_runnable_no_tools = _wrap_model(m, bind_tools=False)
 
-    if state["remaining_steps"] < 10 and response.tool_calls:
-        return {
-            "messages": [
-                AIMessage(
-                    id=response.id,
-                    content="Sorry, need more steps to process this request.",
-                )
-            ]
-        }
-    return {"messages": [response]}
+    return cast(
+        AgentState,
+        await run_tool_loop_turn(
+            state=state,
+            config=config,
+            summary_model=m,
+            model_runnable_with_tools=model_runnable,
+            model_runnable_without_tools=model_runnable_no_tools,
+            compaction_manager=_COMPACTION_MANAGER,
+        ),
+    )
 
 
 agent = StateGraph(AgentState)
@@ -75,12 +95,7 @@ agent.add_edge("tools", "model")
 
 
 def pending_tool_calls(state: AgentState) -> Literal["tools", "done"]:
-    last_message = state["messages"][-1]
-    if not isinstance(last_message, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(last_message)}")
-    if last_message.tool_calls:
-        return "tools"
-    return "done"
+    return pending_tool_calls_helper(state)
 
 
 agent.add_conditional_edges("model", pending_tool_calls, {"tools": "tools", "done": END})

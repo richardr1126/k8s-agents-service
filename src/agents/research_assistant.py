@@ -1,28 +1,33 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal, cast
 
 from langchain_community.tools import DuckDuckGoSearchResults, OpenWeatherMapQueryRun
 from langchain_community.utilities import OpenWeatherMapAPIWrapper
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
-from langgraph.graph import END, MessagesState, StateGraph
-from langgraph.managed import RemainingSteps
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from agents.compaction import CompactionManager
 from agents.llama_guard import LlamaGuard, LlamaGuardOutput, SafetyAssessment
 from agents.tools import calculator
+from agents.tool_loop import (
+    ToolLoopState,
+    pending_tool_calls as pending_tool_calls_helper,
+    run_tool_loop_turn,
+    wrap_tool_loop_model,
+)
 from core import get_model, settings
 
 
-class AgentState(MessagesState, total=False):
+class AgentState(ToolLoopState, total=False):
     """`total=False` is PEP589 specs.
 
     documentation: https://typing.readthedocs.io/en/latest/spec/typeddict.html#totality
     """
 
     safety: LlamaGuardOutput
-    remaining_steps: RemainingSteps
 
 
 web_search = DuckDuckGoSearchResults(name="WebSearch")
@@ -35,6 +40,7 @@ if settings.OPENWEATHERMAP_API_KEY:
         openweathermap_api_key=settings.OPENWEATHERMAP_API_KEY.get_secret_value()
     )
     tools.append(OpenWeatherMapQueryRun(name="Weather", api_wrapper=wrapper))
+_COMPACTION_MANAGER = CompactionManager()
 
 current_date = datetime.now().strftime("%B %d, %Y")
 instructions = f"""
@@ -52,12 +58,22 @@ instructions = f"""
 
 
 def wrap_model(model: BaseChatModel) -> RunnableSerializable[AgentState, AIMessage]:
-    bound_model = model.bind_tools(tools)
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)] + state["messages"],
-        name="StateModifier",
+    return _wrap_model(model, bind_tools=True)
+
+
+def _wrap_model(
+    model: BaseChatModel, *, bind_tools: bool
+) -> RunnableSerializable[AgentState, AIMessage]:
+    return cast(
+        RunnableSerializable[AgentState, AIMessage],
+        wrap_tool_loop_model(
+            model,
+            tools=cast(list[Any], tools),
+            prompt=instructions,
+            bind_tools=bind_tools,
+            normalize_replay_messages=False,
+        ),
     )
-    return preprocessor | bound_model  # type: ignore[return-value]
 
 
 def format_safety_message(safety: LlamaGuardOutput) -> AIMessage:
@@ -69,26 +85,24 @@ def format_safety_message(safety: LlamaGuardOutput) -> AIMessage:
 
 async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
     m = get_model(config["configurable"].get("model", settings.DEFAULT_MODEL))
-    model_runnable = wrap_model(m)
-    response = await model_runnable.ainvoke(state, config)
+    model_runnable = _wrap_model(m, bind_tools=True)
+    model_runnable_no_tools = _wrap_model(m, bind_tools=False)
+    tool_loop_update = await run_tool_loop_turn(
+        state=state,
+        config=config,
+        summary_model=m,
+        model_runnable_with_tools=model_runnable,
+        model_runnable_without_tools=model_runnable_no_tools,
+        compaction_manager=_COMPACTION_MANAGER,
+    )
+    final_response = cast(AIMessage, tool_loop_update["messages"][-1])
 
     # Run llama guard check here to avoid returning the message if it's unsafe
     llama_guard = LlamaGuard()
-    safety_output = await llama_guard.ainvoke("Agent", state["messages"] + [response])
+    safety_output = await llama_guard.ainvoke("Agent", state["messages"] + [final_response])
     if safety_output.safety_assessment == SafetyAssessment.UNSAFE:
         return {"messages": [format_safety_message(safety_output)], "safety": safety_output}
-
-    if state["remaining_steps"] < 2 and response.tool_calls:
-        return {
-            "messages": [
-                AIMessage(
-                    id=response.id,
-                    content="Sorry, need more steps to process this request.",
-                )
-            ]
-        }
-    # We return a list, because this will get added to the existing list
-    return {"messages": [response]}
+    return cast(AgentState, tool_loop_update)
 
 
 async def llama_guard_input(state: AgentState, config: RunnableConfig) -> AgentState:
@@ -134,12 +148,7 @@ agent.add_edge("tools", "model")
 
 # After "model", if there are tool calls, run "tools". Otherwise END.
 def pending_tool_calls(state: AgentState) -> Literal["tools", "done"]:
-    last_message = state["messages"][-1]
-    if not isinstance(last_message, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(last_message)}")
-    if last_message.tool_calls:
-        return "tools"
-    return "done"
+    return pending_tool_calls_helper(state)
 
 
 agent.add_conditional_edges("model", pending_tool_calls, {"tools": "tools", "done": END})

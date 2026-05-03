@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     LANGFUSE_SECRET_KEY: SecretStr | None = None
     PARALLEL_BRANCH_DEBUG: bool = False
     DEBUG_TASK_BRANCH_MAP: bool = False
+    AGENT_RECURSION_LIMIT: int = 35
+    AGENT_MIN_REMAINING_STEPS_FOR_TOOL_CALLS: int = 5
+    AGENT_COMPACTION_ENABLED: bool = True
+    AGENT_LOW_STEP_GUARD_ENABLED: bool = True
+    AGENT_COMPACTION_TRIGGER_TOKENS: int = 50_000
+    AGENT_COMPACTION_CHAR_TRIGGER_FALLBACK: int = 100_000
 
     # Database Configuration
     DATABASE_TYPE: DatabaseType = (

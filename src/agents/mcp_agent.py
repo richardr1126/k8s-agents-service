@@ -3,32 +3,36 @@ from datetime import datetime
 from typing import Any, Literal, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage
 from langchain_core.runnables import (
     RunnableConfig,
-    RunnableLambda,
     RunnableSerializable,
 )
 from langchain_core.tools import BaseTool
 from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_mcp_adapters.sessions import StreamableHttpConnection
-from langgraph.graph import END, MessagesState, StateGraph
+from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.managed import RemainingSteps
 from langgraph.prebuilt import ToolNode
 
+from agents.compaction import CompactionManager
 from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.lazy_agent import LazyLoadingAgent
+from agents.tool_loop import (
+    ToolLoopState,
+    pending_tool_calls as pending_tool_calls_helper,
+    run_tool_loop_turn,
+    wrap_tool_loop_model,
+)
 from core import get_model, settings
 from schema.models import AllModelEnum
-from service.utils import normalize_messages_for_replay
 
 logger = logging.getLogger(__name__)
 
 
-class AgentState(MessagesState, total=False):
+class AgentState(ToolLoopState, total=False):
     """State for the MCP agent."""
-    remaining_steps: RemainingSteps
+    pass
 
 
 current_date = datetime.now().strftime("%B %d, %Y")
@@ -76,27 +80,28 @@ instructions = f"""
     """
 
 
+_COMPACTION_MANAGER = CompactionManager()
+
+
 def wrap_model(
-    model: BaseChatModel, tools: list[BaseTool]
+    model: BaseChatModel, tools: list[BaseTool], *, bind_tools: bool = True
 ) -> RunnableSerializable[AgentState, AIMessage]:
     """Wrap model with tools and system instructions."""
-    bound_model = model.bind_tools(tools)
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=instructions)]
-        + normalize_messages_for_replay(state["messages"]),
-        name="StateModifier",
+    return cast(
+        RunnableSerializable[AgentState, AIMessage],
+        wrap_tool_loop_model(
+            model,
+            tools=tools,
+            prompt=instructions,
+            bind_tools=bind_tools,
+            normalize_replay_messages=True,
+        ),
     )
-    return preprocessor | bound_model  # type: ignore[return-value]
 
 
 def pending_tool_calls(state: AgentState) -> Literal["tools", "done"]:
     """Check if there are pending tool calls."""
-    last_message = state["messages"][-1]
-    if not isinstance(last_message, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(last_message)}")
-    if last_message.tool_calls:
-        return "tools"
-    return "done"
+    return pending_tool_calls_helper(state)
 
 
 class PostgresMCPAgent(LazyLoadingAgent):
@@ -137,21 +142,22 @@ class PostgresMCPAgent(LazyLoadingAgent):
     def _create_graph(self, model_name: AllModelEnum) -> CompiledStateGraph:
         """Create graph bound to one model with cached MCP tools."""
         model = get_model(model_name)
-        model_runnable = wrap_model(model, self._mcp_tools)
+        model_runnable = wrap_model(model, self._mcp_tools, bind_tools=True)
+        model_runnable_no_tools = wrap_model(model, self._mcp_tools, bind_tools=False)
         tool_node = ToolNode(self._mcp_tools)
 
         async def acall_model(state: AgentState, config: RunnableConfig) -> AgentState:
-            response = await model_runnable.ainvoke(state, config)
-            if state["remaining_steps"] < 10 and response.tool_calls:
-                return {
-                    "messages": [
-                        AIMessage(
-                            id=response.id,
-                            content="Sorry, need more steps to process this request.",
-                        )
-                    ]
-                }
-            return {"messages": [response]}
+            return cast(
+                AgentState,
+                await run_tool_loop_turn(
+                    state=state,
+                    config=config,
+                    summary_model=model,
+                    model_runnable_with_tools=model_runnable,
+                    model_runnable_without_tools=model_runnable_no_tools,
+                    compaction_manager=_COMPACTION_MANAGER,
+                ),
+            )
 
         async def acall_tools(state: AgentState, config: RunnableConfig) -> AgentState:
             return await tool_node.ainvoke(state, config)
