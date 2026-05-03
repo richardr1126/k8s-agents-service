@@ -13,26 +13,30 @@ from typing import Any, Literal, cast
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, ToolMessage
 from langchain_core.runnables import (
     RunnableConfig,
-    RunnableLambda,
     RunnableSerializable,
 )
 from langchain_core.tools import InjectedToolCallId, tool
-from langgraph.graph import END, MessagesState, StateGraph
-from langgraph.managed import RemainingSteps
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import InjectedState, ToolNode
 from langgraph.types import Command
 from typing_extensions import Annotated
 
+from agents.compaction import CompactionManager
 from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.mcp_agent import mcp_agent
 from agents.rag_assistant import rag_assistant
+from agents.tool_loop import (
+    ToolLoopState,
+    pending_tool_calls as pending_tool_calls_helper,
+    run_tool_loop_turn,
+    wrap_tool_loop_model,
+)
 from agents.web_rag_agent import web_rag_agent
 from core import get_model, settings
 from schema.models import AllModelEnum
-from service.utils import normalize_messages_for_replay
 
 SubAgentType = Literal["resume", "web", "postgres"]
 logger = logging.getLogger(__name__)
@@ -80,8 +84,8 @@ Today's date is {current_date}.
 """
 
 
-class MainAgentState(MessagesState, total=False):
-    remaining_steps: RemainingSteps
+class MainAgentState(ToolLoopState, total=False):
+    pass
 
 
 def _resolve_sub_agent(subagent_type: str) -> Any:
@@ -229,45 +233,44 @@ async def task(
 
 
 _TOOLS = [task]
+_COMPACTION_MANAGER = CompactionManager()
 
 
-def wrap_model(model: BaseChatModel) -> RunnableSerializable[MainAgentState, AIMessage]:
-    bound_model = model.bind_tools(_TOOLS)
+def wrap_model(
+    model: BaseChatModel, *, bind_tools: bool = True
+) -> RunnableSerializable[MainAgentState, AIMessage]:
     current_date = datetime.now().strftime("%B %d, %Y")
     system_prompt = MAIN_AGENT_PROMPT.format(current_date=current_date)
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=system_prompt)]
-        + normalize_messages_for_replay(state["messages"]),
-        name="StateModifier",
+    return cast(
+        RunnableSerializable[MainAgentState, AIMessage],
+        wrap_tool_loop_model(
+            model,
+            tools=cast(list[Any], _TOOLS),
+            prompt=system_prompt,
+            bind_tools=bind_tools,
+            normalize_replay_messages=True,
+        ),
     )
-    return preprocessor | bound_model  # type: ignore[return-value]
 
 
 def pending_tool_calls(state: MainAgentState) -> Literal["tools", "done"]:
-    last_message = state["messages"][-1]
-    if not isinstance(last_message, AIMessage):
-        raise TypeError(f"Expected AIMessage, got {type(last_message)}")
-    if last_message.tool_calls:
-        return "tools"
-    return "done"
+    return pending_tool_calls_helper(state)
 
 
 def _build_main_graph(model_name: AllModelEnum):
     model = get_model(model_name)
-    model_runnable = wrap_model(model)
+    model_runnable = wrap_model(model, bind_tools=True)
+    model_runnable_no_tools = wrap_model(model, bind_tools=False)
 
     async def acall_model(state: MainAgentState, config: RunnableConfig) -> dict:
-        response = cast(AIMessage, await model_runnable.ainvoke(state, config))
-        if state.get("remaining_steps", 100) < 10 and response.tool_calls:
-            return {
-                "messages": [
-                    AIMessage(
-                        id=response.id,
-                        content="Sorry, need more steps to process this request.",
-                    )
-                ]
-            }
-        return {"messages": [response]}
+        return await run_tool_loop_turn(
+            state=state,
+            config=config,
+            summary_model=model,
+            model_runnable_with_tools=model_runnable,
+            model_runnable_without_tools=model_runnable_no_tools,
+            compaction_manager=_COMPACTION_MANAGER,
+        )
 
     graph = StateGraph(MainAgentState)
     graph.add_node("model", acall_model)
