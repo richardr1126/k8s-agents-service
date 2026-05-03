@@ -11,7 +11,7 @@ from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.types import StreamWriter
 from pydantic import BaseModel, Field
 
-from agents.bg_task_agent.task import Task
+from agents.task_progress import Task
 from agents.tools import create_pgvector_instance, web_vector_search
 from core import get_model, settings
 from service.utils import normalize_messages_for_replay

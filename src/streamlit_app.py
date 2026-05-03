@@ -255,19 +255,6 @@ async def main() -> None:
     messages: list[ChatMessage] = st.session_state.messages
 
     if len(messages) == 0:
-        # match agent_client.agent:
-        #     case "chatbot":
-        #         WELCOME = "Hello! I'm a simple chatbot. Ask me anything!"
-        #     case "interrupt-agent":
-        #         WELCOME = "Hello! I'm an interrupt agent. Tell me your birthday and I will predict your personality!"
-        #     case "research-assistant":
-        #         WELCOME = "Hello! I'm an AI-powered research assistant with web search and a calculator. Ask me anything!"
-        #     case "rag-assistant":
-        #         WELCOME = """Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
-        #         I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!"""
-        #     case _:
-        #         WELCOME = "Hello! I'm an AI agent. Ask me anything!"
-
         with st.chat_message("ai"):
             # Find the agent by key, using session state if available, otherwise fall back to agent_client.agent
             current_agent_key = st.session_state.get('current_agent', agent_client.agent)
@@ -500,10 +487,10 @@ async def draw_messages(
                             status.update(state="complete")
 
             case "custom":
-                # CustomData example used by the bg-task-agent
+                # CustomData example used by task-progress updates.
                 # See:
                 # - src/agents/utils.py CustomData
-                # - src/agents/bg_task_agent/task.py
+                # - src/agents/task_progress.py
                 try:
                     task_data: TaskData = TaskData.model_validate(msg.custom_data)
                 except ValidationError:

@@ -27,7 +27,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 - **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry with separate image streams
 - **🔧 Deployment Scripts**: Comprehensive deployment automation with database setup, secrets management, and dependency updates
 - **🔌 MCP Integration**: Model Context Protocol server support for advanced database analysis and tool execution
-- **🔍 Enhanced Search**: DuckDuckGo search integration for improved web research capabilities
+- **🔍 Enhanced Search**: Tavily search integration for improved web research capabilities
 
 ## Overview
 
@@ -63,7 +63,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 
 1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between specialized agents based on context, now including database analysis capabilities
 1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
-1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content using DuckDuckGo search integration
+1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content using Tavily search integration
 1. **Database Analyst Agent**: Specialized MCP-powered agent for analyzing the Cosmere Feed database, providing insights into user engagement, content trends, and feed performance metrics
 1. **Enhanced Tool Communication**: Improved agent handoff system with visual UI components and contextual routing
 1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, enhanced tool visualization, and smart input limits with real-time character counting (560 character limit)
@@ -181,7 +181,7 @@ To customize the agent for your own use case:
 1. Import and add your new agent to the `agents` dictionary in `src/agents/agents.py`. Your agent can be called by `/<your_agent_name>/invoke` or `/<your_agent_name>/stream`.
 1. Adjust the Streamlit interface in `src/streamlit_app.py` and the Next.js UI in `ui/` to match your agent's capabilities.
 1. Update the `DEFAULT_AGENT` constant in `src/agents/agents.py` to set your preferred default agent (currently set to "auto-router" for intelligent routing).
-1. For supervisor agents, configure the routing logic in `langgraph_supervisor_agent.py` to define how queries should be distributed between your specialized agents.
+1. For supervisor-style routing, configure the routing logic in `src/agents/main_agent.py` to define how queries should be distributed between your specialized agents.
 
 ### Current Available Agents
 
@@ -387,7 +387,7 @@ For local development, we recommend using [docker compose watch](https://docs.do
 
 4. The services will now automatically update when you make changes to your code:
    - Changes in the relevant python files and directories will trigger updates for the relevant services.
-   - NOTE: If you make changes to the `pyproject.toml` or `uv.lock` files (such as adding new dependencies like `ddgs` for search capabilities), you will need to rebuild the services by running `docker compose up --build`.
+   - NOTE: If you make changes to the `pyproject.toml` or `uv.lock` files (such as adding dependencies), you will need to rebuild the services by running `docker compose up --build`.
 
 5. Access the Streamlit app by navigating to `http://localhost:8501` in your web browser.
 
