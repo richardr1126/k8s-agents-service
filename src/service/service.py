@@ -551,10 +551,8 @@ async def invoke(user_input: UserInput, agent_id: str = DEFAULT_AGENT) -> ChatMe
     Use user_id to persist and continue a conversation across multiple threads.
     """
     # NOTE: Currently this only returns the last message or interrupt.
-    # In the case of an agent outputting multiple AIMessages (such as the background step
-    # in interrupt-agent, or a tool step in research-assistant), it's omitted. Arguably,
-    # you'd want to include it. You could update the API to return a list of ChatMessages
-    # in that case.
+    # If an agent outputs multiple AIMessages in one run, earlier AI outputs are omitted.
+    # You could update the API to return a list of ChatMessages in that case.
     agent: AgentGraph = get_agent(agent_id)
     kwargs, run_id = await _handle_input(user_input, agent)
 

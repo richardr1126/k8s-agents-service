@@ -30,40 +30,30 @@ class Agent:
 
 agents: dict[str, Agent] = {
     "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
-    # "research-assistant": Agent(
-    #     description="A research assistant with web search and calculator.", graph=research_assistant
-    # ),
     "auto-router": Agent(
         description="Hello! I'm an agent that routes between a resume assistant, a web research assistant, and a database analyst.",
-        graph=main_agent
+        graph=main_agent,
     ),
     "resume-agent": Agent(
         description="""Hello! I'm a professional resume assistant designed to help showcase Richard's skills, experience, and accomplishments.
         I can search through resume information and project repositories to provide comprehensive answers about his professional background, technical skills, work experience, and project achievements. Ask me anything about his career!""",
-        graph=rag_assistant
+        graph=rag_assistant,
     ),
     "web-rag-agent": Agent(
         description="""Hello! I'm a web research assistant designed to help you find information online.
         I can browse the web, summarize articles, and provide you with the most relevant information. Ask me anything about your research topic!""",
-        graph=web_rag_agent
+        graph=web_rag_agent,
     ),
     "postgres-mcp-agent": Agent(
         description="""Hello! I'm a database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content.
         I can analyze the PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance.
         Ask me about user activity patterns, popular posts, engagement metrics, or any data-driven questions about the Cosmere feed!""",
-        graph=mcp_agent
+        graph=mcp_agent,
     ),
     "workflow-agent": Agent(
         description="""Hello! I'm a workflow-driven assistant. I expose a small tool surface (list_capabilities, read_capability, run_workflow_cli) that fronts a library of pregenerated CLI-style workflows. Ask me what I can do, or give me a task and I'll discover the right workflow and run it.""",
-        graph=workflow_agent
+        graph=workflow_agent,
     ),
-    # "command-agent": Agent(description="A command agent.", graph=command_agent),
-    # "bg-task-agent": Agent(description="A background task agent.", graph=bg_task_agent),
-    # "interrupt-agent": Agent(description="An agent the uses interrupts.", graph=interrupt_agent),
-    # "knowledge-base-agent": Agent(
-    #     description="A retrieval-augmented generation agent using Amazon Bedrock Knowledge Base",
-    #     graph=kb_agent,
-    # ),
 }
 
 

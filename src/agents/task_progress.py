@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 from uuid import uuid4
 
 from langchain_core.messages import BaseMessage
@@ -16,7 +16,9 @@ class Task:
         self.result: Literal["success", "error"] | None = None
         self.writer = writer
 
-    def _generate_and_dispatch_message(self, writer: StreamWriter | None, data: dict):
+    def _generate_and_dispatch_message(
+        self, writer: StreamWriter | None, data: dict[str, Any]
+    ) -> BaseMessage:
         writer = writer or self.writer
         task_data = TaskData(name=self.name, run_id=self.id, state=self.state, data=data)
         if self.result:
@@ -29,25 +31,29 @@ class Task:
             task_custom_data.dispatch(writer)
         return task_custom_data.to_langchain()
 
-    def start(self, writer: StreamWriter | None = None, data: dict = {}) -> BaseMessage:
+    def start(
+        self, writer: StreamWriter | None = None, data: dict[str, Any] | None = None
+    ) -> BaseMessage:
         self.state = "new"
-        task_message = self._generate_and_dispatch_message(writer, data)
+        task_message = self._generate_and_dispatch_message(writer, data or {})
         return task_message
 
-    def write_data(self, writer: StreamWriter | None = None, data: dict = {}) -> BaseMessage:
+    def write_data(
+        self, writer: StreamWriter | None = None, data: dict[str, Any] | None = None
+    ) -> BaseMessage:
         if self.state == "complete":
             raise ValueError("Only incomplete tasks can output data.")
         self.state = "running"
-        task_message = self._generate_and_dispatch_message(writer, data)
+        task_message = self._generate_and_dispatch_message(writer, data or {})
         return task_message
 
     def finish(
         self,
         result: Literal["success", "error"],
         writer: StreamWriter | None = None,
-        data: dict = {},
+        data: dict[str, Any] | None = None,
     ) -> BaseMessage:
         self.state = "complete"
         self.result = result
-        task_message = self._generate_and_dispatch_message(writer, data)
+        task_message = self._generate_and_dispatch_message(writer, data or {})
         return task_message
