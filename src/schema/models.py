@@ -80,7 +80,7 @@ class OllamaModelName(StrEnum):
 class OpenRouterModelName(StrEnum):
     """https://openrouter.ai/models"""
 
-    KIMI_K26 = "moonshotai/kimi-k2.6"
+    QWEN_36_27B = "qwen/qwen3.6-27b"
     GEMINI_25_FLASH = "google/gemini-2.5-flash"
     GEMINI_31_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview"
     CLAUDE_HAIKU_45 = "anthropic/claude-haiku-4.5"

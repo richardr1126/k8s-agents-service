@@ -1,12 +1,10 @@
 import os
-import glob
-from typing import List, Dict, Any
 
 from dotenv import load_dotenv
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_postgres import PGVector
-from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader, TextLoader
+from langchain_community.document_loaders import Docx2txtLoader, PyPDFLoader
 from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Load environment variables from the .env file
 load_dotenv()
