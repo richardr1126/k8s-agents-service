@@ -38,6 +38,9 @@ export const auth = betterAuth({
     },
   },
   advanced: {
+    // Use a repo-specific prefix so auth cookies do not collide with other
+    // Better Auth apps running on localhost.
+    cookiePrefix: process.env.BETTER_AUTH_COOKIE_PREFIX || "k8s-agents-auth",
     database: {
       generateId: () => {
         // Generate user-friendly IDs similar to current system

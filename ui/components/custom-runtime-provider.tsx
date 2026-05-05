@@ -515,16 +515,20 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   const [taskBranchMapByThread, setTaskBranchMapByThread] = useState<Map<string, Map<string, string>>>(new Map());
   const [availableBranchByThread, setAvailableBranchByThread] = useState<Map<string, Set<string>>>(new Map());
 
-  // Always use the most recent thread (by timestamp) from user data
-  const getMostRecentThread = () => {
+  const mostRecentThread = useMemo(() => {
     if (!userData?.threads || userData.threads.length === 0) return null;
     // Sort a copy by timestamp descending and return the first (most recent)
     // Avoid mutating state by not sorting the original array in place
     return [...userData.threads].sort((a, b) => b.timestamp - a.timestamp)[0];
-  };
+  }, [userData?.threads]);
 
-  const mostRecentThread = getMostRecentThread();
-  const currentThreadId = userData?.currentThreadId || mostRecentThread?.id || null;
+  const hasValidCurrentThreadId = Boolean(
+    userData?.currentThreadId
+    && userData?.threads?.some((t) => t.id === userData.currentThreadId),
+  );
+  const currentThreadId = hasValidCurrentThreadId
+    ? (userData?.currentThreadId ?? null)
+    : (mostRecentThread?.id ?? null);
   const userId = userData?.userId || null;
 
   // Get the selected agent and model for the current thread
@@ -535,30 +539,32 @@ function ThreadProvider({ children }: ThreadProviderProps) {
   // Function to update agent selection for current thread
   const setSelectedAgentId = useCallback((agentId: string) => {
     if (currentThreadId) {
+      if (currentThread?.agentId === agentId) return;
       updateThreadAgent(currentThreadId, agentId);
     }
-  }, [currentThreadId, updateThreadAgent]);
+  }, [currentThread?.agentId, currentThreadId, updateThreadAgent]);
 
   // Function to update model selection for current thread
   const setSelectedModelId = useCallback((modelId: string) => {
     if (currentThreadId) {
+      if (currentThread?.modelId === modelId) return;
       updateThreadModel(currentThreadId, modelId);
     }
-  }, [currentThreadId, updateThreadModel]);
+  }, [currentThread?.modelId, currentThreadId, updateThreadModel]);
 
   // Set defaults when service info is loaded and we have a current thread
   useEffect(() => {
-    if (serviceInfo && currentThreadId) {
-      // Set default agent if none selected
-      if (!selectedAgentId && serviceInfo.default_agent) {
-        updateThreadAgent(currentThreadId, serviceInfo.default_agent);
-      }
-      // Set default model if none selected
-      if (!selectedModelId && serviceInfo.default_model) {
-        updateThreadModel(currentThreadId, serviceInfo.default_model);
-      }
+    if (!serviceInfo || !currentThreadId || !currentThread) return;
+
+    // Set default agent if none selected
+    if (!currentThread.agentId && serviceInfo.default_agent) {
+      updateThreadAgent(currentThreadId, serviceInfo.default_agent);
     }
-  }, [serviceInfo, currentThreadId, selectedAgentId, selectedModelId, updateThreadAgent, updateThreadModel]); // Add missing dependencies
+    // Set default model if none selected
+    if (!currentThread.modelId && serviceInfo.default_model) {
+      updateThreadModel(currentThreadId, serviceInfo.default_model);
+    }
+  }, [serviceInfo, currentThreadId, currentThread, updateThreadAgent, updateThreadModel]);
 
   // Auto-switch to most recent thread if current thread is not set or invalid
   useEffect(() => {
@@ -733,7 +739,6 @@ function ChatWithThreads({
   const {
     userData,
     createNewThread,
-    switchToThread,
     updateThreadTitle,
     updateThreadActivity,
     deleteThread,
@@ -1099,7 +1104,6 @@ function ChatWithThreads({
     },
     onSwitchToThread: (threadId) => {
       setCurrentThreadId(threadId);
-      switchToThread(threadId);
     },
     onRename: async (threadId, newTitle) => {
       await updateThreadTitle(threadId, newTitle);
