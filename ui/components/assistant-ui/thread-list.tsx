@@ -93,7 +93,7 @@ const ThreadListItemLoading: FC = () => {
   const { runningThreads } = useThreadContext();
   const threadListItem = useThreadListItem();
   
-  if (!threadListItem || !runningThreads.has(threadListItem.threadId)) {
+  if (!threadListItem || !runningThreads.has(threadListItem.id)) {
     return null;
   }
   
@@ -117,7 +117,7 @@ const ThreadListItemDelete: FC = () => {
     // Confirm deletion
     if (confirm('Are you sure you want to delete this thread? This action cannot be undone.')) {
       // Delete thread (this handles both frontend DB and backend deletion)
-      await deleteThread(threadListItem.threadId);
+      await deleteThread(threadListItem.id);
     }
   };
   

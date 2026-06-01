@@ -17,6 +17,7 @@ export async function GET() {
 
     const userInfo = {
       id: session.user.id,
+      email: session.user.email,
       isAnonymous: getIsAnonymous(session.user)
     };
 

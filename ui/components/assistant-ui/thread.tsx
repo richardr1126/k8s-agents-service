@@ -60,6 +60,8 @@ import { ModelSelect } from "@/components/model-select";
 import { useUser } from "@/components/auth-user-provider";
 import { RateLimitDisplay, RateLimitBanner } from "@/components/rate-limit-display";
 import { useRateLimit } from "@/components/rate-limit-provider";
+import { useSession } from "@/lib/auth-client";
+import { hasUnlimitedUsageOverride, isUnlimitedRateLimit } from "@/lib/usage-overrides";
 import agentSuggestions from "./agent-suggestions.json";
 
 export const Thread: FC = () => {
@@ -548,13 +550,18 @@ const ThreadWelcomeSuggestions: FC = () => {
 const Composer: FC = () => {
   // Use the useComposer hook to get the current text value from composer state
   const composerText = useComposer((state) => state.text);
-  const maxCharacters = 560; // 2 tweets worth (280 chars each)
-  const isOverLimit = composerText.length > maxCharacters;
-  const charactersRemaining = maxCharacters - composerText.length;
+  const { data: session } = useSession();
+  const hasUnlimitedChars = hasUnlimitedUsageOverride({
+    id: session?.user?.id,
+    email: session?.user?.email,
+  });
+  const maxCharacters = hasUnlimitedChars ? null : 560; // 2 tweets worth (280 chars each)
+  const isOverLimit = maxCharacters !== null && composerText.length > maxCharacters;
+  const charactersRemaining = maxCharacters === null ? null : (maxCharacters - composerText.length);
 
   // Import the rate limit hook to check status
   const { status } = useRateLimit();
-  const isAtLimit = status ? status.remainingMessages <= 0 : false;
+  const isAtLimit = status ? (!isUnlimitedRateLimit(status.limit) && status.remainingMessages <= 0) : false;
   const isSendDisabled = isAtLimit || isOverLimit || composerText.trim().length === 0;
 
   // Handle keyboard events to prevent submission when disabled
@@ -592,10 +599,11 @@ const Composer: FC = () => {
           autoFocus
           aria-label="Message input"
           onKeyDown={handleKeyDown}
-          maxLength={maxCharacters + 50} // Allow some buffer for user awareness
+          maxLength={maxCharacters !== null ? maxCharacters + 50 : undefined} // Allow some buffer for user awareness
         />
         <ComposerAction 
           inputValue={composerText}
+          maxCharacters={maxCharacters}
           isOverLimit={isOverLimit}
           charactersRemaining={charactersRemaining}
         />
@@ -606,12 +614,14 @@ const Composer: FC = () => {
 
 interface ComposerActionProps {
   inputValue: string;
+  maxCharacters: number | null;
   isOverLimit: boolean;
-  charactersRemaining: number;
+  charactersRemaining: number | null;
 }
 
 const ComposerAction: FC<ComposerActionProps> = ({ 
   inputValue, 
+  maxCharacters,
   isOverLimit, 
   charactersRemaining 
 }) => {
@@ -624,8 +634,9 @@ const ComposerAction: FC<ComposerActionProps> = ({
 
   // Import the hook at the top of file and use it here
   const { status } = useRateLimit();
-  const isAtLimit = status ? status.remainingMessages <= 0 : false;
+  const isAtLimit = status ? (!isUnlimitedRateLimit(status.limit) && status.remainingMessages <= 0) : false;
   const isSendDisabled = isAtLimit || isOverLimit || inputValue.trim().length === 0;
+  const isUnlimitedChars = maxCharacters === null;
 
   return (
     // aui-composer-action-wrapper
@@ -664,13 +675,21 @@ const ComposerAction: FC<ComposerActionProps> = ({
               "text-xs font-mono",
               isOverLimit 
                 ? "text-destructive" 
-                : charactersRemaining <= 50 
+                : !isUnlimitedChars && (charactersRemaining ?? 0) <= 50
                   ? "text-amber-600 dark:text-amber-400" 
                   : "text-muted-foreground"
             )}
-            title={`${inputValue.length}/560 characters used`}
+            title={
+              isUnlimitedChars
+                ? `${inputValue.length} characters used (unlimited)`
+                : `${inputValue.length}/${maxCharacters} characters used`
+            }
           >
-            {charactersRemaining < 0 ? `+${Math.abs(charactersRemaining)}` : charactersRemaining}
+            {isUnlimitedChars
+              ? "∞"
+              : (charactersRemaining ?? 0) < 0
+                ? `+${Math.abs(charactersRemaining ?? 0)}`
+                : (charactersRemaining ?? 0)}
           </span>
         )}
         
@@ -696,7 +715,7 @@ const ComposerAction: FC<ComposerActionProps> = ({
               disabled={isSendDisabled}
               title={
                 isOverLimit 
-                  ? `Message is ${Math.abs(charactersRemaining)} characters over the limit`
+                  ? `Message is ${Math.abs(charactersRemaining ?? 0)} characters over the limit`
                   : isAtLimit 
                     ? `Rate limit reached. ${status?.remainingMessages || 0} messages remaining today.`
                     : undefined
