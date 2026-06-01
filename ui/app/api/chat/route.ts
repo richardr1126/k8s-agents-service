@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     // Check rate limiting before processing the message
     const userInfo = {
       id: userId,
+      email: session.user.email,
       isAnonymous: getIsAnonymous(session.user)
     };
 

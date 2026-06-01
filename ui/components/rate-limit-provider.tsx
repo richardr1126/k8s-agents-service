@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { isUnlimitedRateLimit } from '@/lib/usage-overrides';
 
 export interface RateLimitStatus {
   allowed: boolean;
@@ -95,12 +96,13 @@ export function RateLimitProvider({ children }: RateLimitProviderProps) {
 
   // Calculate time until reset
   const timeUntilReset = status ? calculateTimeUntilReset(status.resetTime) : '';
-  const isAtLimit = status ? status.remainingMessages <= 0 : false;
+  const isAtLimit = status ? (!isUnlimitedRateLimit(status.limit) && status.remainingMessages <= 0) : false;
 
   // Increment count locally (for immediate UI feedback)
   const incrementCount = useCallback(() => {
     setStatus(prevStatus => {
       if (!prevStatus) return prevStatus;
+      if (isUnlimitedRateLimit(prevStatus.limit)) return prevStatus;
       
       const newCurrentCount = prevStatus.currentCount + 1;
       const newRemainingMessages = Math.max(0, prevStatus.limit - newCurrentCount);

@@ -1,4 +1,8 @@
 import { Pool } from 'pg';
+import {
+  hasUnlimitedUsageOverride,
+  UNLIMITED_RATE_LIMIT,
+} from './usage-overrides';
 
 // Rate limits configuration
 export const RATE_LIMITS = {
@@ -46,6 +50,7 @@ export interface RateLimitResult {
 
 export interface UserInfo {
   id: string;
+  email?: string | null;
   isAnonymous?: boolean;
 }
 
@@ -60,6 +65,10 @@ export class RateLimiter {
    * Check if a user can send a message and increment their count if allowed
    */
   async checkAndIncrementLimit(user: UserInfo): Promise<RateLimitResult> {
+    if (hasUnlimitedUsageOverride(user)) {
+      return this.getUnlimitedResult();
+    }
+
     await initializeRateLimitTable();
     
     const client = await this.pool.connect();
@@ -127,6 +136,10 @@ export class RateLimiter {
    * Get current usage for a user without incrementing
    */
   async getCurrentUsage(user: UserInfo): Promise<RateLimitResult> {
+    if (hasUnlimitedUsageOverride(user)) {
+      return this.getUnlimitedResult();
+    }
+
     await initializeRateLimitTable();
     
     const client = await this.pool.connect();
@@ -226,6 +239,16 @@ export class RateLimiter {
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0); // Start of next day
     return tomorrow;
+  }
+
+  private getUnlimitedResult(): RateLimitResult {
+    return {
+      allowed: true,
+      currentCount: 0,
+      limit: UNLIMITED_RATE_LIMIT,
+      resetTime: this.getResetTime(),
+      remainingMessages: UNLIMITED_RATE_LIMIT,
+    };
   }
 }
 

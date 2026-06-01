@@ -3,6 +3,7 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 import { useRateLimit } from '@/components/rate-limit-provider';
+import { isUnlimitedRateLimit } from '@/lib/usage-overrides';
 
 interface RateLimitDisplayProps {
   compact?: boolean;
@@ -16,10 +17,11 @@ export function RateLimitDisplay({ compact = false }: RateLimitDisplayProps) {
   }
 
   if (compact) {
+    const isUnlimited = isUnlimitedRateLimit(status.limit);
     return (
       <div className="flex items-center gap-2 text-sm">
         <span className={isAtLimit ? 'text-destructive' : 'text-muted-foreground'}>
-          {status.remainingMessages}/{status.limit}
+          {isUnlimited ? '∞' : `${status.remainingMessages}/${status.limit}`}
         </span>
       </div>
     );
@@ -32,7 +34,7 @@ export function RateLimitDisplay({ compact = false }: RateLimitDisplayProps) {
 export function RateLimitBanner() {
   const { status, isAtLimit, timeUntilReset } = useRateLimit();
 
-  if (!status || !isAtLimit) {
+  if (!status || !isAtLimit || isUnlimitedRateLimit(status.limit)) {
     return null;
   }
 
