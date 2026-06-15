@@ -288,6 +288,10 @@ if __name__ == "__main__":
         model="qwen/qwen3-embedding-8b",
         openai_api_base="https://openrouter.ai/api/v1",
         openai_api_key=openrouter_api_key,
+        model_kwargs={"encoding_format": "float"},
+        # Send raw strings instead of tokenized input; the routed provider
+        # (DeepInfra) rejects token-ID arrays with HTTP 400.
+        check_embedding_ctx_length=False,
     )
 
     # --- 1. Google Drive Resume (public) ---
