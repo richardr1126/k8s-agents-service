@@ -94,8 +94,6 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: Annotated[str, BeforeValidator(check_str_is_http)] = "https://cloud.langfuse.com"
     LANGFUSE_PUBLIC_KEY: SecretStr | None = None
     LANGFUSE_SECRET_KEY: SecretStr | None = None
-    PARALLEL_BRANCH_DEBUG: bool = False
-    DEBUG_TASK_BRANCH_MAP: bool = False
     AGENT_RECURSION_LIMIT: int = 35
     AGENT_MIN_REMAINING_STEPS_FOR_TOOL_CALLS: int = 5
     AGENT_COMPACTION_ENABLED: bool = True

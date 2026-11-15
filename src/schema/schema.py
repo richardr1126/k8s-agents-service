@@ -69,15 +69,6 @@ class UserInput(BaseModel):
     )
 
 
-class StreamInput(UserInput):
-    """User input for streaming the agent's response."""
-
-    stream_tokens: bool = Field(
-        description="Whether to stream LLM tokens to the client.",
-        default=True,
-    )
-
-
 class ToolCall(TypedDict):
     """Represents a request to call a tool."""
 
@@ -93,9 +84,9 @@ class ToolCall(TypedDict):
 class ChatMessage(BaseModel):
     """Message in a chat."""
 
-    type: Literal["human", "ai", "tool", "custom"] = Field(
+    type: Literal["human", "ai", "tool"] = Field(
         description="Role of the message.",
-        examples=["human", "ai", "tool", "custom"],
+        examples=["human", "ai", "tool"],
     )
     content: str = Field(
         description="Content of the message.",
@@ -122,10 +113,6 @@ class ChatMessage(BaseModel):
     reasoning_content: list[str] = Field(
         description="Reasoning/thinking snippets extracted from the provider response.",
         default=[],
-    )
-    custom_data: dict[str, Any] = Field(
-        description="Custom message data.",
-        default={},
     )
 
     def pretty_repr(self) -> str:
@@ -175,10 +162,6 @@ class ChatHistoryInput(BaseModel):
         description="Thread ID to persist and continue a multi-turn conversation.",
         examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
     )
-
-
-class ChatHistory(BaseModel):
-    messages: list[ChatMessage]
 
 
 class DeleteThreadInput(BaseModel):

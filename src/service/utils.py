@@ -6,9 +6,6 @@ from langchain_core.messages import (
     HumanMessage,
     ToolMessage,
 )
-from langchain_core.messages import (
-    ChatMessage as LangchainChatMessage,
-)
 
 from schema import ChatMessage
 
@@ -91,12 +88,6 @@ def extract_reasoning_content(message: AIMessage) -> list[str]:
     return deduped
 
 
-def extract_reasoning_from_payload(payload: Any) -> list[str]:
-    chunks: list[str] = []
-    _collect_reasoning_text(payload, chunks)
-    return chunks
-
-
 def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
     """Create a ChatMessage from a LangChain message."""
     match message:
@@ -124,31 +115,8 @@ def langchain_to_chat_message(message: BaseMessage) -> ChatMessage:
                 tool_call_id=message.tool_call_id,
             )
             return tool_message
-        case LangchainChatMessage():
-            if message.role == "custom":
-                custom_message = ChatMessage(
-                    type="custom",
-                    content="",
-                    custom_data=message.content[0],
-                )
-                return custom_message
-            raise ValueError(f"Unsupported chat message role: {message.role}")
         case _:
             raise ValueError(f"Unsupported message type: {message.__class__.__name__}")
-
-
-def remove_tool_calls(content: str | list[str | dict]) -> str | list[str | dict]:
-    """Remove tool calls from content."""
-    if isinstance(content, str):
-        return content
-    # Currently only Anthropic models stream tool calls, using content item type tool_use.
-    return [
-        content_item
-        for content_item in content
-        if isinstance(content_item, str)
-        or not isinstance(content_item, dict)
-        or content_item.get("type") != "tool_use"
-    ]
 
 
 def _normalize_replayed_content(value: Any) -> str:
