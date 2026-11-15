@@ -65,28 +65,6 @@
       "action": "Which programming languages are most in demand right now?"
     }
   ],
-  "postgres-mcp-agent": [
-    {
-      "title": "Analyze feed engagement metrics",
-      "label": "User Analytics",
-      "action": "Show me the engagement metrics for the Cosmere feed - how many requests and active users do we have?"
-    },
-    {
-      "title": "Popular Cosmere content trends",
-      "label": "Content Analysis",
-      "action": "What are the most popular posts on the Cosmere feed? What Cosmere-related content gets the most engagement?"
-    },
-    {
-      "title": "User activity patterns",
-      "label": "Behavioral Insights",
-      "action": "Analyze user activity patterns - when are users most active on the Cosmere feed?"
-    },
-    {
-      "title": "Feed performance over time",
-      "label": "Growth Metrics",
-      "action": "How has the Cosmere feed grown over time? Show me request trends and user adoption patterns."
-    }
-  ],
   "chatbot": [
     {
       "title": "Tell me a joke",
