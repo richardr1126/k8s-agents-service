@@ -127,7 +127,7 @@ cd helm
 ./manual_deploy.sh
 ```
 
-For ArgoCD deployments, see the `helm/argocd.yaml` manifest.
+For ArgoCD deployments, the Application lives in the k3s-cluster repo (`argocd/apps/`).
 
 ### Key Files
 
@@ -146,7 +146,6 @@ The repository is structured as follows:
 **Kubernetes Deployment:**
 - `helm/agents-service/`: Complete Helm chart for the backend service
 - `helm/agents-streamlit/`: Dedicated Helm chart for the Streamlit UI (deployed as subchart)
-- `helm/argocd.yaml`: ArgoCD application manifest for GitOps
 - `helm/manual_deploy.sh`: Deployment script with YugabyteDB setup
 - `helm/create_secrets.sh`: Kubernetes secrets management script for both service and streamlit components
 - `helm/update_dependencies.sh`: Helm chart dependency management script for subchart updates
@@ -287,13 +286,11 @@ This script will:
 
 #### GitOps with ArgoCD
 
-For GitOps deployments, use the included ArgoCD application manifest:
+The ArgoCD Application for this service is defined in the k3s-cluster repo (`argocd/apps/`), which the
+cluster's root app syncs. Create the secrets first:
 
 ```sh
-# Create secrets manually
 ./create_secrets.sh
-
-kubectl apply -f helm/argocd.yaml
 ```
 
 #### Manual Helm Deployment
