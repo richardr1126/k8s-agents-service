@@ -41,7 +41,6 @@ dependencies = [
     "python-dotenv ~=1.2.4",
     "tavily-python ~=0.8.5",
     "uvicorn ~=0.54.0",
-    "langchain-mcp-adapters ~=0.3.2",
     "langchain-openrouter>=0.2.9",
     "pypdf>=7.1.0",
 ]

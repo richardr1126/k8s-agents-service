@@ -6,36 +6,12 @@ from typing import Any
 
 import numexpr
 from langchain_core.tools import BaseTool, tool
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 
 from core import settings
 
 logger = logging.getLogger(__name__)
-
-async def get_mcp_tools() -> list:
-    try:
-        # Initialize MCP client to connect to postgres-mcp server
-        mcp_client = MultiServerMCPClient(
-            {
-                "postgres-mcp": {
-                    "url": settings.POSTGRES_MCP_URL,
-                    "transport": "sse",
-                }
-            }
-        )
-        
-        # Load MCP tools from the postgres server
-        mcp_tools = await mcp_client.get_tools()
-        logger.info(f"Successfully loaded {len(mcp_tools)} MCP tools from postgres server")
-        return mcp_tools
-        
-    except Exception as e:
-        # Fallback gracefully if MCP connection fails
-        logger.warning(f"Could not connect to MCP server at {settings.POSTGRES_MCP_URL}: {e}")
-        logger.info("Continuing with no tools...")
-        return []
 
 def calculator_func(expression: str) -> str:
     """Calculates a math expression using numexpr.

@@ -24,7 +24,6 @@ from typing_extensions import Annotated
 
 from agents.compaction import CompactionManager
 from agents.configurable_model_graph import ConfigurableModelGraph
-from agents.mcp_agent import mcp_agent
 from agents.rag_assistant import rag_assistant
 from agents.tool_loop import (
     ToolLoopState,
@@ -37,7 +36,7 @@ from core import get_model
 from schema.models import AllModelEnum
 from schema.subagent import SubagentArtifact
 
-SubAgentType = Literal["resume", "web", "postgres"]
+SubAgentType = Literal["resume", "web"]
 
 
 def _normalize_tool_result_content(value: Any) -> str:
@@ -67,7 +66,6 @@ You are the main controller agent. You delegate work to specialized sub-agents t
 Available sub-agents (subagent_type values):
 - "resume": Answers questions about Richard's professional background, skills, projects, education, and career history.
 - "web": Performs live web research for current events, recent news, real-time data, or anything requiring up-to-date information.
-- "postgres": Analyzes the Cosmere Feed PostgreSQL database (user metrics, content trends, engagement insights for a Bluesky feed featuring Brandon Sanderson's Cosmere content).
 
 How to work:
 1. Read the user's request.
@@ -92,12 +90,8 @@ def _resolve_sub_agent(subagent_type: str) -> Any:
         return rag_assistant
     if subagent_type == "web":
         return web_rag_agent
-    if subagent_type == "postgres":
-        # mcp_agent is lazy-loaded; .get_graph() returns a ConfigurableModelGraph
-        # that respects config["configurable"]["model"].
-        return mcp_agent.get_graph()
     raise ValueError(
-        f"Unknown subagent_type '{subagent_type}'. Must be one of: resume, web, postgres."
+        f"Unknown subagent_type '{subagent_type}'. Must be one of: resume, web."
     )
 
 
@@ -133,7 +127,7 @@ async def task(
     ],
     subagent_type: Annotated[
         SubAgentType,
-        "Which sub-agent to dispatch to: 'resume', 'web', or 'postgres'.",
+        "Which sub-agent to dispatch to: 'resume' or 'web'.",
     ],
     tool_call_id: Annotated[str, InjectedToolCallId],
     config: RunnableConfig,

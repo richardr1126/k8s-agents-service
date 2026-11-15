@@ -2,7 +2,7 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph and FastAPI, featuring a Helm chart with multi-architecture images and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance and specialized database analysis capabilities.
+A Kubernetes deployment of an AI agents service built with LangGraph and FastAPI, featuring a Helm chart with multi-architecture images and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance and live web research.
 
 ### Next.js Chat UI (`ui/`)
 
@@ -26,7 +26,6 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 - **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures for the service and cron containers
 - **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry with separate image streams
 - **🔧 Deployment Scripts**: Comprehensive deployment automation with database setup, secrets management, and dependency updates
-- **🔌 MCP Integration**: Model Context Protocol server support for advanced database analysis and tool execution
 - **🔍 Enhanced Search**: Tavily search integration for improved web research capabilities
 
 ## Overview
@@ -41,7 +40,6 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
 1. **RAG Agent**: RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
-1. **MCP Integration**: Model Context Protocol (MCP) server integration for database analysis and tool execution.
 1. **Thread Management**: Complete thread lifecycle management with proper deletion from both conversation memory (checkpointer) and long-term memory (store).
 1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
 1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
@@ -56,14 +54,12 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
 1. **Automated Cron Jobs**: Kubernetes CronJob support for scheduled tasks like vector database updates and maintenance
-1. **MCP Server Integration**: Model Context Protocol server support for advanced database analysis and external tool integration
 
 ### Resume & Portfolio Features
 
-1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between specialized agents based on context, now including database analysis capabilities
+1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between the resume and web research sub-agents based on context
 1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
 1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content using Tavily search integration
-1. **Database Analyst Agent**: Specialized MCP-powered agent for analyzing the Cosmere Feed database, providing insights into user engagement, content trends, and feed performance metrics
 1. **Nested Sub-Agent Streaming**: Sub-agent runs stream over AG-UI and render nested under the `task` tool call that started them, live and after a reload
 1. **Professional UI**: Next.js interface with guest sessions, database-backed run limits, responsive design, tool visualization and a 560-character input limit
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
@@ -159,7 +155,7 @@ The repository is structured as follows:
    ```
 
 2. Set up environment variables:
-   Create a `.env` file in the root directory. At least one LLM API key or configuration is required. See the [`.env.example` file](./.env.example) for a full list of available environment variables, including a variety of model provider API keys, header-based authentication, LangSmith tracing, testing and development modes, OpenWeatherMap API key, and PostgreSQL MCP URL configuration.
+   Create a `.env` file in the root directory. At least one LLM API key or configuration is required. See the [`.env.example` file](./.env.example) for a full list of available environment variables, including a variety of model provider API keys, header-based authentication, LangSmith tracing, testing and development modes, and OpenWeatherMap API key.
 
 3. You can now run the agent service locally, either with Docker or just using Python. The Docker setup is recommended for simpler environment setup and immediate reloading of the services when you make changes to your code.
 
@@ -181,10 +177,9 @@ To customize the agent for your own use case:
 
 ### Current Available Agents
 
-- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent, web research agent, and database analyst based on context
+- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent and web research agent based on context
 - **resume-agent**: Professional resume assistant that searches through resume information and project repositories
 - **web-rag-agent**: Web research assistant that can browse the internet and summarize articles
-- **postgres-mcp-agent**: Database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content. Analyzes PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance
 - **chatbot**: Simple conversational agent for general purpose chat
 
 
@@ -253,9 +248,6 @@ APP_POSTGRES_PASSWORD=application-database-password
 OPENROUTER_API_KEY=your-openrouter-key
 LANGSMITH_API_KEY=your-langsmith-key  
 GITHUB_PAT=your-github-token-for-container-registry
-
-# MCP Configuration (for database analysis agent)
-POSTGRES_MCP_URL=http://host.docker.internal:8000/sse
 ```
 
 #### Quick Deploy with Helm
@@ -330,7 +322,6 @@ cronjob:
 - `GDRIVE_DOC_ID`: Google Drive document ID for resume data
 - All database connection variables for vector storage
 - `OPENROUTER_API_KEY`: For model inference and embeddings
-- `POSTGRES_MCP_URL`: For database analysis capabilities (if using MCP agent)
 
 #### Database Support
 
@@ -340,7 +331,7 @@ cronjob:
 
 ### Docker Setup
 
-This project includes a Docker setup for easy development and deployment. The `compose.yaml` file defines the `postgres`, `agent_service` and `postgres-mcp` services. The Dockerfiles are in `docker/`.
+This project includes a Docker setup for easy development and deployment. The `compose.yaml` file defines the `postgres` and `agent_service` services. The Dockerfiles are in `docker/`.
 
 For local development, we recommend using [docker compose watch](https://docs.docker.com/compose/file-watch/). This feature allows for a smoother development experience by automatically updating your containers when changes are detected in your source code.
 

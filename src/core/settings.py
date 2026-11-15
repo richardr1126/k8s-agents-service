@@ -80,9 +80,6 @@ class Settings(BaseSettings):
     OPENWEATHERMAP_API_KEY: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
 
-    # MCP Configuration
-    POSTGRES_MCP_URL: str = "http://host.docker.internal:8000/sse"
-
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"
     LANGCHAIN_ENDPOINT: Annotated[str, BeforeValidator(check_str_is_http)] = (

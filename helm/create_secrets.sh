@@ -56,7 +56,6 @@ kubectl create secret generic app-secrets \
   --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY}" \
   --from-literal=LANGSMITH_PROJECT=default \
   --from-literal=TAVILY_API_KEY="${TAVILY_API_KEY}" \
-  --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}" \
-  --from-literal=POSTGRES_MCP_URL="http://postgres-mcp.default.svc.cluster.local:8000/sse"
+  --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}"
 
 echo "Secrets created successfully!"

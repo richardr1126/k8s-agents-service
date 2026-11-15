@@ -58,17 +58,5 @@ services:
           action: sync+restart
           target: /app/memory/
 
-  postgres-mcp:
-    image: crystaldba/postgres-mcp:latest
-    ports:
-      - "${POSTGRES_MCP_PORT:-8000}:8000"
-    command: ["--access-mode=restricted", "--transport=sse"]
-    environment:
-      - DATABASE_URI=postgresql://cosmerefeed:REDACTED@192.168.0.73:5433/cosmerefeed
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
 volumes:
   postgres_data:

@@ -172,23 +172,27 @@ async def test_single_subagent_stream(client: httpx.AsyncClient) -> None:
 
 
 async def test_parallel_task_calls(client: httpx.AsyncClient) -> None:
-    events = await run(client, [user("resume:alpha|postgres:beta")])
+    events = await run(client, [user("resume:alpha|web:rust")])
     assert_wire_hygiene(events)
     runs = subagent_runs(events)
-    assert set(runs) == {"call_alpha_1", "call_beta_1"}
+    assert set(runs) == {"call_alpha_1", "call_rust_1"}
     assert runs["call_alpha_1"]["name"] == "resume"
-    assert runs["call_beta_1"]["name"] == "postgres"
-    alpha, beta = runs["call_alpha_1"]["subagentRunId"], runs["call_beta_1"]["subagentRunId"]
-    assert alpha != beta
+    assert runs["call_rust_1"]["name"] == "web"
+    alpha, rust = runs["call_alpha_1"]["subagentRunId"], runs["call_rust_1"]["subagentRunId"]
+    assert alpha != rust
 
-    for topic, run_id in (("alpha", alpha), ("beta", beta)):
+    expected = {
+        "call_alpha_1": (alpha, "lookup", "Answer for alpha: facts about alpha"),
+        "call_rust_1": (rust, "web_search", WEB_ANSWER),
+    }
+    for call_id, (run_id, tool_name, answer) in expected.items():
         tagged = [e for e in events if e.get("subagentRunId") == run_id]
-        calls = [e["toolCallId"] for e in tagged if e["type"] == "TOOL_CALL_START"]
-        assert calls == [f"call_lookup_{topic}"]
+        tools = [e["toolCallName"] for e in tagged if e["type"] == "TOOL_CALL_START"]
+        assert tools == [tool_name]
         text = "".join(e["delta"] for e in tagged if e["type"] == "TEXT_MESSAGE_CONTENT")
-        assert text == f"Answer for {topic}: facts about {topic}"
-        assert_closed_before_result(events, run_id, f"call_{topic}_1")
-        result = events[index(events, "TOOL_CALL_RESULT", toolCallId=f"call_{topic}_1")]
+        assert text == answer
+        assert_closed_before_result(events, run_id, call_id)
+        result = events[index(events, "TOOL_CALL_RESULT", toolCallId=call_id)]
         assert result["content"] == text
 
 
@@ -252,11 +256,11 @@ async def test_interrupt_and_resume(client: httpx.AsyncClient) -> None:
 
 
 async def test_subagent_error_becomes_tool_result(client: httpx.AsyncClient) -> None:
-    events = await run(client, [user("resume:alpha|postgres:boom")])
+    events = await run(client, [user("web:rust|resume:boom")])
     assert_wire_hygiene(events)
     run_id = subagent_runs(events)["call_boom_1"]["subagentRunId"]
     error = events[index(events, "SUBAGENT_ERROR", subagentRunId=run_id)]
-    assert error["message"] == "Sub-agent 'postgres' failed: search backend down"
+    assert error["message"] == "Sub-agent 'resume' failed: search backend down"
     assert_closed_before_result(events, run_id, "call_boom_1")
     result = events[index(events, "TOOL_CALL_RESULT", toolCallId="call_boom_1")]
     assert result["content"] == error["message"]
@@ -270,12 +274,12 @@ async def test_subagent_error_becomes_tool_result(client: httpx.AsyncClient) -> 
     assert by_call["call_boom_1"] == {
         "subagentRunId": run_id,
         "parentToolCallId": "call_boom_1",
-        "name": "postgres",
+        "name": "resume",
         "description": "research boom",
         "status": "error",
         "error": error["message"],
     }
-    assert by_call["call_alpha_1"]["status"] == "success"
+    assert by_call["call_rust_1"]["status"] == "success"
     tool_message = next(m for m in history["messages"] if m["id"] == "call_boom_1")
     assert tool_message["error"] == "error"
     assert tool_message["content"] == error["message"]

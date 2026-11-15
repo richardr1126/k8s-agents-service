@@ -7,7 +7,6 @@ from agents.chatbot import chatbot
 from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.lazy_agent import LazyLoadingAgent
 from agents.main_agent import main_agent
-from agents.mcp_agent import mcp_agent
 from agents.rag_assistant import rag_assistant
 from agents.web_rag_agent import web_rag_agent
 from agents.workflow_agent import workflow_agent
@@ -31,7 +30,7 @@ class Agent:
 agents: dict[str, Agent] = {
     "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
     "auto-router": Agent(
-        description="Hello! I'm an agent that routes between a resume assistant, a web research assistant, and a database analyst.",
+        description="Hello! I'm an agent that routes between a resume assistant and a web research assistant.",
         graph=main_agent,
     ),
     "resume-agent": Agent(
@@ -43,12 +42,6 @@ agents: dict[str, Agent] = {
         description="""Hello! I'm a web research assistant designed to help you find information online.
         I can browse the web, summarize articles, and provide you with the most relevant information. Ask me anything about your research topic!""",
         graph=web_rag_agent,
-    ),
-    "postgres-mcp-agent": Agent(
-        description="""Hello! I'm a database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content.
-        I can analyze the PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance.
-        Ask me about user activity patterns, popular posts, engagement metrics, or any data-driven questions about the Cosmere feed!""",
-        graph=mcp_agent,
     ),
     "workflow-agent": Agent(
         description="""Hello! I'm a workflow-driven assistant. I expose a small tool surface (list_capabilities, read_capability, run_workflow_cli) that fronts a library of pregenerated CLI-style workflows. Ask me what I can do, or give me a task and I'll discover the right workflow and run it.""",
