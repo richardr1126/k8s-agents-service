@@ -100,6 +100,12 @@ def index(events: Events, type: str, **fields: Any) -> int:
     )
 
 
+def index_args(events: Events, call_id: str) -> str:
+    return "".join(
+        e["delta"] for e in events if e["type"] == "TOOL_CALL_ARGS" and e["toolCallId"] == call_id
+    )
+
+
 def subagent_runs(events: Events) -> dict[str, dict[str, Any]]:
     """parentToolCallId -> SUBAGENT_STARTED event."""
     started = [e for e in events if e["type"] == "SUBAGENT_STARTED"]
@@ -199,10 +205,41 @@ async def test_interrupt_and_resume(client: httpx.AsyncClient) -> None:
     assert finished["outcome"]["interruptIds"] == [pending["id"]]
     assert "TOOL_CALL_RESULT" not in [e["type"] for e in events if "subagentRunId" not in e]
 
+    first_run = events
+    # What a client holding the sub-agent card echoes back (as assistant-ui's
+    # toAgUiMessages does): the sub-agent's calls flattened into the parent
+    # assistant message, untagged.
+    held_calls = [
+        {
+            "id": e["toolCallId"],
+            "type": "function",
+            "function": {"name": e["toolCallName"], "arguments": a},
+        }
+        for e in first_run
+        if e["type"] == "TOOL_CALL_START"
+        for a in [index_args(first_run, e["toolCallId"])]
+    ]
+    assert [c["id"] for c in held_calls] == ["call_confirm_1", "call_confirm_confirm"]
+    echoed = [
+        user("resume:confirm"),
+        {"id": "main-dispatch-1", "role": "assistant", "content": "", "toolCalls": held_calls},
+    ]
     resume = [{"interruptId": pending["id"], "status": "resolved", "payload": "yes"}]
-    events = await run(client, [user("resume:confirm")], resume=resume)
+    events = await run(client, echoed, resume=resume)
     assert_wire_hygiene(events)
     assert {e["subagentRunId"] for e in events if "subagentRunId" in e} == {run_id}
+    # The resumed run continues the same card: calls the client holds are not
+    # announced again, the sub-agent restarts under its original parent, and
+    # results carry the first run's call ids.
+    assert not [
+        e for e in events if e["type"].startswith("TOOL_CALL_") and e["type"] != "TOOL_CALL_RESULT"
+    ]
+    [restarted] = [e for e in events if e["type"] == "SUBAGENT_STARTED"]
+    first_started = subagent_runs(first_run)["call_confirm_1"]
+    assert restarted == first_started
+    assert first_started["parentMessageId"] == "main-dispatch-1"
+    results = [e["toolCallId"] for e in events if e["type"] == "TOOL_CALL_RESULT"]
+    assert results == ["call_confirm_confirm", "call_confirm_1"]
     assert (
         events[index(events, "TOOL_CALL_RESULT", toolCallId="call_confirm_confirm")]["content"]
         == "user said yes"

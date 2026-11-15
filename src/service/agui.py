@@ -4,7 +4,17 @@ import re
 from collections.abc import AsyncGenerator, AsyncIterator, Iterator
 from typing import Any, cast
 
-from ag_ui.core import EventType, Message, RunAgentInput, ToolCallResultEvent
+from ag_ui.core import (
+    AssistantMessage,
+    EventType,
+    Message,
+    RunAgentInput,
+    SubagentStartedEvent,
+    ToolCallArgsEvent,
+    ToolCallEndEvent,
+    ToolCallResultEvent,
+    ToolCallStartEvent,
+)
 from ag_ui.encoder import EventEncoder
 from ag_ui_langgraph import LangGraphAgent
 from ag_ui_langgraph.agent import ProcessedEvents
@@ -146,19 +156,58 @@ def _guard_inbound(messages: list[Message], checkpoint: list[Any]) -> list[Messa
         for m in root[tail_start:]
         if m.role == "user" or (m.role == "tool" and m.tool_call_id in pending)
     }
+    # Clients holding sub-agent cards echo the nested calls flattened into the
+    # parent's assistant message. Restore the checkpoint's calls: otherwise the
+    # adapter claims those ids for the root lane and renames the sub-agent's
+    # own calls ("<id>::tools:<run>") when a resumed run replays them.
+    calls = {
+        m.id: {tc["id"] for tc in m.tool_calls} for m in checkpoint if isinstance(m, AIMessage)
+    }
+
+    def own_calls(message: Message) -> Message:
+        own = calls.get(_MINTED_ROOT_ID.sub("", message.id))
+        if own is None or not isinstance(message, AssistantMessage) or not message.tool_calls:
+            return message
+        kept = [tc for tc in message.tool_calls if _MINTED_ROOT_ID.sub("", tc.id) in own]
+        return message.model_copy(update={"tool_calls": kept or None})
+
     return [
-        m
+        own_calls(m) if getattr(m, "subagent_run_id", None) is None else m
         for m in messages
         if getattr(m, "subagent_run_id", None) is not None or is_known(m) or id(m) in new
     ]
 
 
-async def _events(agent: _Agent, input: RunAgentInput) -> AsyncIterator[str]:
+def _held_tool_calls(messages: list[Message]) -> dict[str, str]:
+    """Tool call id -> id of the client message holding it, as echoed."""
+    return {
+        tc.id: m.id
+        for m in messages
+        if isinstance(m, AssistantMessage)
+        for tc in m.tool_calls or []
+    }
+
+
+async def _events(agent: _Agent, input: RunAgentInput, held: dict[str, str]) -> AsyncIterator[str]:
     encoder = EventEncoder()
     async for event in agent.run(input):
         # The checkpoint, via /history, is the source of truth for messages.
-        if event.type != EventType.MESSAGES_SNAPSHOT:
-            yield encoder.encode(event)
+        if event.type == EventType.MESSAGES_SNAPSHOT:
+            continue
+        # A resumed run replays the interrupted calls (the parent's `task` and
+        # the sub-agent's own) without a model stream, so the adapter announces
+        # them again with no parent message. The client already holds them;
+        # only their results are news.
+        if (
+            isinstance(event, ToolCallStartEvent | ToolCallArgsEvent | ToolCallEndEvent)
+            and event.tool_call_id in held
+        ):
+            continue
+        if isinstance(event, SubagentStartedEvent) and event.parent_message_id is None:
+            event = event.model_copy(
+                update={"parent_message_id": held.get(event.parent_tool_call_id or "")}
+            )
+        yield encoder.encode(event)
 
 
 @router.post("/{agent_id}/ag-ui")
@@ -178,6 +227,7 @@ async def ag_ui(agent_id: str, input: RunAgentInput) -> StreamingResponse:
         "configurable": {"model": model, "user_id": forwarded.get("user_id")},
     }
     state = await agent.graph.aget_state({"configurable": {"thread_id": input.thread_id}})
+    held = _held_tool_calls(input.messages)
     input = input.model_copy(
         update={
             # The adapter merges forwardedProps into the graph input; they are
@@ -188,4 +238,4 @@ async def ag_ui(agent_id: str, input: RunAgentInput) -> StreamingResponse:
     )
     # Starlette cancels this generator, and with it the graph run, when the
     # client disconnects.
-    return StreamingResponse(_events(agent, input), media_type="text/event-stream")
+    return StreamingResponse(_events(agent, input, held), media_type="text/event-stream")
