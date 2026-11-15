@@ -57,20 +57,6 @@ docker buildx build \
   --label "org.opencontainers.image.licenses=MIT" \
   ../.
 
-# Build and push agents-streamlit image
-AGENTS_STREAMLIT_IMAGE="${REGISTRY}/${BASE_IMAGE_NAME}-streamlit"
-echo "Building and pushing agents-streamlit image with tag: ${IMAGE_TAG}..."
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t $AGENTS_STREAMLIT_IMAGE:$IMAGE_TAG \
-  -t $AGENTS_STREAMLIT_IMAGE:latest \
-  --push \
-  --file "../docker/Dockerfile.app" \
-  --label "org.opencontainers.image.source=https://github.com/richardr1126/k8s-agents-service" \
-  --label "org.opencontainers.image.description=Kubernetes Agents Streamlit" \
-  --label "org.opencontainers.image.licenses=MIT" \
-  ../. 
-
 # Create the user and database
 echo "Creating user..."
 kubectl exec --namespace yugabyte -it yb-tserver-0 -- /bin/bash -c "export PGPASSWORD='${ADMIN_POSTGRES_PASSWORD}'; /home/yugabyte/bin/ysqlsh -h yb-tserver-0.yb-tservers.yugabyte -U ysqladmin -d yugabyte -c \"CREATE USER agentsservice WITH PASSWORD '${APP_POSTGRES_PASSWORD}' SUPERUSER CREATEDB CREATEROLE;\"" || true
@@ -85,8 +71,6 @@ kubectl exec --namespace yugabyte -it yb-tserver-0 -- /bin/bash -c "export PGPAS
 # Upgrade or install the Helm chart
 helm upgrade --install agents-service ./agents-service \
   --set image.repository="${REGISTRY}/${BASE_IMAGE_NAME}-service" \
-  --set image.tag="${IMAGE_TAG}" \
-  --set agents-streamlit.image.repository="${REGISTRY}/${BASE_IMAGE_NAME}-streamlit" \
-  --set agents-streamlit.image.tag="${IMAGE_TAG}"
+  --set image.tag="${IMAGE_TAG}"
 
 echo "Platform deployment completed successfully with image tag: ${IMAGE_TAG}!"

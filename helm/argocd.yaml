@@ -19,8 +19,6 @@ spec:
       parameters:
         - name: image.pullPolicy
           value: Always
-        - name: agents-streamlit.image.pullPolicy
-          value: Always
   destination:
     server: https://kubernetes.default.svc
     namespace: default

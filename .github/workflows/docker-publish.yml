@@ -23,9 +23,6 @@ jobs:
           - name: service
             dockerfile: docker/Dockerfile.service
             image_suffix: -service
-          - name: streamlit
-            dockerfile: docker/Dockerfile.app
-            image_suffix: -streamlit
           - name: cron
             dockerfile: docker/Dockerfile.cron
             image_suffix: -cron

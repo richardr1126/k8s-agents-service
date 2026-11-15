@@ -57,39 +57,6 @@ services:
         - path: src/memory/
           action: sync+restart
           target: /app/memory/
-  streamlit_app:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.app
-    ports:
-      - "${STREAMLIT_PORT:-8501}:8501"
-    depends_on:
-      - agent_service
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import urllib.request; urllib.request.urlopen('http://localhost:8501/healthz')",
-        ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    environment:
-      - AGENT_URL=http://agent_service:8080
-      - AUTH_SECRET=${AUTH_SECRET:-secret}
-    develop:
-      watch:
-        - path: src/client/
-          action: sync+restart
-          target: /app/client/
-        - path: src/schema/
-          action: sync+restart
-          target: /app/schema/
-        - path: src/streamlit_app.py
-          action: sync+restart
-          target: /app/streamlit_app.py
 
   postgres-mcp:
     image: crystaldba/postgres-mcp:latest

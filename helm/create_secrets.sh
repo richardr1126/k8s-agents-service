@@ -36,8 +36,6 @@ done
 # Delete existing secrets and create new ones
 echo "Deleting existing app-secrets..."
 kubectl delete secret app-secrets --ignore-not-found
-echo "Deleting existing streamlit-secrets..."
-kubectl delete secret streamlit-secrets --ignore-not-found
 
 # Create application secrets
 echo "Creating app-secrets..."
@@ -60,10 +58,5 @@ kubectl create secret generic app-secrets \
   --from-literal=TAVILY_API_KEY="${TAVILY_API_KEY}" \
   --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}" \
   --from-literal=POSTGRES_MCP_URL="http://postgres-mcp.default.svc.cluster.local:8000/sse"
-
-echo "Creating streamlit-secrets..."
-kubectl create secret generic streamlit-secrets \
-  --from-literal=AGENT_URL="https://agents.richardr.dev" \
-  --from-literal=AUTH_SECRET="${AUTH_SECRET}"
 
 echo "Secrets created successfully!"

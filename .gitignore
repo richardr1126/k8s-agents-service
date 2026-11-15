@@ -1,5 +1,4 @@
-# Streamlit and sqlite
-.streamlit/secrets.toml
+# sqlite
 checkpoints.db
 checkpoints.db-*
 
