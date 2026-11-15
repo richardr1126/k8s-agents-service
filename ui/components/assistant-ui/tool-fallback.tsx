@@ -3,7 +3,6 @@ import { ChevronDownIcon, ChevronUpIcon, WrenchIcon, SearchIcon, CalculatorIcon,
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { MarkdownString } from "./markdown-string";
-import { TransferToolFallback } from "../transfer-tool-ui";
 import { cn } from "@/lib/utils";
 import { Spinner } from "../ui/spinner";
 import { useContainerBreakpoint } from "@/hooks/use-container-breakpoint";
@@ -82,11 +81,6 @@ export const ToolFallback: ToolCallMessagePartComponent = (props) => {
   const hasSecondaryHeaderLine = Boolean(searchQuery || (!searchQuery && !isCollapsed));
   const useTopAlignedHeader = isNarrow && hasSecondaryHeaderLine;
 
-  // Main-agent dispatch tool uses a dedicated transfer card.
-  if (toolName === "task") {
-    return <TransferToolFallback {...props} />;
-  }
-  
   const formatResult = (result: unknown) => {
     if (typeof result === "string") {
       return result;

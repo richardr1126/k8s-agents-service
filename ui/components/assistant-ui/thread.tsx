@@ -1,133 +1,66 @@
 import {
-  ThreadPrimitive,
-  ComposerPrimitive,
-  MessagePrimitive,
   ActionBarPrimitive,
-  BranchPickerPrimitive,
+  ComposerPrimitive,
   ErrorPrimitive,
-  AssistantRuntimeProvider,
-  ExternalStoreAdapter,
-  useExternalStoreRuntime,
+  MessagePrimitive,
+  ThreadPrimitive,
   useAuiState,
 } from "@assistant-ui/react";
-import type { FC, PointerEvent as ReactPointerEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import {
+  AlertCircle,
   ArrowDownIcon,
   CalculatorIcon,
+  CheckIcon,
   ChevronDownIcon,
   CloudIcon,
   CopyIcon,
-  CheckIcon,
-  PencilIcon,
   SearchIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  XIcon,
-  Square,
   SendHorizontalIcon,
+  Square,
   WrenchIcon,
 } from "lucide-react";
-import { useServiceInfo } from "@/components/service-info-provider";
-
+import type { FC } from "react";
+import { useMemo } from "react";
+import { AgentSelect } from "@/components/agent-select";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { motion } from "framer-motion";
+import { useChat } from "@/components/custom-runtime-provider";
+import { InterruptBanner } from "@/components/interrupt-banner";
+import { ModelSelect } from "@/components/model-select";
+import { SubagentToolCard } from "@/components/subagent-tool-ui";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useIsMobile } from "@/hooks/use-mobile";
-import { MarkdownText } from "./markdown-text";
-import { ToolFallback } from "./tool-fallback";
-import { ReasoningPart } from "./reasoning";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { TaskToolUI } from "@/components/task-ui";
-import {
-  convertMessage,
-  ROOT_BRANCH_ID,
-  useThreadContext,
-} from "@/components/custom-runtime-provider";
-import { ChatMessage } from "@/lib/types";
-import { AgentSelect } from "@/components/agent-select";
-import { ModelSelect } from "@/components/model-select";
-import { useUser } from "@/components/auth-user-provider";
-import { RateLimitDisplay, RateLimitBanner } from "@/components/rate-limit-display";
-import { useRateLimit } from "@/components/rate-limit-provider";
-import { useSession } from "@/lib/auth-client";
-import { hasUnlimitedUsageOverride, isUnlimitedRateLimit } from "@/lib/usage-overrides";
 import agentSuggestions from "./agent-suggestions.json";
+import { MarkdownText } from "./markdown-text";
+import { ReasoningPart } from "./reasoning";
+import { ToolFallback } from "./tool-fallback";
+
+const MAX_CHARACTERS = 560;
 
 export const Thread: FC = () => {
-  const { isLoading: userLoading } = useUser();
-  const { currentThreadId, threads, isSubAgentPanelOpen } = useThreadContext();
-  
-  // Show thread skeleton when:
-  // 1. User is still loading (authentication)
-  // 2. We have a thread ID but no messages loaded for it yet (thread data loading)
-  const isThreadDataLoading = currentThreadId && !threads.has(currentThreadId);
-  const baseLoading = userLoading || isThreadDataLoading;
-
-  // Debounce the transition from loading -> not loading to smooth out quick flips
-  const [isThreadLoading, setIsThreadLoading] = useState(baseLoading);
-  useEffect(() => {
-    if (baseLoading) {
-      setIsThreadLoading(true);
-      return;
-    }
-    const t = setTimeout(() => setIsThreadLoading(false), 150);
-    return () => clearTimeout(t);
-  }, [baseLoading]);
-
-  if (isThreadLoading) {
-    return <ThreadLoadingSkeleton />;
-  }
-
   return (
-    <div className="bg-background flex h-full min-w-0">
-      <ThreadPrimitive.Root
-        // aui-thread-root
-        className={cn(
-          "bg-background flex h-full min-w-0 flex-col pb-2 sm:pb-0",
-          isSubAgentPanelOpen ? "flex-1" : "w-full",
-        )}
-        style={{
-          ["--thread-max-width" as string]: "48rem",
-          ["--thread-padding-x" as string]: "0.7rem",
-        }}
-      >
-        {/* aui-thread-viewport */}
-        <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
-          <ThreadWelcome />
-
-          <ThreadPrimitive.Messages
-            components={{
-              UserMessage,
-              EditComposer,
-              AssistantMessage,
-            }}
-          />
-
-          <ThreadPrimitive.If empty={false}>
-            {/* aui-thread-viewport-spacer */}
-            <motion.div className="min-h-6 min-w-6 shrink-0" />
-          </ThreadPrimitive.If>
-        </ThreadPrimitive.Viewport>
-
-        <Composer />
-      </ThreadPrimitive.Root>
-
-      <SubAgentSidePanel />
-    </div>
+    <ThreadPrimitive.Root
+      className="bg-background flex h-full w-full min-w-0 flex-col pb-2 sm:pb-0"
+      style={{
+        ["--thread-max-width" as string]: "48rem",
+        ["--thread-padding-x" as string]: "0.7rem",
+      }}
+    >
+      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
+        <ThreadWelcome />
+        <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
+        <ThreadPrimitive.If empty={false}>
+          <motion.div className="min-h-6 min-w-6 shrink-0" />
+        </ThreadPrimitive.If>
+      </ThreadPrimitive.Viewport>
+      <Composer />
+    </ThreadPrimitive.Root>
   );
 };
 
-const ThreadLoadingSkeleton: FC = () => {
+export const ThreadLoadingSkeleton: FC = () => {
   return (
     <div className="bg-background flex h-full flex-col">
       {/* Skeleton for main content area */}
@@ -195,251 +128,6 @@ const ThreadLoadingSkeleton: FC = () => {
   );
 };
 
-const NOOP_ON_NEW = async () => {
-  throw new Error("Sub-agent side panel is read-only");
-};
-
-const DEFAULT_SUBAGENT_PANEL_WIDTH = 42 * 16;
-const MIN_SUBAGENT_PANEL_WIDTH = 24 * 16;
-const MIN_MAIN_THREAD_WIDTH = 22 * 16;
-
-const SubAgentSidePanel: FC = () => {
-  const {
-    currentThreadId,
-    threads,
-    runningThreads,
-    isSubAgentPanelOpen,
-    setSubAgentPanelOpen,
-    selectedSubAgentBranchId,
-    setSelectedSubAgentBranchId,
-    closeSubAgentPanel,
-  } = useThreadContext();
-  const isMobile = useIsMobile();
-  const [desktopPanelWidth, setDesktopPanelWidth] = useState(DEFAULT_SUBAGENT_PANEL_WIDTH);
-  const [isResizing, setIsResizing] = useState(false);
-  const resizeStartRef = useRef<{ x: number; width: number } | null>(null);
-
-  const allMessages = useMemo(
-    () => (currentThreadId ? (threads.get(currentThreadId) ?? []) : []),
-    [currentThreadId, threads],
-  );
-
-  const branchIds = useMemo(() => {
-    const seen = new Set<string>();
-    const ordered: string[] = [];
-    for (const message of allMessages) {
-      const branchId = message.branchId;
-      if (!branchId || branchId === ROOT_BRANCH_ID) continue;
-      if (seen.has(branchId)) continue;
-      seen.add(branchId);
-      ordered.push(branchId);
-    }
-    return ordered;
-  }, [allMessages]);
-
-  const activeBranchId = useMemo(() => {
-    // Preserve explicit selection even before first branch message arrives.
-    if (selectedSubAgentBranchId) {
-      return selectedSubAgentBranchId;
-    }
-    return branchIds[0] ?? null;
-  }, [selectedSubAgentBranchId, branchIds]);
-
-  const activeBranchLabel = useMemo(() => {
-    if (!activeBranchId) return "Sub-agent Stream";
-    const prefix = activeBranchId.split(":")[0] || activeBranchId;
-    switch (prefix) {
-      case "resume":
-        return "Resume Agent";
-      case "web":
-        return "Web Research Agent";
-      case "postgres":
-        return "Postgres Agent";
-      default:
-        return "Sub-agent Stream";
-    }
-  }, [activeBranchId]);
-
-  useEffect(() => {
-    // Only auto-select when nothing is selected yet.
-    if (selectedSubAgentBranchId || !activeBranchId) return;
-    setSelectedSubAgentBranchId(activeBranchId);
-  }, [activeBranchId, selectedSubAgentBranchId, setSelectedSubAgentBranchId]);
-
-  const branchMessages = useMemo(
-    () => (activeBranchId ? allMessages.filter((message) => message.branchId === activeBranchId) : []),
-    [activeBranchId, allMessages],
-  );
-
-  const branchRuntimeAdapter = useMemo<ExternalStoreAdapter<ChatMessage>>(
-    () => ({
-      messages: branchMessages,
-      isRunning: Boolean(currentThreadId && activeBranchId && runningThreads.has(currentThreadId)),
-      onNew: NOOP_ON_NEW,
-      convertMessage,
-    }),
-    [activeBranchId, branchMessages, currentThreadId, runningThreads],
-  );
-  const branchRuntime = useExternalStoreRuntime(branchRuntimeAdapter);
-
-  const clampDesktopWidth = useCallback((width: number) => {
-    if (typeof window === "undefined") {
-      return Math.max(MIN_SUBAGENT_PANEL_WIDTH, width);
-    }
-    const maxWidth = Math.max(
-      MIN_SUBAGENT_PANEL_WIDTH,
-      window.innerWidth - MIN_MAIN_THREAD_WIDTH,
-    );
-    return Math.min(Math.max(width, MIN_SUBAGENT_PANEL_WIDTH), maxWidth);
-  }, []);
-
-  useEffect(() => {
-    if (isSubAgentPanelOpen) return;
-    setDesktopPanelWidth(DEFAULT_SUBAGENT_PANEL_WIDTH);
-    setIsResizing(false);
-    resizeStartRef.current = null;
-  }, [isSubAgentPanelOpen]);
-
-  useEffect(() => {
-    if (!isSubAgentPanelOpen || isMobile) return;
-    const onWindowResize = () => {
-      setDesktopPanelWidth((width) => clampDesktopWidth(width));
-    };
-    window.addEventListener("resize", onWindowResize);
-    onWindowResize();
-    return () => window.removeEventListener("resize", onWindowResize);
-  }, [clampDesktopWidth, isMobile, isSubAgentPanelOpen]);
-
-  useEffect(() => {
-    if (!isResizing) return;
-    const onPointerMove = (event: PointerEvent) => {
-      const resizeStart = resizeStartRef.current;
-      if (!resizeStart) return;
-      const dragDelta = resizeStart.x - event.clientX;
-      const nextWidth = resizeStart.width + dragDelta;
-      setDesktopPanelWidth(clampDesktopWidth(nextWidth));
-    };
-    const stopResizing = () => {
-      setIsResizing(false);
-      resizeStartRef.current = null;
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", stopResizing);
-    window.addEventListener("pointercancel", stopResizing);
-    document.body.style.userSelect = "none";
-    document.body.style.cursor = "col-resize";
-
-    return () => {
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", stopResizing);
-      window.removeEventListener("pointercancel", stopResizing);
-      document.body.style.userSelect = "";
-      document.body.style.cursor = "";
-    };
-  }, [clampDesktopWidth, isResizing]);
-
-  const onResizePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    resizeStartRef.current = {
-      x: event.clientX,
-      width: clampDesktopWidth(desktopPanelWidth),
-    };
-    setIsResizing(true);
-  };
-
-  const panelContent = (
-    <>
-      <div className="border-b border-border/60 px-4 py-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold">{activeBranchLabel}</div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0"
-            onClick={closeSubAgentPanel}
-            aria-label="Close sub-agent panel"
-          >
-            <XIcon className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      <AssistantRuntimeProvider runtime={branchRuntime}>
-        <TaskToolUI />
-        <ThreadPrimitive.Root
-          className="flex min-h-0 min-w-0 flex-1 flex-col"
-          style={{
-            ["--thread-max-width" as string]: "100%",
-            ["--thread-padding-x" as string]: "0.8rem",
-          }}
-        >
-          <ThreadPrimitive.Viewport className="relative flex min-h-0 min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-4">
-            <ThreadPrimitive.Empty>
-              <div className="text-muted-foreground px-4 py-6 text-sm">
-                Waiting for branch events...
-              </div>
-            </ThreadPrimitive.Empty>
-            <ThreadPrimitive.Messages
-              components={{
-                UserMessage: UserSidebarMessage,
-                EditComposer,
-                AssistantMessage: AssistantSidebarMessage,
-              }}
-            />
-            <ThreadPrimitive.If empty={false}>
-              <motion.div className="min-h-5 min-w-5 shrink-0" />
-            </ThreadPrimitive.If>
-          </ThreadPrimitive.Viewport>
-        </ThreadPrimitive.Root>
-      </AssistantRuntimeProvider>
-    </>
-  );
-
-  if (isMobile) {
-    return (
-      <Sheet open={isSubAgentPanelOpen} onOpenChange={setSubAgentPanelOpen}>
-        <SheetContent
-          side="right"
-          className="bg-background border-l border-border/70 flex h-full w-[85vw] max-w-[42rem] min-w-0 flex-col gap-0 p-0 [&>button]:hidden"
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Sub-agent panel</SheetTitle>
-            <SheetDescription>
-              Displays the active sub-agent stream and branch events.
-            </SheetDescription>
-          </SheetHeader>
-          {panelContent}
-        </SheetContent>
-      </Sheet>
-    );
-  }
-
-  if (!isSubAgentPanelOpen) {
-    return null;
-  }
-
-  return (
-    <aside
-      className="bg-background border-l border-border/70 relative flex h-full min-w-0 shrink-0 flex-col overflow-hidden"
-      style={{ width: `${desktopPanelWidth}px` }}
-    >
-      <div
-        className="absolute top-0 left-0 z-20 h-full w-2 -translate-x-1/2 cursor-col-resize touch-none"
-        onPointerDown={onResizePointerDown}
-        aria-hidden="true"
-      />
-      <div
-        className={cn(
-          "bg-border/60 absolute inset-y-0 left-0 w-px",
-          isResizing && "bg-primary/80",
-        )}
-        aria-hidden="true"
-      />
-      {panelContent}
-    </aside>
-  );
-};
-
 const ThreadScrollToBottom: FC = () => {
   return (
     <ThreadPrimitive.ScrollToBottom asChild>
@@ -456,14 +144,8 @@ const ThreadScrollToBottom: FC = () => {
 };
 
 const ThreadWelcome: FC = () => {
-  const { selectedAgentId } = useThreadContext();
-  const { serviceInfo } = useServiceInfo();
-  
-  // Find the current agent's description
-  const currentAgent = serviceInfo?.agents?.find(
-    agent => agent.key === (selectedAgentId || serviceInfo?.default_agent)
-  );
-  
+  const { serviceInfo, agentId } = useChat();
+  const currentAgent = serviceInfo.agents.find((agent) => agent.key === agentId);
   const welcomeMessage = currentAgent?.description || "How can I help you today?";
 
   return (
@@ -502,12 +184,9 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadWelcomeSuggestions: FC = () => {
-  const { selectedAgentId } = useThreadContext();
-  const { serviceInfo } = useServiceInfo();
-  
-  // Get suggestions for the current agent, fallback to auto-router suggestions
-  const currentAgentId = selectedAgentId || serviceInfo?.default_agent || "auto-router";
-  const suggestions = agentSuggestions[currentAgentId as keyof typeof agentSuggestions] || agentSuggestions["auto-router"];
+  const { agentId } = useChat();
+  const suggestions =
+    agentSuggestions[agentId as keyof typeof agentSuggestions] ?? agentSuggestions["auto-router"];
 
   return (
     // aui-thread-welcome-suggestions
@@ -546,201 +225,113 @@ const ThreadWelcomeSuggestions: FC = () => {
   );
 };
 
+
+const LimitBanner: FC = () => {
+  const { limitMessage } = useChat();
+  if (!limitMessage) return null;
+  return (
+    <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+      <AlertCircle className="size-4 shrink-0" />
+      <p>{limitMessage}</p>
+    </div>
+  );
+};
+
+/** Runs left in the tightest window, e.g. "2/3". */
+const UsageCounter: FC = () => {
+  const { usage } = useChat();
+  const tightest = usage?.reduce<(typeof usage)[number] | null>(
+    (min, w) => (!min || w.limit - w.used < min.limit - min.used ? w : min),
+    null,
+  );
+  if (!tightest) return null;
+  const left = Math.max(0, tightest.limit - tightest.used);
+  return (
+    <span
+      className={cn("text-sm", left === 0 ? "text-destructive" : "text-muted-foreground")}
+      title={`${left} of ${tightest.limit} runs left this ${tightest.window}`}
+    >
+      {left}/{tightest.limit}
+    </span>
+  );
+};
+
 const Composer: FC = () => {
-  // Read the current text value from composer state
-  const composerText = useAuiState((s) => s.composer.text);
-  const { data: session } = useSession();
-  const hasUnlimitedChars = hasUnlimitedUsageOverride({
-    id: session?.user?.id,
-    email: session?.user?.email,
-  });
-  const maxCharacters = hasUnlimitedChars ? null : 560; // 2 tweets worth (280 chars each)
-  const isOverLimit = maxCharacters !== null && composerText.length > maxCharacters;
-  const charactersRemaining = maxCharacters === null ? null : (maxCharacters - composerText.length);
-
-  // Import the rate limit hook to check status
-  const { status } = useRateLimit();
-  const isAtLimit = status ? (!isUnlimitedRateLimit(status.limit) && status.remainingMessages <= 0) : false;
-  const isSendDisabled = isAtLimit || isOverLimit || composerText.trim().length === 0;
-
-  // Handle keyboard events to prevent submission when disabled
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      if (isSendDisabled) {
-        e.preventDefault();
-        e.stopPropagation();
-        return false;
-      }
-    }
-  };
+  const text = useAuiState((s) => s.composer.text);
+  const { limitMessage } = useChat();
+  const remaining = MAX_CHARACTERS - text.length;
+  const isOverLimit = remaining < 0;
+  const isSendDisabled = Boolean(limitMessage) || isOverLimit || text.trim().length === 0;
 
   return (
-    // aui-composer-wrapper
     <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)] pb-4 md:pb-6">
       <ThreadScrollToBottom />
       <ThreadPrimitive.Empty>
         <ThreadWelcomeSuggestions />
       </ThreadPrimitive.Empty>
-      
-      {/* Rate Limit Banner */}
-      <RateLimitBanner />
-      
-      {/* aui-composer-root */}
+      <InterruptBanner />
+      <LimitBanner />
       <ComposerPrimitive.Root className="focus-within::ring-offset-2 relative flex w-full flex-col rounded-2xl focus-within:ring-2 focus-within:ring-black dark:focus-within:ring-white">
-        {/* aui-composer-input */}
         <ComposerPrimitive.Input
           placeholder="Send a message..."
           className={cn(
             "bg-muted border-border dark:border-muted-foreground/15 focus:outline-primary placeholder:text-muted-foreground max-h-[calc(50dvh)] min-h-16 w-full resize-none rounded-t-2xl border-x border-t px-4 pt-2 pb-3 text-base outline-none",
-            isOverLimit && "border-destructive focus:ring-destructive"
+            isOverLimit && "border-destructive focus:ring-destructive",
           )}
           rows={1}
           autoFocus
           aria-label="Message input"
-          onKeyDown={handleKeyDown}
-          maxLength={maxCharacters !== null ? maxCharacters + 50 : undefined} // Allow some buffer for user awareness
+          submitMode={isSendDisabled ? "none" : "enter"}
         />
-        <ComposerAction 
-          inputValue={composerText}
-          maxCharacters={maxCharacters}
-          isOverLimit={isOverLimit}
-          charactersRemaining={charactersRemaining}
-        />
-      </ComposerPrimitive.Root>
-    </div>
-  );
-};
-
-interface ComposerActionProps {
-  inputValue: string;
-  maxCharacters: number | null;
-  isOverLimit: boolean;
-  charactersRemaining: number | null;
-}
-
-const ComposerAction: FC<ComposerActionProps> = ({ 
-  inputValue, 
-  maxCharacters,
-  isOverLimit, 
-  charactersRemaining 
-}) => {
-  const {
-    selectedAgentId,
-    setSelectedAgentId,
-    selectedModelId,
-    setSelectedModelId,
-  } = useThreadContext();
-
-  // Import the hook at the top of file and use it here
-  const { status } = useRateLimit();
-  const isAtLimit = status ? (!isUnlimitedRateLimit(status.limit) && status.remainingMessages <= 0) : false;
-  const isSendDisabled = isAtLimit || isOverLimit || inputValue.trim().length === 0;
-  const isUnlimitedChars = maxCharacters === null;
-
-  return (
-    // aui-composer-action-wrapper
-    <div className="bg-muted/80 border-top border-1 dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2 flex-wrap gap-y-1">
-      {/* left: model/agent selectors */}
-      <div className="flex items-center gap-2">
-        <AgentSelect
-          className=""
-          selectedAgentId={selectedAgentId}
-          onAgentChange={setSelectedAgentId}
-        />
-        <ModelSelect
-          className=""
-          selectedModelId={selectedModelId}
-          onModelChange={setSelectedModelId}
-        />
-      </div>
-      {/* <TooltipIconButton
-        tooltip="Attach file"
-        variant="ghost"
-        // aui-composer-attachment-button
-        className="hover:bg-foreground/15 dark:hover:bg-background/50 scale-115 p-3.5"
-        onClick={() => {
-          console.log("Attachment clicked - not implemented");
-        }}
-      >
-        <PlusIcon />
-      </TooltipIconButton> */}
-
-      {/* Rate limit display and action buttons */}
-      <div className="flex items-center gap-2 pl-1">
-        {/* Character count display */}
-        {inputValue.length > 0 && (
-          <span 
-            className={cn(
-              "text-xs font-mono",
-              isOverLimit 
-                ? "text-destructive" 
-                : !isUnlimitedChars && (charactersRemaining ?? 0) <= 50
-                  ? "text-amber-600 dark:text-amber-400" 
-                  : "text-muted-foreground"
+        <div className="bg-muted/80 border-1 dark:border-muted-foreground/15 relative flex flex-wrap items-center justify-between gap-y-1 rounded-b-2xl border-x border-b p-2">
+          <div className="flex items-center gap-2">
+            <AgentSelect />
+            <ModelSelect />
+          </div>
+          <div className="flex items-center gap-2 pl-1">
+            {text.length > 0 && (
+              <span
+                className={cn(
+                  "font-mono text-xs",
+                  isOverLimit ? "text-destructive" : remaining <= 50 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
+                )}
+                title={`${text.length}/${MAX_CHARACTERS} characters`}
+              >
+                {isOverLimit ? `+${-remaining}` : remaining}
+              </span>
             )}
-            title={
-              isUnlimitedChars
-                ? `${inputValue.length} characters used (unlimited)`
-                : `${inputValue.length}/${maxCharacters} characters used`
-            }
-          >
-            {isUnlimitedChars
-              ? "∞"
-              : (charactersRemaining ?? 0) < 0
-                ? `+${Math.abs(charactersRemaining ?? 0)}`
-                : (charactersRemaining ?? 0)}
-          </span>
-        )}
-        
-        <RateLimitDisplay compact={true} />
-        
-        <ThreadPrimitive.If running={false}>
-          <ComposerPrimitive.Send asChild>
-            <Button
-              type="submit"
-              variant="ghost"
-              // aui-composer-send
-              className={cn(
-                "h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30",
-                isSendDisabled && "opacity-50 cursor-not-allowed"
-              )}
-              aria-label={
-                isOverLimit 
-                  ? "Message too long" 
-                  : isAtLimit 
-                    ? "Rate limit reached" 
-                    : "Send message"
-              }
-              disabled={isSendDisabled}
-              title={
-                isOverLimit 
-                  ? `Message is ${Math.abs(charactersRemaining ?? 0)} characters over the limit`
-                  : isAtLimit 
-                    ? `Rate limit reached. ${status?.remainingMessages || 0} messages remaining today.`
-                    : undefined
-              }
-            >
-              {/* aui-composer-send-icon */}
-              <SendHorizontalIcon className="size-4" />
-            </Button>
-          </ComposerPrimitive.Send>
-        </ThreadPrimitive.If>
-
-        <ThreadPrimitive.If running>
-          <ComposerPrimitive.Cancel asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              // aui-composer-cancel
-              className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
-              aria-label="Stop generating"
-            >
-              {/* aui-composer-cancel-icon */}
-              <Square className="size-3.5 fill-white dark:size-4 dark:fill-black" />
-            </Button>
-          </ComposerPrimitive.Cancel>
-        </ThreadPrimitive.If>
-      </div>
+            <UsageCounter />
+            <ThreadPrimitive.If running={false}>
+              <ComposerPrimitive.Send asChild>
+                <Button
+                  type="submit"
+                  variant="ghost"
+                  className={cn(
+                    "h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30",
+                    isSendDisabled && "cursor-not-allowed opacity-50",
+                  )}
+                  aria-label="Send message"
+                  disabled={isSendDisabled}
+                >
+                  <SendHorizontalIcon className="size-4" />
+                </Button>
+              </ComposerPrimitive.Send>
+            </ThreadPrimitive.If>
+            <ThreadPrimitive.If running>
+              <ComposerPrimitive.Cancel asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
+                  aria-label="Stop generating"
+                >
+                  <Square className="size-3.5 fill-white dark:size-4 dark:fill-black" />
+                </Button>
+              </ComposerPrimitive.Cancel>
+            </ThreadPrimitive.If>
+          </div>
+        </div>
+      </ComposerPrimitive.Root>
     </div>
   );
 };
@@ -840,64 +431,41 @@ const ParallelToolGroup: FC<
   );
 };
 
-const AssistantMessageBase: FC<{ showBranchPicker: boolean }> = ({ showBranchPicker }) => {
-  const message = useAuiState((s) => s.message);
-  
-  // Check if message has text content for action controls only.
-  const hasTextContent = message.content.some(part => 
-    part.type === 'text' && part.text.trim().length > 0
-  );
 
-  const hasToolContent = message.content.some(part => part.type === 'tool-call');
-  const hasReasoningContent = message.content.some(part => part.type === 'reasoning');
-  const hasBodyContent = hasTextContent || hasToolContent || hasReasoningContent;
-  if (!hasBodyContent) {
-    return null;
-  }
+const AssistantMessage: FC = () => {
+  const hasBody = useAuiState((s) =>
+    s.message.content.some((part) => part.type !== "text" || part.text.trim().length > 0),
+  );
+  const hasError = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
+  if (!hasBody && !hasError) return null;
 
   return (
     <MessagePrimitive.Root asChild>
       <motion.div
-        // aui-assistant-message-root
-        className={cn(
-          "relative mx-auto grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] px-[var(--thread-padding-x)] py-4",
-          hasBodyContent && "mb-4"
-        )}
+        className="relative mx-auto mb-4 grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] px-[var(--thread-padding-x)] py-4"
         initial={{ y: 5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         data-role="assistant"
       >
-        {/* aui-assistant-message-avatar */}
         <div className="ring-border bg-background col-start-1 row-start-1 flex size-8 shrink-0 items-center justify-center rounded-full ring-1">
           <StarIcon size={14} />
         </div>
-
-        {/* aui-assistant-message-content */}
         <div className="text-foreground col-span-2 col-start-2 row-start-1 ml-4 leading-5 break-words">
           <MessagePrimitive.Content
             components={{
               Text: MarkdownText,
               Reasoning: ReasoningPart,
-              tools: { Fallback: ToolFallbackWrapper },
+              tools: { by_name: { task: SubagentToolCard }, Fallback: ToolFallbackWrapper },
               ToolGroup: ParallelToolGroup,
             }}
           />
           <MessageError />
         </div>
-
         <AssistantActionBar />
-
-        {showBranchPicker ? (
-          <BranchPicker className="col-start-2 row-start-2 mr-2 -ml-2" />
-        ) : null}
       </motion.div>
     </MessagePrimitive.Root>
   );
 };
-
-const AssistantMessage: FC = () => <AssistantMessageBase showBranchPicker={true} />;
-
-const AssistantSidebarMessage: FC = () => <AssistantMessageBase showBranchPicker={false} />;
 
 const AssistantActionBar: FC = () => {
   const message = useAuiState((s) => s.message);
@@ -944,114 +512,12 @@ const UserMessage: FC = () => {
         animate={{ y: 0, opacity: 1 }}
         data-role="user"
       >
-        <UserActionBar />
-
         {/* aui-user-message-content */}
         <div className="bg-muted text-foreground col-start-2 rounded-3xl px-5 py-2.5 break-words">
           <MessagePrimitive.Content components={{ Text: MarkdownText }} />
         </div>
-
-        {/* aui-user-branch-picker */}
-        <BranchPicker className="col-span-full col-start-1 row-start-3 -mr-1 justify-end" />
       </motion.div>
     </MessagePrimitive.Root>
-  );
-};
-
-const UserSidebarMessage: FC = () => {
-  return (
-    <MessagePrimitive.Root asChild>
-      <motion.div
-        className="mx-auto grid w-full max-w-[var(--thread-max-width)] auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-1 px-[var(--thread-padding-x)] py-4 [&:where(>*)]:col-start-2"
-        initial={{ y: 5, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        data-role="user"
-      >
-        <UserActionBar />
-        <div className="bg-muted text-foreground col-start-2 rounded-3xl px-5 py-2.5 break-words">
-          <MessagePrimitive.Content components={{ Text: MarkdownText }} />
-        </div>
-      </motion.div>
-    </MessagePrimitive.Root>
-  );
-};
-
-const UserActionBar: FC = () => {
-  return (
-    <ActionBarPrimitive.Root
-      hideWhenRunning
-      autohide="not-last"
-      // aui-user-action-bar-root
-      className="col-start-1 mt-2.5 mr-3 flex flex-col items-end"
-    >
-      <ActionBarPrimitive.Edit asChild>
-        <TooltipIconButton tooltip="Edit">
-          <PencilIcon />
-        </TooltipIconButton>
-      </ActionBarPrimitive.Edit>
-    </ActionBarPrimitive.Root>
-  );
-};
-
-const EditComposer: FC = () => {
-  return (
-    // aui-edit-composer-wrapper
-    <div className="mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)]">
-      {/* aui-edit-composer-root */}
-      <ComposerPrimitive.Root className="bg-muted ml-auto flex w-full max-w-7/8 flex-col rounded-xl">
-        {/* aui-edit-composer-input */}
-        <ComposerPrimitive.Input
-          className="text-foreground flex min-h-[60px] w-full resize-none bg-transparent p-4 outline-none"
-          autoFocus
-        />
-
-        {/* aui-edit-composer-footer */}
-        <div className="mx-3 mb-3 flex items-center justify-center gap-2 self-end">
-          <ComposerPrimitive.Cancel asChild>
-            <Button variant="ghost" size="sm" aria-label="Cancel edit">
-              Cancel
-            </Button>
-          </ComposerPrimitive.Cancel>
-          <ComposerPrimitive.Send asChild>
-            <Button size="sm" aria-label="Update message">
-              Update
-            </Button>
-          </ComposerPrimitive.Send>
-        </div>
-      </ComposerPrimitive.Root>
-    </div>
-  );
-};
-
-const BranchPicker: FC<BranchPickerPrimitive.Root.Props> = ({
-  className,
-  ...rest
-}) => {
-  return (
-    <BranchPickerPrimitive.Root
-      hideWhenSingleBranch
-      // aui-branch-picker-root
-      className={cn(
-        "text-muted-foreground inline-flex items-center text-xs",
-        className,
-      )}
-      {...rest}
-    >
-      <BranchPickerPrimitive.Previous asChild>
-        <TooltipIconButton tooltip="Previous">
-          <ChevronLeftIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Previous>
-      {/* aui-branch-picker-state */}
-      <span className="font-medium">
-        <BranchPickerPrimitive.Number /> / <BranchPickerPrimitive.Count />
-      </span>
-      <BranchPickerPrimitive.Next asChild>
-        <TooltipIconButton tooltip="Next">
-          <ChevronRightIcon />
-        </TooltipIconButton>
-      </BranchPickerPrimitive.Next>
-    </BranchPickerPrimitive.Root>
   );
 };
 

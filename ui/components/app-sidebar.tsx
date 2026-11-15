@@ -15,7 +15,6 @@ import {
 import { ThreadList } from "@/components/assistant-ui/thread-list"
 import { showPrivacyPopup } from "@/components/privacy-popup"
 import { signOut, useSession } from "@/lib/auth-client"
-import { clearAuthenticationState, markSignedOut } from "@/lib/session-utils"
 import { useRouter } from "next/navigation"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -23,10 +22,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    // Clear authentication state before signing out
-    markSignedOut();
-    clearAuthenticationState();
     await signOut();
+    router.push("/signin");
   };
 
   const handleCreateAccount = () => {
@@ -37,9 +34,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     router.push("/signin");
   };
 
-  // Check if user is anonymous using the isAnonymous field from better-auth
-  // Use Record<string, unknown> for session.user if type is unknown
-  const isAnonymous = session?.user && (session.user as Record<string, unknown>).isAnonymous === true;
+  const isAnonymous = session?.user.isAnonymous === true;
 
   return (
     <Sidebar {...props} >
