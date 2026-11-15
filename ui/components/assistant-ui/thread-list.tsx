@@ -2,7 +2,7 @@ import type { FC } from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
-  useThreadListItem,
+  useAuiState,
 } from "@assistant-ui/react";
 import { Trash2Icon, CirclePlusIcon, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -91,7 +91,7 @@ const ThreadListItemTitle: FC = () => {
 
 const ThreadListItemLoading: FC = () => {
   const { runningThreads } = useThreadContext();
-  const threadListItem = useThreadListItem();
+  const threadListItem = useAuiState((s) => s.threadListItem);
   
   if (!threadListItem || !runningThreads.has(threadListItem.id)) {
     return null;
@@ -106,7 +106,7 @@ const ThreadListItemLoading: FC = () => {
 
 const ThreadListItemDelete: FC = () => {
   const { deleteThread } = useUser();
-  const threadListItem = useThreadListItem();
+  const threadListItem = useAuiState((s) => s.threadListItem);
   
   const handleDelete = async (e: React.MouseEvent) => {
     e.preventDefault();

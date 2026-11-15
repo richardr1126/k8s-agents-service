@@ -8,8 +8,7 @@ import {
   AssistantRuntimeProvider,
   ExternalStoreAdapter,
   useExternalStoreRuntime,
-  useMessage,
-  useComposer,
+  useAuiState,
 } from "@assistant-ui/react";
 import type { FC, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -548,8 +547,8 @@ const ThreadWelcomeSuggestions: FC = () => {
 };
 
 const Composer: FC = () => {
-  // Use the useComposer hook to get the current text value from composer state
-  const composerText = useComposer((state) => state.text);
+  // Read the current text value from composer state
+  const composerText = useAuiState((s) => s.composer.text);
   const { data: session } = useSession();
   const hasUnlimitedChars = hasUnlimitedUsageOverride({
     id: session?.user?.id,
@@ -786,7 +785,7 @@ const getGroupToolDisplayName = (toolName: string) =>
 const ParallelToolGroup: FC<
   React.PropsWithChildren<{ startIndex: number; endIndex: number }>
 > = ({ startIndex, endIndex, children }) => {
-  const message = useMessage();
+  const message = useAuiState((s) => s.message);
 
   const toolParts = useMemo(() => {
     return message.content
@@ -842,7 +841,7 @@ const ParallelToolGroup: FC<
 };
 
 const AssistantMessageBase: FC<{ showBranchPicker: boolean }> = ({ showBranchPicker }) => {
-  const message = useMessage();
+  const message = useAuiState((s) => s.message);
   
   // Check if message has text content for action controls only.
   const hasTextContent = message.content.some(part => 
@@ -901,7 +900,7 @@ const AssistantMessage: FC = () => <AssistantMessageBase showBranchPicker={true}
 const AssistantSidebarMessage: FC = () => <AssistantMessageBase showBranchPicker={false} />;
 
 const AssistantActionBar: FC = () => {
-  const message = useMessage();
+  const message = useAuiState((s) => s.message);
   
   // Check if message has any text content (not just tool calls)
   const hasTextContent = message.content.some(part => 

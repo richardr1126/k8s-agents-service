@@ -930,7 +930,7 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
         
         # Delete from checkpointer (conversation memory) using built-in method
         try:
-            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver, AsyncMongoDBSaver) 
+            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver) 
             # support the adelete_thread method for proper thread deletion
             await checkpointer.adelete_thread(input.thread_id)
             logger.info(f"Successfully deleted thread {input.thread_id} from checkpointer")

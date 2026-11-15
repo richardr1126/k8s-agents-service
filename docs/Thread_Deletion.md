@@ -42,7 +42,7 @@ Deletes a thread from the backend conversation memory and long-term storage.
 **Implementation Details:**
 - Uses LangGraph's built-in `adelete_thread()` method for proper cleanup
 - Deletes from both checkpointer (conversation memory) and store (long-term memory)
-- Supports all checkpointer types: PostgreSQL, SQLite, MongoDB
+- Supports all checkpointer types: PostgreSQL, SQLite
 - Graceful error handling with detailed logging
 
 ### Frontend: POST /api/thread/delete

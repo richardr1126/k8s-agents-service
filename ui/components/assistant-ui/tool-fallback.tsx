@@ -1,4 +1,4 @@
-import { ToolCallContentPartComponent } from "@assistant-ui/react";
+import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ChevronDownIcon, ChevronUpIcon, WrenchIcon, SearchIcon, CalculatorIcon, CloudIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../ui/button";
@@ -72,7 +72,7 @@ const extractSearchQuery = (argsText?: string): string | null => {
   return null;
 };
 
-export const ToolFallback: ToolCallContentPartComponent = (props) => {
+export const ToolFallback: ToolCallMessagePartComponent = (props) => {
   const { toolName, argsText, result } = props;
   const [isCollapsed, setIsCollapsed] = useState(true);
   const hasDetails = Boolean(argsText || result !== undefined);

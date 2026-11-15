@@ -1,6 +1,6 @@
 "use client";
 
-import { ToolCallContentPartComponent } from "@assistant-ui/react";
+import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import {
   ArrowRightIcon,
   ChevronDownIcon,
@@ -85,7 +85,7 @@ const formatResult = (result: unknown): string => {
   return JSON.stringify(result, null, 2);
 };
 
-export const TransferToolFallback: ToolCallContentPartComponent = ({
+export const TransferToolFallback: ToolCallMessagePartComponent = ({
   toolName,
   argsText,
   result,

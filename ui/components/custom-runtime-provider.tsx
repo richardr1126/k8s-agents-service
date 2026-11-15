@@ -762,7 +762,7 @@ function ChatWithThreads({
 
   // Convert user threads to thread list format with loading state
   const threadList = activeThreads.map(thread => ({
-    threadId: thread.id,
+    id: thread.id,
     status: "regular" as const,
     title: thread.title,
     isLoading: runningThreads.has(thread.id),
