@@ -40,13 +40,7 @@ instructions = f"""
     """
 ```
 
-5. Open [`streamlit_app.py` file](../src/streamlit_app.py) and update the agent's welcome message:
-
-```python
-WELCOME = """Hello! I'm your AI assistant with access to a knowledge base of projects and technical documentation. Ask me anything!"""
-```
-
-6. Run the application and test your RAG assistant.
+5. Run the application and test your RAG assistant.
 
 ## Database Configuration
 
