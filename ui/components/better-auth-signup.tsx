@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { useState } from "react";
 import { Loader2, X, AlertTriangle, CheckCircle, Eye, EyeOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { signUp, signIn } from "@/lib/auth-client";
+import { signUp, signIn, useSession } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -32,6 +32,7 @@ export default function SignUp() {
 	const [showPassword, setShowPassword] = useState(false);
 	const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
 	const router = useRouter();
+	const { refetch } = useSession();
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [validationErrors, setValidationErrors] = useState<{
@@ -150,6 +151,7 @@ export default function SignUp() {
 					router.push("/signin");
 				} else {
 					toast.success("Account created and signed in successfully!");
+					await refetch();
 					router.push("/");
 				}
 			}
