@@ -10,7 +10,7 @@ The thread deletion system provides complete removal of conversation threads fro
 
 The deletion process involves two main components:
 
-1. **Frontend (Neon Database)**: Thread metadata and UI state
+1. **Frontend (UI Postgres, `threads` table)**: Thread metadata and ownership
 2. **Backend (YugabyteDB)**: Conversation memory and long-term storage
 
 ## API Endpoints
@@ -45,35 +45,27 @@ Deletes a thread from the backend conversation memory and long-term storage.
 - Supports all checkpointer types: PostgreSQL, SQLite
 - Graceful error handling with detailed logging
 
-### Frontend: POST /api/thread/delete
+### Frontend: DELETE /api/threads/[threadId]
 
-Frontend API route that calls the backend delete endpoint and handles UI state cleanup.
-
-**Request:**
-```json
-{
-  "threadId": "string"
-}
-```
+Frontend API route that checks the session user owns the thread, calls the backend `DELETE /thread`, then deletes the `threads` row.
 
 **Response:**
 ```json
 {
-  "success": true
+  "ok": true
 }
 ```
 
 **Error Responses:**
-- `400`: Missing threadId
 - `401`: Unauthorized (user not authenticated)
-- `500`: Backend deletion failed
+- `404`: Thread not found or not owned by the user
+- `502`: Backend deletion failed (the row is kept)
 
 ## Database Schema Changes
 
-### Neon Database (Frontend)
-- Removed `archived` column from `user_threads` table
-- Simplified thread CRUD operations
-- Direct deletion instead of soft deletion
+### UI Postgres (Frontend)
+- `threads` rows are deleted outright; there is no soft deletion
+- Rows cascade-delete with their owning `user`
 
 ### YugabyteDB (Backend)
 - Uses LangGraph's built-in deletion methods
@@ -88,12 +80,10 @@ Frontend API route that calls the backend delete endpoint and handles UI state c
 - Replaced archive icon with delete (trash) icon
 - Added confirmation dialog for deletion
 - Changed styling to use destructive colors
-- Immediate optimistic UI updates
 
 ### Thread Management
-- Automatic switching to most recent remaining thread
-- Creates new thread if no threads remain
-- Rollback on deletion failure
+- Deleting the open thread switches to a new, empty thread
+- The thread list updates after the backend confirms the deletion
 
 ### Docker Compose
 No changes needed - deletion works with existing database setup.
@@ -104,9 +94,8 @@ No changes needed - deletion works with existing Helm charts.
 ## Error Handling
 
 ### Frontend
-- Optimistic updates with rollback on failure
 - User confirmation dialog prevents accidental deletion
-- Graceful handling of backend failures
+- A failed backend deletion leaves the thread in place
 
 ### Backend
 - Comprehensive logging of all deletion operations

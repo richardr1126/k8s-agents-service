@@ -6,7 +6,7 @@ A Kubernetes deployment of an AI agents service built with LangGraph and FastAPI
 
 ### Next.js Chat UI (`ui/`)
 
-The repository now contains a second, production-focused chat interface built with **Next.js 15**, **React 19**, **assistant-ui**, and **Tailwind CSS 4**. This UI features enhanced tool visualization with contextual icons, transfer tool components for agent handoffs, smart input limits with visual feedback (560 character limit equivalent to 2 tweets), and improved user experience with intelligent routing feedback. It talks to the service over the [AG-UI protocol](https://docs.ag-ui.com) and is the only frontend.
+The chat interface is built with **Next.js 16**, **React 19**, **assistant-ui** and **Tailwind CSS 4**, and talks to the service over the [AG-UI protocol](https://docs.ag-ui.com). It is the only frontend. Sub-agent runs stream live as collapsible cards nested under the tool call that started them, and agent interrupts are answered from a banner above the composer. Visitors can sign up or continue as a guest, and per-user run limits (stricter for guests) are stored in Postgres. See [ui/README.md](ui/README.md).
 
 This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including a Helm chart, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
 
@@ -64,8 +64,8 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
 1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content using Tavily search integration
 1. **Database Analyst Agent**: Specialized MCP-powered agent for analyzing the Cosmere Feed database, providing insights into user engagement, content trends, and feed performance metrics
-1. **Enhanced Tool Communication**: Improved agent handoff system with visual UI components and contextual routing
-1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, enhanced tool visualization, and smart input limits with real-time character counting (560 character limit)
+1. **Nested Sub-Agent Streaming**: Sub-agent runs stream over AG-UI and render nested under the `task` tool call that started them, live and after a reload
+1. **Professional UI**: Next.js interface with guest sessions, database-backed run limits, responsive design, tool visualization and a 560-character input limit
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
 1. **Smart Search**: Intelligent filtering and source attribution in resume and project searches
 
@@ -372,6 +372,7 @@ For local development, we recommend using [docker compose watch](https://docs.do
    pnpm install  # or npm/yarn
    cp .env.example .env.local
    # Adjust environment variables as needed - see ui/README.md
+   pnpm db:migrate  # apply the schema to POSTGRES_URL
    pnpm dev
    ```
    The Next.js app will be available at `http://localhost:3000`.
