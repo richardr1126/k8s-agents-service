@@ -12,7 +12,7 @@ import { signIn, useSession } from "@/lib/auth-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { showPrivacyPopup } from "@/components/privacy-popup";
-export default function SignIn() {
+export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
   const router = useRouter();
   // Load the new session before leaving, or the chat page would see none and send us back.
   const { refetch } = useSession();
@@ -221,6 +221,7 @@ export default function SignIn() {
 
           
 
+          {githubSignIn && (
           <Button
             variant="outline"
             className="w-full gap-2"
@@ -261,6 +262,7 @@ export default function SignIn() {
               </>
             )}
           </Button>
+          )}
 
           <Button
             variant="outline"

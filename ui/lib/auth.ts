@@ -6,10 +6,12 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 
-const github =
-  process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET
-    ? { github: { clientId: process.env.GITHUB_CLIENT_ID, clientSecret: process.env.GITHUB_CLIENT_SECRET } }
-    : {};
+/** Whether GitHub sign-in is configured; the sign-in page shows the button only then. */
+export const githubSignIn = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+
+const github = githubSignIn
+  ? { github: { clientId: process.env.GITHUB_CLIENT_ID!, clientSecret: process.env.GITHUB_CLIENT_SECRET! } }
+  : {};
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
