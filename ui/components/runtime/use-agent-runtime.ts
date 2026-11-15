@@ -16,6 +16,12 @@ async function proxyFetch(url: string, init: RequestInit) {
   throw new RunLimitError(body.message ?? "You've reached your run limit. Try again later.");
 }
 
+async function loadHistory(threadId: string) {
+  const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}`);
+  if (!res.ok) throw new Error(`Could not load the conversation (HTTP ${res.status})`);
+  return historyToThreadMessages((await res.json()) as History);
+}
+
 async function loadThreads(): Promise<ThreadRow[] | null> {
   const res = await fetch("/api/threads");
   return res.ok ? res.json() : null;
@@ -61,13 +67,21 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, onError, onRun
     const { unsubscribe } = agent.subscribe({
       // The proxy has stored the thread by the time the stream starts.
       onRunStartedEvent: () => void refreshThreads(),
-      onRunFinalized: () => {
+      onRunFinalized: ({ input }) => {
         void refreshThreads();
         finalizedRef.current();
+        // Without a MESSAGES_SNAPSHOT (the backend sends none), the runtime streams
+        // a resumed run into a new assistant message, away from the interrupted
+        // sub-agent card. Reload the thread from /history to put the result back.
+        if (input.resume?.length) {
+          void loadHistory(input.threadId)
+            .then((messages) => runtimeRef.current?.thread.reset(messages))
+            .catch(onError);
+        }
       },
     });
     return unsubscribe;
-  }, [agent, refreshThreads]);
+  }, [agent, refreshThreads, onError]);
 
   const threadList = useMemo<UseAgUiThreadListAdapter>(
     () => ({
@@ -82,9 +96,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, onError, onRun
           setAgentId(row.agentId);
           if (row.modelId) setModelId(row.modelId);
         }
-        const res = await fetch(`/api/threads/${encodeURIComponent(id)}`);
-        if (!res.ok) throw new Error(`Could not load the conversation (HTTP ${res.status})`);
-        return { messages: historyToThreadMessages((await res.json()) as History) };
+        return { messages: await loadHistory(id) };
       },
       onRename: async (id, title) => {
         await fetch(`/api/threads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ title }) });
