@@ -173,7 +173,7 @@ Customize the system prompt in `rag_response_node` for different response styles
 Core dependencies:
 - `langchain-postgres` - Vector database integration
 - `langchain-openai` - OpenAI-compatible embeddings via OpenRouter
-- `tavily-python` - Web search API
+- `langchain-community` - Tavily web search (`TavilySearchResults`)
 - `pydantic` - Structured AI outputs
 
 ## Contributing

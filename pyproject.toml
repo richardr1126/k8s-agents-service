@@ -39,7 +39,6 @@ dependencies = [
     "pydantic ~=2.14.3",
     "pydantic-settings ~=2.16.3",
     "python-dotenv ~=1.2.4",
-    "tavily-python ~=0.8.5",
     "uvicorn ~=0.54.0",
     "langchain-openrouter>=0.2.9",
     "pypdf>=7.1.0",

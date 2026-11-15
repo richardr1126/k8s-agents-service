@@ -12,15 +12,10 @@ from agents import (  # noqa: E402
     DEFAULT_AGENT,
     AgentGraph,
     get_agent,
-    get_all_agent_info,
-    load_agent,
 )
 
 
 async def main() -> None:
-    for agent_info in get_all_agent_info():
-        await load_agent(agent_info.key)
-
     agent: AgentGraph = get_agent(DEFAULT_AGENT)
     inputs: MessagesState = {
         "messages": [HumanMessage("Find me a recipe for chocolate chip cookies")]
