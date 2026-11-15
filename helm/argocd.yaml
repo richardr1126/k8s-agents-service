@@ -1,0 +1,26 @@
+# OUTDATED - kept for reference only. Do not apply.
+# This service was removed from the cluster in Nov 2026 (YugabyteDB removal). When it returns,
+# its Application goes in the k3s-cluster repo (argocd/apps/, project "apps") and the root app
+# syncs it. This file still uses project "default", which is now locked down, so it would fail.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agents-service
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/richardr1126/k8s-agents-service
+    targetRevision: main
+    path: helm/agents-service
+    helm:
+      valueFiles:
+        - values.yaml
+      parameters:
+        - name: image.pullPolicy
+          value: Always
+        - name: agents-streamlit.image.pullPolicy
+          value: Always
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
