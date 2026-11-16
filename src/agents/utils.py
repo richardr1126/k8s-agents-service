@@ -1,17 +1,17 @@
-from typing import Any
-
-from langchain_core.messages import ChatMessage
-from langgraph.types import StreamWriter
-from pydantic import BaseModel, Field
+from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import merge_configs
 
 
-class CustomData(BaseModel):
-    "Custom data being sent by an agent"
+def internal_llm_config(config: RunnableConfig) -> RunnableConfig:
+    """Config for LLM calls whose output is not part of the conversation.
 
-    data: dict[str, Any] = Field(description="The custom data")
-
-    def to_langchain(self) -> ChatMessage:
-        return ChatMessage(content=[self.data], role="custom")
-
-    def dispatch(self, writer: StreamWriter) -> None:
-        writer(self.to_langchain())
+    ag-ui-langgraph skips streaming for runs with these metadata flags; the
+    `langsmith:nostream` tag does the same for LangGraph's own stream modes.
+    """
+    return merge_configs(
+        config,
+        {
+            "metadata": {"emit-messages": False, "emit-tool-calls": False},
+            "tags": ["langsmith:nostream"],
+        },
+    )

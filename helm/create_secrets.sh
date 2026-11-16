@@ -1,69 +1,42 @@
 #!/bin/bash
+# Creates `app-secrets` in the default namespace from helm/.env: API keys and settings for
+# the agents service and its CronJob. The database settings aren't here; the chart points
+# the pods at its CloudNativePG cluster (values.yaml).
+#
+# AUTH_SECRET must match the UI's BACKEND_AUTH_TOKEN on Vercel.
+set -euo pipefail
 
-# Script to create Kubernetes secrets for the k8s-agents-service
-# This script only handles creating the application secrets from environment variables
-
-# Get the directory where the script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/.env"
-
-# Check if .env file exists
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/.env"
 if [ ! -f "$ENV_FILE" ]; then
-  echo "Error: .env file not found at $ENV_FILE"
-  echo "Please create a .env file with the following variables:"
-  echo "APP_POSTGRES_PASSWORD=your_postgres_password"
-  echo "OPENROUTER_API_KEY=your_openrouter_api_key"
-  echo "LANGSMITH_API_KEY=your_langsmith_api_key"
-  echo "TAVILY_API_KEY=your_tavily_api_key"
+  echo "Error: $ENV_FILE not found. It needs:"
+  echo "  AUTH_SECRET OPENROUTER_API_KEY TAVILY_API_KEY GDRIVE_DOC_ID"
+  echo "  and optionally LANGSMITH_API_KEY"
   exit 1
 fi
+set -a; source "$ENV_FILE"; set +a
 
-# Load environment variables from .env file
-echo "Loading environment variables from $ENV_FILE"
-set -a  # automatically export all variables
-source "$ENV_FILE"
-set +a  # stop automatically exporting
-
-# Validate that required variables are set
-required_vars=("APP_POSTGRES_PASSWORD" "OPENROUTER_API_KEY" "LANGSMITH_API_KEY" "AUTH_SECRET" "TAVILY_API_KEY" "GDRIVE_DOC_ID")
-for var in "${required_vars[@]}"; do
-  if [ -z "${!var}" ]; then
-    echo "Error: $var is not set in .env file"
+for var in AUTH_SECRET OPENROUTER_API_KEY TAVILY_API_KEY GDRIVE_DOC_ID; do
+  if [ -z "${!var:-}" ]; then
+    echo "Error: $var is not set in $ENV_FILE"
     exit 1
   fi
 done
 
-# Delete existing secrets and create new ones
-echo "Deleting existing app-secrets..."
-kubectl delete secret app-secrets --ignore-not-found
-echo "Deleting existing streamlit-secrets..."
-kubectl delete secret streamlit-secrets --ignore-not-found
+tracing=false
+[ -n "${LANGSMITH_API_KEY:-}" ] && tracing=true
 
-# Create application secrets
-echo "Creating app-secrets..."
-kubectl create secret generic app-secrets \
+kubectl -n default create secret generic app-secrets \
   --from-literal=USE_FAKE_MODEL=false \
   --from-literal=AUTH_SECRET="${AUTH_SECRET}" \
   --from-literal=HOST=0.0.0.0 \
   --from-literal=PORT=8080 \
-  --from-literal=DATABASE_TYPE=postgres \
-  --from-literal=POSTGRES_USER=agentsservice \
-  --from-literal=POSTGRES_PASSWORD="${APP_POSTGRES_PASSWORD}" \
-  --from-literal=POSTGRES_HOST=yb-tserver-0.yb-tservers.yugabyte.svc.cluster.local,yb-tserver-1.yb-tservers.yugabyte.svc.cluster.local \
-  --from-literal=POSTGRES_PORT=5433 \
-  --from-literal=POSTGRES_DB=agentsservice \
   --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
   --from-literal=DEFAULT_MODEL="google/gemini-3.1-flash-lite-preview" \
-  --from-literal=LANGSMITH_TRACING=true \
-  --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY}" \
+  --from-literal=LANGSMITH_TRACING="${tracing}" \
+  --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY:-}" \
   --from-literal=LANGSMITH_PROJECT=default \
   --from-literal=TAVILY_API_KEY="${TAVILY_API_KEY}" \
   --from-literal=GDRIVE_DOC_ID="${GDRIVE_DOC_ID}" \
-  --from-literal=POSTGRES_MCP_URL="http://postgres-mcp.default.svc.cluster.local:8000/sse"
+  --dry-run=client -o yaml | kubectl apply -f -
 
-echo "Creating streamlit-secrets..."
-kubectl create secret generic streamlit-secrets \
-  --from-literal=AGENT_URL="https://agents.richardr.dev" \
-  --from-literal=AUTH_SECRET="${AUTH_SECRET}"
-
-echo "Secrets created successfully!"
+echo "app-secrets applied"

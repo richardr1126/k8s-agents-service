@@ -5,15 +5,51 @@
 # more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
 replicaCount: 1
 
+# API keys and settings come from `app-secrets` (helm/create_secrets.sh). The database
+# settings point at the CloudNativePG cluster below; its password is in `agents-service-db-app`,
+# which CloudNativePG generates. The host assumes the release is named agents-service.
+x-db-env: &db-env
+  - name: DATABASE_TYPE
+    value: postgres
+  - name: POSTGRES_HOST
+    value: agents-service-db-rw
+  - name: POSTGRES_PORT
+    value: "5432"
+  - name: POSTGRES_DB
+    value: agentsservice
+  - name: POSTGRES_USER
+    value: agentsservice
+  - name: POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: agents-service-db-app
+        key: password
+
 envFrom:
   - secretRef:
       name: app-secrets
 
+env: *db-env
+
+# Postgres with pgvector: a CloudNativePG Cluster (templates/database.yaml).
+# The standard images ship pgvector.
+database:
+  instances: 2
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.6-202610260820-standard-trixie
+  size: 5Gi
+  storageClass: local-path-retain
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: ghcr.io/richardr1126/k8s-agents-service
-  # This sets the pull policy for images.
-  pullPolicy: IfNotPresent
+  # `latest` is rebuilt on every push to main, so always pull it.
+  pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
@@ -37,6 +73,7 @@ cronjob:
   failedJobsHistoryLimit: 3
   successfulJobsHistoryLimit: 3
   restartPolicy: OnFailure
+  env: *db-env
   # Add starting deadline to help with timing issues
   startingDeadlineSeconds: 300
   # Use the cron-specific image
@@ -165,14 +202,10 @@ volumeMounts: []
 #   mountPath: "/etc/foo"
 #   readOnly: true
 
-nodeSelector: {}
+# The images are built for arm64 only (.github/workflows/docker-publish.yml).
+nodeSelector:
+  kubernetes.io/arch: arm64
 
 tolerations: []
 
 affinity: {}
-
-
-
-# Configuration for the agents-streamlit subchart
-agents-streamlit:
-  enabled: false

@@ -11,9 +11,9 @@
       "action": "What skills does Richard have that are in demand in the current software engineering landscape? Can you provide recent job postings that align with his skill set?"
     },
     {
-      "title": "Social media feed performance",
-      "label": "Uses Web Agent + Postgres Agent",
-      "action": "What's the latest news about Brandon Sanderson or his books, and how is the Cosmere feed performing in response to recent events?"
+      "title": "Latest Brandon Sanderson news",
+      "label": "Uses Web Agent",
+      "action": "What's the latest news about Brandon Sanderson and his upcoming books?"
     },
     {
       "title": "What is Richard's most technical project?",
@@ -63,28 +63,6 @@
       "title": "Programming language popularity",
       "label": "Development Trends",
       "action": "Which programming languages are most in demand right now?"
-    }
-  ],
-  "postgres-mcp-agent": [
-    {
-      "title": "Analyze feed engagement metrics",
-      "label": "User Analytics",
-      "action": "Show me the engagement metrics for the Cosmere feed - how many requests and active users do we have?"
-    },
-    {
-      "title": "Popular Cosmere content trends",
-      "label": "Content Analysis",
-      "action": "What are the most popular posts on the Cosmere feed? What Cosmere-related content gets the most engagement?"
-    },
-    {
-      "title": "User activity patterns",
-      "label": "Behavioral Insights",
-      "action": "Analyze user activity patterns - when are users most active on the Cosmere feed?"
-    },
-    {
-      "title": "Feed performance over time",
-      "label": "Growth Metrics",
-      "action": "How has the Cosmere feed grown over time? Show me request trends and user adoption patterns."
     }
   ],
   "chatbot": [

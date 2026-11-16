@@ -1,0 +1,31 @@
+{{- with .Values.database }}
+# Postgres for the agents service, run by the CloudNativePG operator (installed cluster-wide).
+# CloudNativePG creates:
+#   {{ $.Release.Name }}-db-rw   Service for the primary (POSTGRES_HOST)
+#   {{ $.Release.Name }}-db-app  Secret with the generated `agentsservice` user's password
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ $.Release.Name }}-db
+spec:
+  instances: {{ .instances }}
+  imageName: {{ .imageName }}
+  # One instance per node, so a node going down only costs a replica.
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  bootstrap:
+    initdb:
+      database: agentsservice
+      owner: agentsservice
+      # The app user can't create extensions, and the RAG code expects pgvector to exist.
+      postInitApplicationSQL:
+        - CREATE EXTENSION IF NOT EXISTS vector
+  storage:
+    size: {{ .size }}
+    storageClass: {{ .storageClass }}
+  {{- with .resources }}
+  resources:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

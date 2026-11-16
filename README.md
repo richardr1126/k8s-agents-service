@@ -2,13 +2,13 @@
 
 [![GitHub License](https://img.shields.io/github/license/richardr1126/k8s-agents-service)](https://github.com/richardr1126/k8s-agents-service/blob/main/LICENSE)
 
-A Kubernetes deployment of an AI agents service built with LangGraph, FastAPI and Streamlit, featuring comprehensive Helm charts with dual-architecture deployment and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance and specialized database analysis capabilities.
+A Kubernetes deployment of an AI agents service built with LangGraph and FastAPI, featuring a Helm chart with multi-architecture images and GitOps integration. Currently configured as a professional resume and portfolio showcase system with intelligent RAG-based assistance and live web research.
 
 ### Next.js Chat UI (`ui/`)
 
-The repository now contains a second, production-focused chat interface built with **Next.js 15**, **React 19**, **assistant-ui**, and **Tailwind CSS 4**. This UI features enhanced tool visualization with contextual icons, transfer tool components for agent handoffs, smart input limits with visual feedback (560 character limit equivalent to 2 tweets), and improved user experience with intelligent routing feedback. The interface is designed to be the primary deployable frontend, while the existing **Streamlit app remains a lightweight reference interface for local development and quick experimentation**.
+The chat interface is built with **Next.js 16**, **React 19**, **assistant-ui** and **Tailwind CSS 4**, and talks to the service over the [AG-UI protocol](https://docs.ag-ui.com). It is the only frontend. Sub-agent runs stream live as collapsible cards nested under the tool call that started them, and agent interrupts are answered from a banner above the composer. Visitors can sign up or continue as a guest, and per-user run limits (stricter for guests) are stored in Postgres. See [ui/README.md](ui/README.md).
 
-This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including dual Helm charts for service/UI separation, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
+This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including a Helm chart, GitOps deployment, Postgres with pgvector, and multi-architecture container builds.
 
 > **⚠️ Important Notice**: This project is currently in development and is **not fully featured for production** use. While it provides a solid foundation for Kubernetes deployment of AI agents, additional hardening, monitoring, and operational considerations may be needed for production environments.
 
@@ -20,13 +20,12 @@ This project is built upon the excellent foundation provided by [JoshuaC215's AI
 
 This fork adds Kubernetes deployment capabilities on top of the original toolkit:
 
-- **🎯 Kubernetes-Native**: Dual Helm charts with subchart architecture for service and UI components
+- **🎯 Kubernetes-Native**: Helm chart for the agent service
 - **🔄 GitOps Ready**: ArgoCD application manifests for automated deployments  
-- **🗄️ YugabyteDB Integration**: Distributed SQL database with pgvector extensions for RAG capabilities
-- **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures across service and streamlit containers
+- **🗄️ Postgres + pgvector**: One Postgres database for conversation memory, long-term memory and RAG vectors
+- **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures for the service and cron containers
 - **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry with separate image streams
 - **🔧 Deployment Scripts**: Comprehensive deployment automation with database setup, secrets management, and dependency updates
-- **🔌 MCP Integration**: Model Context Protocol server support for advanced database analysis and tool execution
 - **🔍 Enhanced Search**: Tavily search integration for improved web research capabilities
 
 ## Overview
@@ -34,39 +33,35 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 ### Core Features (from original toolkit)
 
 1. **LangGraph Agent and latest features**: A customizable agent built using the LangGraph framework. Implements the latest LangGraph v0.6+ features including human in the loop with `interrupt()`, flow control with `Command`, long-term memory with `Store`, and `langgraph-supervisor` with intelligent auto-routing capabilities.
-1. **FastAPI Service**: Serves the agent with both streaming and non-streaming endpoints.
-1. **Advanced Streaming**: A novel approach to support both token-based and message-based streaming.
-1. **Streamlit Interface**: Simple reference UI for local testing & debugging (kept intentionally lightweight).
+1. **FastAPI Service**: Serves the agents with a non-streaming `/invoke` endpoint and an [AG-UI](https://docs.ag-ui.com) event stream, see [API](#api).
+1. **Sub-agent streaming**: Sub-agents run by the auto-router stream their own text and tool calls, tagged with a `subagentRunId`, and are stored with the thread so `/history` can rebuild them.
 1. **Next.js Chat UI**: Modern production-focused React/Next.js application - [see UI README](ui/README.md)
 1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
-1. **RAG Agent**: RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
-1. **MCP Integration**: Model Context Protocol (MCP) server integration for database analysis and tool execution.
-1. **Thread Management**: Complete thread lifecycle management with proper deletion from both conversation memory (checkpointer) and long-term memory (store).
+1. **RAG Agent**: RAG implementation using PGVector on Postgres - see [docs](docs/RAG_Assistant.md).
+1. **Thread Management**: Deleting a thread removes its conversation memory (checkpointer), long-term memory (store) and its web search vectors.
 1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
 1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
 1. **Testing**: Includes robust unit and integration tests for the full repo.
 
 ### New Kubernetes Features
 
-1. **Dual Helm Charts**: Separate charts for service (`agents-service`) and UI (`agents-streamlit`) with subchart architecture
+1. **Helm Chart**: `agents-service` chart for the backend, with an optional CronJob
 1. **ArgoCD Integration**: GitOps-ready application manifests for automated deployments
-1. **YugabyteDB Support**: Enterprise-grade distributed SQL database with pgvector extension support for RAG capabilities
-1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images for both service and streamlit components published to GitHub Container Registry
+1. **Postgres on Kubernetes**: Runs against a CloudNativePG cluster with the pgvector extension
+1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images for the service and cron job published to GitHub Container Registry
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
 1. **Automated Cron Jobs**: Kubernetes CronJob support for scheduled tasks like vector database updates and maintenance
-1. **MCP Server Integration**: Model Context Protocol server support for advanced database analysis and external tool integration
 
 ### Resume & Portfolio Features
 
-1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between specialized agents based on context, now including database analysis capabilities
+1. **Auto-Router Agent**: Default intelligent supervisor that automatically routes queries between the resume and web research sub-agents based on context
 1. **Resume Agent**: AI assistant that showcases professional background, skills, and project experience using RAG
 1. **Web RAG Agent**: Research assistant capable of browsing and summarizing web content using Tavily search integration
-1. **Database Analyst Agent**: Specialized MCP-powered agent for analyzing the Cosmere Feed database, providing insights into user engagement, content trends, and feed performance metrics
-1. **Enhanced Tool Communication**: Improved agent handoff system with visual UI components and contextual routing
-1. **Professional UI**: Modern Next.js interface with custom favicon, task management components, responsive design, enhanced tool visualization, and smart input limits with real-time character counting (560 character limit)
+1. **Nested Sub-Agent Streaming**: Sub-agent runs stream over AG-UI and render nested under the `task` tool call that started them, live and after a reload
+1. **Professional UI**: Next.js interface with guest sessions, database-backed run limits, responsive design, tool visualization and a 560-character input limit
 1. **Portfolio Integration**: Automated vector database creation from GitHub projects and resume data
 1. **Smart Search**: Intelligent filtering and source attribution in resume and project searches
 
@@ -106,28 +101,14 @@ uv sync --frozen
 source .venv/bin/activate
 python src/run_service.py
 
-# In another shell
-source .venv/bin/activate
-streamlit run src/streamlit_app.py
+# In another shell, the Next.js UI (see ui/README.md)
+cd ui && pnpm install && pnpm dev
 ```
 
 ### Kubernetes Deployment
 
-```sh
-# Clone the repository
-git clone https://github.com/richardr1126/k8s-agents-service.git
-cd k8s-agents-service
-
-# Configure environment variables
-cp helm/.env.example helm/.env
-# Edit helm/.env with your API keys and secrets
-
-# Deploy to Kubernetes with YugabyteDB
-cd helm
-./manual_deploy.sh
-```
-
-For ArgoCD deployments, see the k3s-cluster repo (`argocd/apps/`). `helm/argocd.yaml` is outdated.
+Argo CD runs the chart on the homelab k3s cluster with a CloudNativePG Postgres; see
+[Kubernetes Deployment](#kubernetes-deployment-1) for the secrets it needs.
 
 ### Key Files
 
@@ -138,19 +119,15 @@ The repository is structured as follows:
 - `src/schema/`: Defines the protocol schema  
 - `src/core/`: Core modules including LLM definition and settings
 - `src/service/service.py`: FastAPI service to serve the agents
-- `src/client/client.py`: Client to interact with the agent service
-- `src/streamlit_app.py`: Streamlit app providing a quick chat interface (reference & local testing)
-- `ui/`: Next.js production-oriented chat UI (see section below)
+- `src/service/agui.py`: AG-UI streaming endpoint (ag-ui-langgraph)
+- `src/service/history.py`: rebuilds a thread's AG-UI history, sub-agent runs included
+- `ui/`: Next.js chat UI
 - `tests/`: Unit and integration tests
 
 **Kubernetes Deployment:**
 - `helm/agents-service/`: Complete Helm chart for the backend service
-- `helm/agents-streamlit/`: Dedicated Helm chart for the Streamlit UI (deployed as subchart)
-- `helm/argocd.yaml`: outdated ArgoCD application manifest (reference only; see k3s-cluster)
-- `helm/manual_deploy.sh`: Deployment script with YugabyteDB setup
-- `helm/create_secrets.sh`: Kubernetes secrets management script for both service and streamlit components
-- `helm/update_dependencies.sh`: Helm chart dependency management script for subchart updates
-- `docker/`: Multi-architecture Dockerfiles for service, streamlit, and cron job builds
+- `helm/create_secrets.sh`: creates the `app-secrets` Secret the chart reads
+- `docker/`: Multi-architecture Dockerfiles for the service and cron job builds
 - `scripts/create_resume_vectors_cron.py`: Automated vector database update script for scheduled execution
 
 ## Setup and Usage
@@ -163,9 +140,9 @@ The repository is structured as follows:
    ```
 
 2. Set up environment variables:
-   Create a `.env` file in the root directory. At least one LLM API key or configuration is required. See the [`.env.example` file](./.env.example) for a full list of available environment variables, including a variety of model provider API keys, header-based authentication, LangSmith tracing, testing and development modes, OpenWeatherMap API key, and PostgreSQL MCP URL configuration.
+   Create a `.env` file in the root directory. At least one LLM API key or configuration is required. See the [`.env.example` file](./.env.example) for a full list of available environment variables, including a variety of model provider API keys, header-based authentication, LangSmith tracing, testing and development modes, and OpenWeatherMap API key.
 
-3. You can now run the agent service and the Streamlit app locally, either with Docker or just using Python. The Docker setup is recommended for simpler environment setup and immediate reloading of the services when you make changes to your code.
+3. You can now run the agent service locally, either with Docker or just using Python. The Docker setup is recommended for simpler environment setup and immediate reloading of the services when you make changes to your code.
 
 ### Additional setup for specific AI providers
 
@@ -178,54 +155,39 @@ The repository is structured as follows:
 To customize the agent for your own use case:
 
 1. Add your new agent to the `src/agents` directory. You can copy `rag_assistant.py` (resume agent) or `web_rag_agent.py` and modify it to change the agent's behavior and tools.
-1. Import and add your new agent to the `agents` dictionary in `src/agents/agents.py`. Your agent can be called by `/<your_agent_name>/invoke` or `/<your_agent_name>/stream`.
-1. Adjust the Streamlit interface in `src/streamlit_app.py` and the Next.js UI in `ui/` to match your agent's capabilities.
+1. Import and add your new agent to the `agents` dictionary in `src/agents/agents.py`. Your agent can be called by `/<your_agent_name>/invoke` or `/<your_agent_name>/ag-ui`.
+1. Adjust the Next.js UI in `ui/` to match your agent's capabilities.
 1. Update the `DEFAULT_AGENT` constant in `src/agents/agents.py` to set your preferred default agent (currently set to "auto-router" for intelligent routing).
 1. For supervisor-style routing, configure the routing logic in `src/agents/main_agent.py` to define how queries should be distributed between your specialized agents.
 
 ### Current Available Agents
 
-- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent, web research agent, and database analyst based on context
+- **auto-router** (default): Intelligent supervisor agent that automatically routes queries between the resume agent and web research agent based on context
 - **resume-agent**: Professional resume assistant that searches through resume information and project repositories
 - **web-rag-agent**: Web research assistant that can browse the internet and summarize articles
-- **postgres-mcp-agent**: Database analyst for the Cosmere Feed - a custom Bluesky feed featuring Brandon Sanderson's Cosmere series content. Analyzes PostgreSQL database containing feed requests and posts data to provide insights about user engagement, content trends, and feed performance
 - **chatbot**: Simple conversational agent for general purpose chat
 
 
 ### Database Configuration
 
-This fork uses **YugabyteDB with pgvector** instead of the original PostgreSQL/ChromaDB setup, providing several advantages:
-
-**YugabyteDB Benefits:**
-- **Distributed SQL**: Horizontal scaling and high availability out of the box
-- **PostgreSQL Compatibility**: Full SQL compliance with familiar PostgreSQL interfaces  
-- **Built-in pgvector**: Native vector similarity search for RAG applications
-- **Enterprise-Grade**: Reliability and performance features
+The service keeps everything in one Postgres database with the **pgvector** extension: LangGraph checkpoints (conversation memory), the long-term memory store, and the RAG vector collections. Locally that's the `pgvector/pgvector` container from `compose.yaml`; on the cluster it's a CloudNativePG cluster.
 
 **RAG Implementation:**
 - **PGVector Integration**: Uses `langchain-postgres` with PGVector for vector storage and retrieval
-- **Multiple Collections**: Supports multiple knowledge bases (e.g., "richard-projects" collection)
+- **Collections**: `richard-resume` and `richard-projects` for the resume agent, plus one `web_search_<thread_id>` collection per conversation for web research, dropped when the thread is deleted
 - **OpenRouter Embeddings**: Uses `qwen/qwen3-embedding-8b` for vector generation
 - **Automatic Setup**: Database schema and vector extensions are automatically configured
 
-The system supports three database options:
-- **YugabyteDB**: Distributed SQL with pgvector extensions (recommended)
-- **PostgreSQL**: Traditional PostgreSQL with pgvector extension  
-- **SQLite**: Local development and testing
+Set `DATABASE_TYPE=postgres` for Postgres, or `sqlite` for quick local runs and tests (no RAG vectors).
 
 ### Resume & Portfolio Data Setup
 
 The current implementation includes automated scripts for creating vector databases from resume and project data:
 
-- `scripts/create_resume_vectors.py`: Creates vector embeddings from resume data in `data/richard-resume/`
-- `data/richard-projects/`: Contains markdown files describing various projects
-- `data/richard-resume/`: Contains structured resume information (education, skills, experience)
+- `scripts/create_resume_vectors.py`: Loads the resume PDF from Google Drive (`GDRIVE_DOC_ID`), the project list and resume sections from richardr.dev, and each project's GitHub README, then embeds them into the `richard-resume` and `richard-projects` collections of a local Postgres (`localhost:5432`). Needs Playwright's Chromium: `uv run playwright install chromium`.
+- `scripts/create_resume_vectors_cron.py`: the same, run by the Kubernetes CronJob.
 
-To adapt this for your own portfolio:
-
-1. Replace the content in `data/` directories with your own resume and project information
-2. Run the vector creation scripts to populate your knowledge base
-3. Update agent descriptions in `src/agents/agents.py` to reflect your professional background
+To adapt this for your own portfolio, point the scripts at your own resume and project sources, run them, and update the agent descriptions in `src/agents/agents.py`.
 
 ### Handling Private Credential files
 
@@ -238,96 +200,47 @@ This repository includes comprehensive Kubernetes deployment capabilities using 
 
 #### Prerequisites
 
-- Kubernetes cluster (1.19+)
+- Kubernetes cluster with the CloudNativePG operator
 - Helm 3.x
-- YugabyteDB or PostgreSQL database
 - Docker registry access (GitHub Container Registry)
 
-#### Environment Configuration
+#### How it's deployed
 
-The deployment uses an enhanced environment configuration with separate secrets for different components:
+The chart in `helm/agents-service/` holds the service, its CronJob, the ingress for agents.richardr.dev, and a
+CloudNativePG `Cluster` (`templates/database.yaml`) that bootstraps the `agentsservice` database with pgvector.
+The pods read the database password from the `agents-service-db-app` Secret that CloudNativePG generates, and
+everything else from `app-secrets`.
+
+Argo CD deploys it from `main`: the Application is `argocd/apps/agents-service.yaml` in the
+[k3s-cluster](https://github.com/richardr1126/k3s-cluster) repo. Pushing to `main` builds the
+`k8s-agents-service` and `k8s-agents-cron` images (arm64, tagged `latest`), so the pods pin to arm64 nodes and
+always pull; restart the Deployment to pick up a new build.
+
+#### Secrets
+
+`helm/create_secrets.sh` applies `app-secrets` in the `default` namespace from `helm/.env`:
 
 ```bash
-# Core authentication and database
-AUTH_SECRET=your-secret-for-streamlit-auth
-ADMIN_POSTGRES_PASSWORD=admin-database-password  
-APP_POSTGRES_PASSWORD=application-database-password
-
-# API Keys
-OPENROUTER_API_KEY=your-openrouter-key
-LANGSMITH_API_KEY=your-langsmith-key  
-GITHUB_PAT=your-github-token-for-container-registry
-
-# MCP Configuration (for database analysis agent)
-POSTGRES_MCP_URL=http://host.docker.internal:8000/sse
-
-# Temporary branch-aware stream debug logging (set to true only while debugging)
-PARALLEL_BRANCH_DEBUG=false
+AUTH_SECRET=...          # bearer token; must match the UI's BACKEND_AUTH_TOKEN
+OPENROUTER_API_KEY=...
+TAVILY_API_KEY=...
+GDRIVE_DOC_ID=...
+LANGSMITH_API_KEY=...    # optional; turns on LangSmith tracing
 ```
 
-#### Quick Deploy with Helm
+Run it once before the first sync, and again whenever a key changes:
 
 ```sh
-# Navigate to helm directory
-cd helm
-
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env with your API keys, database passwords, and GitHub PAT
-
-# Run the deployment script (includes YugabyteDB setup)
-./manual_deploy.sh
+./helm/create_secrets.sh
+kubectl rollout restart deployment/agents-service
 ```
 
-This script will:
-- Build and push multi-architecture Docker images for both service and streamlit to GitHub Container Registry
-- Set up YugabyteDB user and database with vector extensions
-- Create Kubernetes secrets with your API keys and configuration
-- Deploy both agents-service and agents-streamlit applications using Helm with subchart architecture
-
-#### GitOps with ArgoCD
-
-> **Outdated:** the ArgoCD Application for this service now belongs in the k3s-cluster repo
-> (`argocd/apps/`). The steps below are the old way and no longer work as written.
-
-For GitOps deployments, use the included ArgoCD application manifest:
+#### Without Argo CD
 
 ```sh
-# Create secrets manually
-./create_secrets.sh
-
-kubectl apply -f helm/argocd.yaml
+./helm/create_secrets.sh
+helm install agents-service ./helm/agents-service   # the release must be named agents-service
 ```
-
-#### Manual Helm Deployment
-
-```sh
-# Create secrets manually
-./create_secrets.sh
-
-# Update chart dependencies (includes agents-streamlit subchart)
-./update_dependencies.sh
-
-# Install with Helm
-helm install agents-service ./agents-service \
-  --set image.repository=ghcr.io/richardr1126/k8s-agents-service \
-  --set image.tag=latest \
-  --set agents-streamlit.image.repository=ghcr.io/richardr1126/k8s-agents-streamlit \
-  --set agents-streamlit.image.tag=latest
-```
-
-#### Dual-Chart Architecture
-
-The Kubernetes deployment uses a dual-chart architecture:
-
-- **`agents-service`**: Main Helm chart that deploys the FastAPI backend service
-- **`agents-streamlit`**: Subchart that deploys the Streamlit UI application as a separate pod
-
-This architecture provides:
-- **Independent Scaling**: Scale UI and backend independently based on demand
-- **Separation of Concerns**: UI and backend can be managed, updated, and troubleshot independently  
-- **Deployment Flexibility**: Deploy only the backend for API-only deployments using `--set agents-streamlit.enabled=false`
-- **Enhanced Security**: Different ingress rules and network policies can be applied to each component
 
 #### Automated Tasks with CronJobs
 
@@ -353,19 +266,17 @@ cronjob:
 
 **Required Environment Variables:**
 - `GDRIVE_DOC_ID`: Google Drive document ID for resume data
-- All database connection variables for vector storage
+- The database settings, which the chart sets
 - `OPENROUTER_API_KEY`: For model inference and embeddings
-- `POSTGRES_MCP_URL`: For database analysis capabilities (if using MCP agent)
 
 #### Database Support
 
-- **YugabyteDB**: Distributed SQL with vector extensions (recommended)
-- **PostgreSQL**: Traditional PostgreSQL with pgvector extension
-- **SQLite**: For development only
+- **Postgres with pgvector**: required for RAG (CloudNativePG on the cluster)
+- **SQLite**: for development and tests only
 
 ### Docker Setup
 
-This project includes a Docker setup for easy development and deployment. The `compose.yaml` file defines three services: `postgres`, `agent_service` and `streamlit_app`. The `Dockerfile` for each service is in their respective directories.
+This project includes a Docker setup for easy development and deployment. The `compose.yaml` file defines the `postgres` and `agent_service` services. The Dockerfiles are in `docker/`.
 
 For local development, we recommend using [docker compose watch](https://docs.docker.com/compose/file-watch/). This feature allows for a smoother development experience by automatically updating your containers when changes are detected in your source code.
 
@@ -386,20 +297,18 @@ For local development, we recommend using [docker compose watch](https://docs.do
    This will automatically:
    - Start a PostgreSQL database service that the agent service connects to
    - Start the agent service with FastAPI
-   - Start the Streamlit app for the user interface
 
 4. The services will now automatically update when you make changes to your code:
    - Changes in the relevant python files and directories will trigger updates for the relevant services.
    - NOTE: If you make changes to the `pyproject.toml` or `uv.lock` files (such as adding dependencies), you will need to rebuild the services by running `docker compose up --build`.
 
-5. Access the Streamlit app by navigating to `http://localhost:8501` in your web browser.
-
-6. (Optional) Run the Next.js UI instead of / in addition to Streamlit:
+5. Run the Next.js UI:
    ```sh
    cd ui
    pnpm install  # or npm/yarn
    cp .env.example .env.local
    # Adjust environment variables as needed - see ui/README.md
+   pnpm db:migrate  # apply the schema to POSTGRES_URL
    pnpm dev
    ```
    The Next.js app will be available at `http://localhost:3000`.
@@ -410,24 +319,15 @@ For local development, we recommend using [docker compose watch](https://docs.do
 
 This setup allows you to develop and test your changes in real-time without manually restarting the services.
 
-### Building other apps on the AgentClient
+### API
 
-The repo includes a generic `src/client/client.AgentClient` that can be used to interact with the agent service. This client is designed to be flexible and can be used to build other apps on top of the agent. It supports both synchronous and asynchronous invocations, and streaming and non-streaming requests.
+- `POST /{agent_id}/ag-ui`: runs an agent and streams [AG-UI](https://docs.ag-ui.com) events (`text/event-stream`). The body is an AG-UI `RunAgentInput`; `forwardedProps.model` picks the model and `forwardedProps.user_id` is passed to the agent. To answer an interrupt, send its id back in `resume`. Events from a sub-agent carry a `subagentRunId` and sit between its `SUBAGENT_STARTED` and `SUBAGENT_FINISHED`/`SUBAGENT_ERROR`, which come before the parent `task` call's `TOOL_CALL_RESULT`. An interrupt, including one raised inside a sub-agent, ends the run with `RUN_FINISHED.outcome` of type `interrupt`.
+- `POST /history`: `{"thread_id"}` returns `{"messages", "subagents"}`: the thread's AG-UI messages, with each sub-agent's messages (tagged with `subagentRunId`) just before its `task` result, and one `{subagentRunId, parentToolCallId, name, description, status, error?}` entry per sub-agent run.
+- `POST /{agent_id}/invoke`: runs an agent and returns its final message.
+- `DELETE /thread`: deletes a thread's checkpoints, sub-agent runs included, its long-term memory, and its web search vector collection.
+- `GET /info`, `POST /feedback`, `GET /health`.
 
-See the `src/run_client.py` file for full examples of how to use the `AgentClient`. A quick example:
-
-```python
-from client import AgentClient
-client = AgentClient()
-
-response = client.invoke("Tell me a brief joke?")
-response.pretty_print()
-# ================================== Ai Message ==================================
-#
-# A man walked into a library and asked the librarian, "Do you have any books on Pavlov's dogs and Schrödinger's cat?"
-# The librarian replied, "It rings a bell, but I'm not sure if it's here or not."
-
-```
+When `AUTH_SECRET` is set, every endpoint except `/health` needs `Authorization: Bearer <AUTH_SECRET>`.
 
 ### Development with LangGraph Studio
 
@@ -437,7 +337,7 @@ The agent supports [LangGraph Studio](https://langchain-ai.github.io/langgraph/c
 
 ### Local development without Docker
 
-You can also run the agent service and the Streamlit app locally without Docker, just using a Python virtual environment.
+You can also run the agent service locally without Docker, just using a Python virtual environment.
 
 1. Create a virtual environment and install dependencies:
 
@@ -452,19 +352,13 @@ You can also run the agent service and the Streamlit app locally without Docker,
    python src/run_service.py
    ```
 
-3. In a separate terminal, run the Streamlit app:
-
-   ```sh
-   streamlit run src/streamlit_app.py
-   ```
-
-4. Open your browser and navigate to the URL provided by Streamlit (usually `http://localhost:8501`).
+3. In a separate terminal, run the Next.js UI as described in [ui/README.md](ui/README.md).
 
 ## Projects built with or inspired by the original agent-service-toolkit
 
 The following are projects that drew code or inspiration from [JoshuaC215's original agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit):
 
-- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Kubernetes deployment with Helm charts and YugabyteDB integration
+- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Kubernetes deployment with Helm, GitOps and Postgres/pgvector, and an AG-UI chat UI
 - **[PolyRAG](https://github.com/QuentinFuxa/PolyRAG)** - Extends agent-service-toolkit with RAG capabilities over both PostgreSQL databases and PDF documents
 - **[alexrisch/agent-web-kit](https://github.com/alexrisch/agent-web-kit)** - A Next.JS frontend for agent-service-toolkit
 - **[raushan-in/dapa](https://github.com/raushan-in/dapa)** - Digital Arrest Protection App (DAPA) enables users to report financial scams and frauds efficiently via a user-friendly platform

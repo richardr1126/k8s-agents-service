@@ -33,7 +33,6 @@ from schema.models import (
 class DatabaseType(StrEnum):
     SQLITE = "sqlite"
     POSTGRES = "postgres"
-    MONGO = "mongo"
 
 
 def check_str_is_http(x: str) -> str:
@@ -81,9 +80,6 @@ class Settings(BaseSettings):
     OPENWEATHERMAP_API_KEY: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
 
-    # MCP Configuration
-    POSTGRES_MCP_URL: str = "http://host.docker.internal:8000/sse"
-
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"
     LANGCHAIN_ENDPOINT: Annotated[str, BeforeValidator(check_str_is_http)] = (
@@ -95,8 +91,6 @@ class Settings(BaseSettings):
     LANGFUSE_HOST: Annotated[str, BeforeValidator(check_str_is_http)] = "https://cloud.langfuse.com"
     LANGFUSE_PUBLIC_KEY: SecretStr | None = None
     LANGFUSE_SECRET_KEY: SecretStr | None = None
-    PARALLEL_BRANCH_DEBUG: bool = False
-    DEBUG_TASK_BRANCH_MAP: bool = False
     AGENT_RECURSION_LIMIT: int = 35
     AGENT_MIN_REMAINING_STEPS_FOR_TOOL_CALLS: int = 5
     AGENT_COMPACTION_ENABLED: bool = True
@@ -119,14 +113,6 @@ class Settings(BaseSettings):
     POSTGRES_APPLICATION_NAME: str = "agent-service-toolkit"
     POSTGRES_MIN_CONNECTIONS_PER_POOL: int = 1
     POSTGRES_MAX_CONNECTIONS_PER_POOL: int = 1
-
-    # MongoDB Configuration
-    MONGO_HOST: str | None = None
-    MONGO_PORT: int | None = None
-    MONGO_DB: str | None = None
-    MONGO_USER: str | None = None
-    MONGO_PASSWORD: SecretStr | None = None
-    MONGO_AUTH_SOURCE: str | None = None
 
     # Azure OpenAI Settings
     AZURE_OPENAI_API_KEY: SecretStr | None = None

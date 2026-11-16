@@ -6,8 +6,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.tools import BaseTool
-from langgraph.graph import MessagesState
+from langgraph.graph import END, MessagesState
 from langgraph.managed import RemainingSteps
+from langgraph.types import Send
 
 from agents.compaction import CompactionManager, build_model_update, prompt_with_compaction_summary
 from service.utils import normalize_messages_for_replay
@@ -82,3 +83,13 @@ def pending_tool_calls(state: ToolLoopState) -> Literal["tools", "done"]:
     if not isinstance(last_message, AIMessage):
         raise TypeError(f"Expected AIMessage, got {type(last_message)}")
     return "tools" if last_message.tool_calls else "done"
+
+
+def send_pending_tool_calls(state: ToolLoopState) -> list[Send] | str:
+    """Fan out each tool call of the last AI message to its own "tools" task."""
+    last_message = state["messages"][-1]
+    if not isinstance(last_message, AIMessage):
+        raise TypeError(f"Expected AIMessage, got {type(last_message)}")
+    if not last_message.tool_calls:
+        return END
+    return [Send("tools", [tool_call]) for tool_call in last_message.tool_calls]

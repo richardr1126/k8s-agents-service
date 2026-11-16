@@ -2,44 +2,41 @@
 
 Pattern inspired by LangChain's `deepagents`: the main ReAct agent decides
 which specialized sub-agent to invoke and writes the sub-task description
-itself. Sub-agents run in isolation and return a single string back to the
-main agent as a ToolMessage.
+itself. Each sub-agent returns its final answer to the main agent as a
+ToolMessage whose artifact keeps the sub-agent's messages for history reload.
 """
 
 from datetime import datetime
 import json
-import logging
+from collections.abc import Awaitable, Callable
 from typing import Any, Literal, cast
-from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, ToolMessage
-from langchain_core.runnables import (
-    RunnableConfig,
-    RunnableSerializable,
-)
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
+from langchain_core.runnables import RunnableConfig, RunnableSerializable
+from langchain_core.runnables.config import merge_configs
 from langchain_core.tools import InjectedToolCallId, tool
+from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import InjectedState, ToolNode
-from langgraph.types import Command
+from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt.tool_node import ToolCallRequest
 from typing_extensions import Annotated
 
 from agents.compaction import CompactionManager
 from agents.configurable_model_graph import ConfigurableModelGraph
-from agents.mcp_agent import mcp_agent
 from agents.rag_assistant import rag_assistant
 from agents.tool_loop import (
     ToolLoopState,
-    pending_tool_calls as pending_tool_calls_helper,
     run_tool_loop_turn,
+    send_pending_tool_calls,
     wrap_tool_loop_model,
 )
 from agents.web_rag_agent import web_rag_agent
-from core import get_model, settings
+from core import get_model
 from schema.models import AllModelEnum
+from schema.subagent import SubagentArtifact
 
-SubAgentType = Literal["resume", "web", "postgres"]
-logger = logging.getLogger(__name__)
+SubAgentType = Literal["resume", "web"]
 
 
 def _normalize_tool_result_content(value: Any) -> str:
@@ -52,6 +49,9 @@ def _normalize_tool_result_content(value: Any) -> str:
         parts = [_normalize_tool_result_content(item) for item in value]
         return "".join(part for part in parts if part)
     if isinstance(value, dict):
+        # Skip non-text blocks such as Claude's "thinking" or "reasoning" blocks.
+        if value.get("type") not in (None, "text"):
+            return ""
         if isinstance(value.get("text"), str):
             return value["text"]
         if "content" in value:
@@ -69,7 +69,6 @@ You are the main controller agent. You delegate work to specialized sub-agents t
 Available sub-agents (subagent_type values):
 - "resume": Answers questions about Richard's professional background, skills, projects, education, and career history.
 - "web": Performs live web research for current events, recent news, real-time data, or anything requiring up-to-date information.
-- "postgres": Analyzes the Cosmere Feed PostgreSQL database (user metrics, content trends, engagement insights for a Bluesky feed featuring Brandon Sanderson's Cosmere content).
 
 How to work:
 1. Read the user's request.
@@ -94,73 +93,31 @@ def _resolve_sub_agent(subagent_type: str) -> Any:
         return rag_assistant
     if subagent_type == "web":
         return web_rag_agent
-    if subagent_type == "postgres":
-        # mcp_agent is lazy-loaded; .get_graph() returns a ConfigurableModelGraph
-        # that respects config["configurable"]["model"].
-        return mcp_agent.get_graph()
     raise ValueError(
-        f"Unknown subagent_type '{subagent_type}'. Must be one of: resume, web, postgres."
+        f"Unknown subagent_type '{subagent_type}'. Must be one of: resume, web."
     )
 
 
-def _child_run_id(parent_run_id: Any, branch_id: str) -> UUID:
-    """Derive a deterministic child run id for a branch under a parent run."""
-    if parent_run_id is None:
-        return uuid4()
-    return uuid5(NAMESPACE_URL, f"{parent_run_id}:{branch_id}")
+class SubagentError(Exception):
+    """A sub-agent failed; the parent gets an error result and carries on."""
 
 
-def _subagent_config_for_branch(
-    parent_config: RunnableConfig, *, subagent_type: SubAgentType, tool_call_id: str
-) -> RunnableConfig:
-    """Build an isolated RunnableConfig for one parallel sub-agent branch.
-
-    The key behavior here is thread isolation: each sub-agent call gets a unique
-    derived `thread_id`, preventing checkpoint collisions across parallel calls.
-    """
-    parent_configurable = dict((parent_config or {}).get("configurable", {}))
-    parent_thread_id = str(parent_configurable.get("thread_id") or "thread")
-    branch_id = f"{subagent_type}:{tool_call_id}"
-    branch_thread_id = f"{parent_thread_id}::subagent::{branch_id}"
-
-    branch_configurable = {
-        **parent_configurable,
-        "parent_thread_id": parent_thread_id,
-        "thread_id": branch_thread_id,
-        "branch_id": branch_id,
-        "subagent_type": subagent_type,
-        "subagent_call_id": tool_call_id,
-    }
-
-    tags = [*(parent_config.get("tags") or [])]
-    for tag in (
-        "subagent-call",
-        f"subagent:{subagent_type}",
-        f"branch:{branch_id}",
-    ):
-        if tag not in tags:
-            tags.append(tag)
-
-    metadata = dict(parent_config.get("metadata") or {})
-    metadata.update(
-        {
-            "parent_thread_id": parent_thread_id,
-            "branch_thread_id": branch_thread_id,
-            "branch_id": branch_id,
-            "subagent_type": subagent_type,
-            "subagent_call_id": tool_call_id,
-        }
-    )
-
-    return RunnableConfig(
-        configurable=branch_configurable,
-        run_id=_child_run_id(parent_config.get("run_id"), branch_id),
-        callbacks=parent_config.get("callbacks"),
-        tags=tags,
-        metadata=metadata,
-        max_concurrency=parent_config.get("max_concurrency"),
-        recursion_limit=parent_config.get("recursion_limit"),
-        run_name=f"subagent:{subagent_type}",
+def _task_result(
+    tool_call_id: str, run_id: str, args: dict[str, Any], content: str, **artifact: Any
+) -> ToolMessage:
+    return ToolMessage(
+        # The adapter streams TOOL_CALL_RESULT with this id; reusing the call id
+        # keeps the live stream, the checkpoint and /history in agreement.
+        id=tool_call_id,
+        name="task",
+        tool_call_id=tool_call_id,
+        content=content,
+        artifact=SubagentArtifact(
+            subagent_run_id=run_id,
+            subagent_type=args["subagent_type"],
+            description=args["description"],
+            **artifact,
+        ).model_dump(),
     )
 
 
@@ -173,63 +130,59 @@ async def task(
     ],
     subagent_type: Annotated[
         SubAgentType,
-        "Which sub-agent to dispatch to: 'resume', 'web', or 'postgres'.",
+        "Which sub-agent to dispatch to: 'resume' or 'web'.",
     ],
-    state: Annotated[dict, InjectedState],
     tool_call_id: Annotated[str, InjectedToolCallId],
     config: RunnableConfig,
-) -> Command:
+) -> ToolMessage:
     """Delegate a task to a specialized sub-agent and return its final answer."""
-    sub_agent = _resolve_sub_agent(subagent_type)
-    subagent_config = _subagent_config_for_branch(
+    # The sub-agent runs inside this tool's checkpoint namespace with the parent's
+    # config, so its events stream through the parent run. ag-ui-langgraph
+    # attributes them via `lc_agent_name` and uses the namespace as subagentRunId.
+    sub_config = merge_configs(
         config,
-        subagent_type=subagent_type,
-        tool_call_id=tool_call_id,
+        {"metadata": {"lc_agent_name": subagent_type}, "run_name": f"subagent:{subagent_type}"},
     )
-    branch_id = f"{subagent_type}:{tool_call_id}"
-    if settings.PARALLEL_BRANCH_DEBUG:
-        logger.info(
-            "subagent.start branch_id=%s subagent=%s parent_thread=%s branch_thread=%s",
-            branch_id,
-            subagent_type,
-            (config.get("configurable") or {}).get("thread_id"),
-            (subagent_config.get("configurable") or {}).get("thread_id"),
-        )
-    result = await sub_agent.ainvoke(
-        {"messages": [("user", description)]},
-        config=subagent_config,
-    )
-    final_message = result["messages"][-1]
-    raw_content = (
-        final_message.content
-        if hasattr(final_message, "content")
-        else final_message
-    )
-    content = _normalize_tool_result_content(raw_content)
-    if settings.PARALLEL_BRANCH_DEBUG:
-        logger.info(
-            "subagent.complete branch_id=%s subagent=%s tool_call_id=%s",
-            branch_id,
-            subagent_type,
-            tool_call_id,
-        )
+    try:
+        sub_agent = _resolve_sub_agent(subagent_type)
+        result = await sub_agent.ainvoke({"messages": [("user", description)]}, sub_config)
+    except GraphBubbleUp:
+        raise
+    except Exception as e:
+        raise SubagentError(f"Sub-agent '{subagent_type}' failed: {e}") from e
 
-    return Command(
-        update={
-            "messages": [
-                ToolMessage(
-                    content=content,
-                    name=f"task:{subagent_type}",
-                    tool_call_id=tool_call_id,
-                    artifact={
-                        "branch_id": branch_id,
-                        "subagent_type": subagent_type,
-                        "subagent_call_id": tool_call_id,
-                    },
-                )
-            ]
-        }
+    messages = result["messages"]
+    return _task_result(
+        tool_call_id,
+        config["configurable"]["checkpoint_ns"],
+        {"subagent_type": subagent_type, "description": description},
+        _normalize_tool_result_content(messages[-1].content),
+        messages=messages_to_dict([m for m in messages if not isinstance(m, HumanMessage)]),
     )
+
+
+async def _task_errors_as_results(
+    request: ToolCallRequest, execute: Callable[[ToolCallRequest], Awaitable[Any]]
+) -> Any:
+    """Return a failed sub-agent to the parent model as an error result.
+
+    The tool still raises, so the adapter emits SUBAGENT_ERROR; other errors
+    propagate and end the run.
+    """
+    try:
+        return await execute(request)
+    except SubagentError as e:
+        call = request.tool_call
+        message = _task_result(
+            cast(str, call["id"]),  # ToolNode only runs calls that have an id
+            request.runtime.config["configurable"]["checkpoint_ns"],
+            call["args"],
+            str(e),
+            status="error",
+            error=str(e),
+        )
+        message.status = "error"
+        return message
 
 
 _TOOLS = [task]
@@ -253,10 +206,6 @@ def wrap_model(
     )
 
 
-def pending_tool_calls(state: MainAgentState) -> Literal["tools", "done"]:
-    return pending_tool_calls_helper(state)
-
-
 def _build_main_graph(model_name: AllModelEnum):
     model = get_model(model_name)
     model_runnable = wrap_model(model, bind_tools=True)
@@ -274,12 +223,12 @@ def _build_main_graph(model_name: AllModelEnum):
 
     graph = StateGraph(MainAgentState)
     graph.add_node("model", acall_model)
-    graph.add_node("tools", ToolNode(_TOOLS))
+    # Node name "tools" and one Send per tool call are what ag-ui-langgraph
+    # relies on to attribute sub-agent events to their `task` call.
+    graph.add_node("tools", ToolNode(_TOOLS, awrap_tool_call=_task_errors_as_results))
     graph.set_entry_point("model")
     graph.add_edge("tools", "model")
-    graph.add_conditional_edges(
-        "model", pending_tool_calls, {"tools": "tools", "done": END}
-    )
+    graph.add_conditional_edges("model", send_pending_tool_calls, ["tools", END])
     return graph.compile(name="main-agent")
 
 

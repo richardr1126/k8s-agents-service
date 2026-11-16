@@ -1,0 +1,73 @@
+{
+  "messages": [
+    {
+      "id": "user-1",
+      "role": "user",
+      "content": "web:rust"
+    },
+    {
+      "id": "main-dispatch-1",
+      "role": "assistant",
+      "content": "",
+      "toolCalls": [
+        {
+          "id": "call_rust_1",
+          "type": "function",
+          "function": {
+            "name": "task",
+            "arguments": "{\"description\": \"research rust\", \"subagent_type\": \"web\"}"
+          }
+        }
+      ]
+    },
+    {
+      "subagentRunId": "tools:<id-1>",
+      "id": "<id-2>",
+      "role": "assistant",
+      "content": "",
+      "toolCalls": [
+        {
+          "id": "<id-3>",
+          "type": "function",
+          "function": {
+            "name": "web_search",
+            "arguments": "{\"query\": \"rust release\"}"
+          }
+        }
+      ]
+    },
+    {
+      "subagentRunId": "tools:<id-1>",
+      "id": "<id-4>",
+      "role": "tool",
+      "content": "Stored 1 chunks from 1 web results for 'rust release'.",
+      "toolCallId": "<id-3>"
+    },
+    {
+      "subagentRunId": "tools:<id-1>",
+      "id": "web-answer",
+      "role": "assistant",
+      "content": "Rust 2.0 shipped in October."
+    },
+    {
+      "id": "call_rust_1",
+      "role": "tool",
+      "content": "Rust 2.0 shipped in October.",
+      "toolCallId": "call_rust_1"
+    },
+    {
+      "id": "main-answer-1",
+      "role": "assistant",
+      "content": "Summary: Rust 2.0 shipped in October."
+    }
+  ],
+  "subagents": [
+    {
+      "subagentRunId": "tools:<id-1>",
+      "parentToolCallId": "call_rust_1",
+      "name": "web",
+      "description": "research rust",
+      "status": "success"
+    }
+  ]
+}

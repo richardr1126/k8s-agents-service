@@ -1,23 +1,13 @@
 from __future__ import annotations
 
-from collections.abc import Callable
 from typing import Any
 
 from pydantic import BaseModel
 
-WorkflowRenderer = Callable[[BaseModel], list[str]]
-
-_RENDERERS: dict[str, WorkflowRenderer] = {}
-
-
-def register_renderer(workflow_id: str, renderer: WorkflowRenderer) -> None:
-    _RENDERERS[workflow_id] = renderer
-
 
 def format_workflow_result_markdown(workflow_id: str, result: BaseModel) -> str:
     lines = [f"## Workflow: `{workflow_id}`", ""]
-    renderer = _RENDERERS.get(workflow_id, _default_renderer)
-    body = renderer(result)
+    body = _default_renderer(result)
     if body:
         lines.extend(body)
     return "\n".join(lines).rstrip()

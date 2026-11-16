@@ -5,49 +5,29 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useState, Suspense, useEffect } from "react";
-import { Loader2, AlertCircle, AlertTriangle, User } from "lucide-react";
+import { useState } from "react";
+import { Loader2, AlertTriangle, User } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { signIn } from "@/lib/auth-client";
+import { signIn, useSession } from "@/lib/auth-client";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { showPrivacyPopup } from "@/components/privacy-popup";
-import { wasSignedOut, clearSignedOut } from "@/lib/session-utils";
-
-function SessionExpiredLoader({ setSessionExpired }: { setSessionExpired: (v: boolean) => void }) {
-  const searchParams = useSearchParams();
-  // Set the flag based on the URL param; this is allowed in Suspense boundary
-  const reason = searchParams.get("reason");
-  useEffect(() => {
-    setSessionExpired(reason === "expired");
-  }, [reason, setSessionExpired]);
-  return null;
-}
-
-export default function SignIn() {
+export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
   const router = useRouter();
+  // Load the new session before leaving, or the chat page would see none and send us back.
+  const { refetch } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loadingEmail, setLoadingEmail] = useState(false);
   const [loadingGithub, setLoadingGithub] = useState(false);
   const [loadingGuest, setLoadingGuest] = useState(false);
   const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
-  const [sessionExpired, setSessionExpired] = useState(false);
-  const [justSignedOut, setJustSignedOut] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<{
     email?: string;
     password?: string;
   }>({});
   const isAnyLoading = loadingEmail || loadingGithub || loadingGuest;
-
-  // Detect explicit sign-out and show a friendly note once
-  useEffect(() => {
-    if (wasSignedOut()) {
-      setJustSignedOut(true);
-      clearSignedOut();
-    }
-  }, []);
 
   // Email validation
   const validateEmail = (email: string): boolean => {
@@ -113,10 +93,7 @@ export default function SignIn() {
           setError(errorMessage || "An error occurred during sign in. Please try again.");
         }
       } else {
-        // Success - clear any expired session flags and redirect
-        if (sessionExpired) {
-          localStorage.removeItem('sessionExpired');
-        }
+        await refetch();
         router.push('/');
       }
     } catch (err) {
@@ -130,52 +107,21 @@ export default function SignIn() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader>
-        {/* Only this part uses useSearchParams via the loader, wrapped in Suspense */}
-        <Suspense fallback={null}>
-          <SessionExpiredLoader setSessionExpired={setSessionExpired} />
-        </Suspense>
-        
         {/* Animated header content */}
         <motion.div
           animate={{ y: 0 }}
           transition={{ duration: 0.3, ease: "easeInOut" }}
         >
           <CardTitle className="text-lg md:text-xl">
-            {sessionExpired ? "Session Expired" : "Sign In"}
+            Sign In
           </CardTitle>
           <CardDescription className="text-xs md:text-sm">
-            {sessionExpired
-              ? "Please sign in again to access your account"
-              : justSignedOut
-              ? "Sign in to continue"
-              : "Enter your email below to login to your account"}
+            Enter your email below to login to your account, or continue as a guest
           </CardDescription>
         </motion.div>
       </CardHeader>
       <CardContent>
         <div className="grid gap-4">
-          {/* Animated session/signout alerts */}
-          <AnimatePresence>
-            {(sessionExpired || justSignedOut) && (
-              <motion.div
-                initial={{ opacity: 0, height: 0, marginBottom: 0 }}
-                animate={{ opacity: 1, height: "auto", marginBottom: 8 }}
-                exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-md dark:bg-amber-950 dark:border-amber-800">
-                  <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <div className="flex-1 text-sm text-amber-700 dark:text-amber-300">
-                    {sessionExpired
-                      ? "Your session has expired. Please sign in again to continue."
-                      : "You've been signed out. Please sign in to continue."}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           {/* Animated error alert */}
           <AnimatePresence>
             {error && (
@@ -275,6 +221,7 @@ export default function SignIn() {
 
           
 
+          {githubSignIn && (
           <Button
             variant="outline"
             className="w-full gap-2"
@@ -315,6 +262,7 @@ export default function SignIn() {
               </>
             )}
           </Button>
+          )}
 
           <Button
             variant="outline"
@@ -324,11 +272,10 @@ export default function SignIn() {
               try {
                 setLoadingGuest(true);
                 setError(null);
-                await signIn.anonymous();
-                if (sessionExpired) {
-                  localStorage.removeItem('sessionExpired');
-                }
-                router.push('/');
+                const result = await signIn.anonymous();
+                if (result.error) throw new Error(result.error.message);
+                await refetch();
+        router.push('/');
               } catch (e) {
                 console.error('Anonymous sign-in failed:', e);
                 setError('Unable to sign in anonymously. Please try again or use another method.');

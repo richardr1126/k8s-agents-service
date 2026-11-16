@@ -1,6 +1,6 @@
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolCall, ToolMessage
 
-from service.utils import extract_reasoning_from_payload, langchain_to_chat_message
+from service.utils import langchain_to_chat_message
 
 
 def test_messages_from_langchain() -> None:
@@ -67,17 +67,21 @@ def test_langchain_to_chat_message_extracts_reasoning_from_additional_kwargs() -
     assert chat_message.reasoning_content == ["First think, then answer."]
 
 
-def test_extract_reasoning_from_payload_handles_nested_summary_blocks() -> None:
+def test_reasoning_extraction_handles_nested_summary_blocks() -> None:
     payload = {
         "type": "reasoning",
         "summary": [{"type": "summary_text", "text": "Inspect the repo first."}],
     }
-    assert extract_reasoning_from_payload(payload) == ["Inspect the repo first."]
+    assert langchain_to_chat_message(AIMessage(content=[payload])).reasoning_content == [
+        "Inspect the repo first."
+    ]
 
 
-def test_extract_reasoning_from_payload_preserves_whitespace() -> None:
+def test_reasoning_extraction_preserves_whitespace() -> None:
     payload = {
         "type": "reasoning",
         "text": " Need a plan ",
     }
-    assert extract_reasoning_from_payload(payload) == [" Need a plan "]
+    assert langchain_to_chat_message(AIMessage(content=[payload])).reasoning_content == [
+        " Need a plan "
+    ]

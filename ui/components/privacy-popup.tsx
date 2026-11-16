@@ -5,7 +5,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Button } from "@/components/ui/button";
 
 // Key for localStorage to remember dismissal (updated for auth version)
-const STORAGE_KEY = "privacy_notice_v3_auth_dismissed";
+const STORAGE_KEY = "privacy_notice_v4_guest_dismissed";
 
 /**
  * PrivacyPopup displays a comprehensive privacy policy for the AI agents service.
@@ -81,21 +81,28 @@ export function PrivacyPopup() {
               <div>
                 <h4 className="font-semibold mb-1">Account Information</h4>
                 <p>
-                  You start with an anonymous account linked to your browser. If your cookie expires or is cleared, you get a new anonymous account. Old threads from the previous account cannot be deleted or managed. If you sign up, your threads move to your new account. Your email, name, and profile picture are stored securely. All chats link to your account.
+                  You can sign up with an email address (or GitHub, where available), or choose &quot;Continue as guest&quot;. A guest session is tied to this browser. If you sign out or clear your cookies as a guest, you cannot get back to that guest&apos;s chats. If you create an account or sign in while using a guest session, your guest chats move to that account. For accounts we store your email, name, and profile picture.
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-1">Conversation Data</h4>
                 <p>
-                  We keep chat messages, tool use, and metadata for features, debugging, and product improvement. If you lose your anonymous account, you cannot delete or manage old threads. Signing up moves your threads to your account.
+                  We keep chat messages, tool use, and metadata for features, debugging, and product improvement. Every chat belongs to your account or guest session, and only you can open it.
+                </p>
+              </div>
+
+              <div>
+                <h4 className="font-semibold mb-1">Usage Limits</h4>
+                <p>
+                  Each account and guest session can start a limited number of runs per minute and per day. Guests get fewer runs than accounts. The counter next to the message box shows how many you have left.
                 </p>
               </div>
 
               <div>
                 <h4 className="font-semibold mb-1">Data Retention & Deletion</h4>
                 <p>
-                  Deleted threads are removed from our main databases. Copies may stay in LangSmith for up to 14 days. If you lose your anonymous account, you cannot delete or manage those threads. Signing up keeps your threads under your control.
+                  Deleted threads are removed from our main databases. Copies may stay in LangSmith for up to 14 days. Chats from a guest session you can no longer reach stay stored, and you cannot delete them yourself.
                 </p>
               </div>
 
@@ -109,14 +116,14 @@ export function PrivacyPopup() {
               <div>
                 <h4 className="font-semibold mb-1">Your Rights</h4>
                 <p>
-                  You can sign out or delete threads anytime if you have access. If you lose your anonymous account, you cannot delete or manage old threads. Signing up keeps your threads under your control. For account deletion or questions, contact richardr.dev or me@richardr.dev.
+                  You can rename or delete your threads and sign out at any time. For account deletion or questions, contact richardr.dev or me@richardr.dev.
                 </p>
               </div>
             </div>
           </SheetDescription>
         </SheetHeader>
         <div className="flex justify-between items-center flex-shrink-0">
-          <p className="text-xs text-muted-foreground">Last updated: September 2025</p>
+          <p className="text-xs text-muted-foreground">Last updated: November 2026</p>
           <Button size="sm" variant="outline" onClick={handleDismiss}>I Understand</Button>
         </div>
       </SheetContent>

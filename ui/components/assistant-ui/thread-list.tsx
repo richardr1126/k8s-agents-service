@@ -2,7 +2,7 @@ import type { FC } from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
-  useThreadListItem,
+  useAuiState,
 } from "@assistant-ui/react";
 import { Trash2Icon, CirclePlusIcon, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
@@ -10,8 +10,6 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
-import { useThreadContext } from "@/components/custom-runtime-provider";
-import { useUser } from "@/components/auth-user-provider";
 
 export const ThreadList: FC = () => {
   return (
@@ -34,8 +32,7 @@ const ThreadListNew: FC = () => {
 };
 
 const ThreadListItems: FC = () => {
-  const { isLoading } = useUser();
-  
+  const isLoading = useAuiState((s) => s.threads.isLoading);
   if (isLoading) {
     return <ThreadListLoading />;
   }
@@ -89,46 +86,25 @@ const ThreadListItemTitle: FC = () => {
   );
 };
 
+/** Only the open thread can run: switching threads stops the run. */
 const ThreadListItemLoading: FC = () => {
-  const { runningThreads } = useThreadContext();
-  const threadListItem = useThreadListItem();
-  
-  if (!threadListItem || !runningThreads.has(threadListItem.id)) {
-    return null;
-  }
-  
-  return (
-    <div className="flex items-center">
-      <Loader2 className="h-3 w-3 animate-spin" />
-    </div>
-  );
+  const isRunning = useAuiState((s) => s.thread.isRunning && s.threads.mainThreadId === s.threadListItem.id);
+  if (!isRunning) return null;
+  return <Loader2 className="h-3 w-3 animate-spin" aria-label="Running" />;
 };
 
-const ThreadListItemDelete: FC = () => {
-  const { deleteThread } = useUser();
-  const threadListItem = useThreadListItem();
-  
-  const handleDelete = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (!threadListItem) return;
-    
-    // Confirm deletion
-    if (confirm('Are you sure you want to delete this thread? This action cannot be undone.')) {
-      // Delete thread (this handles both frontend DB and backend deletion)
-      await deleteThread(threadListItem.id);
-    }
-  };
-  
-  return (
+const ThreadListItemDelete: FC = () => (
+  <ThreadListItemPrimitive.Delete asChild>
     <TooltipIconButton
       className="hover:text-destructive p-4 text-foreground/60 ml-auto mr-1 size-4"
       variant="ghost"
       tooltip="Delete thread"
-      onClick={handleDelete}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (!confirm("Delete this thread? This cannot be undone.")) e.preventDefault();
+      }}
     >
       <Trash2Icon />
     </TooltipIconButton>
-  );
-};
+  </ThreadListItemPrimitive.Delete>
+);

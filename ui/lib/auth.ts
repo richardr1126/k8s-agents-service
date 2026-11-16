@@ -1,103 +1,46 @@
 import { betterAuth } from "better-auth";
+import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
-import { Pool } from "pg";
-import { rateLimiter } from "./rate-limiter";
+import { eq } from "drizzle-orm";
+import { db } from "@/db";
+import * as schema from "@/db/schema";
 
-// Create PostgreSQL connection pool for auth
-const pool = new Pool({
-  connectionString: process.env.POSTGRES_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
-});
+/** Whether GitHub sign-in is configured; the sign-in page shows the button only then. */
+export const githubSignIn = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
+
+const github = githubSignIn
+  ? { github: { clientId: process.env.GITHUB_CLIENT_ID!, clientSecret: process.env.GITHUB_CLIENT_SECRET! } }
+  : {};
 
 export const auth = betterAuth({
-  database: pool,
-  secret: process.env.BETTER_AUTH_SECRET!,
+  database: drizzleAdapter(db, { provider: "pg", schema }),
+  secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL || "http://localhost:3000",
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: false, // Set to true in production
-    async sendResetPassword(data) {
-      // Send an email to the user with a link to reset their password
-      console.log("Password reset requested for:", data.user.email);
-    },
-  },
-  socialProviders: {
-    ...(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET && {
-      github: {
-        clientId: process.env.GITHUB_CLIENT_ID,
-        clientSecret: process.env.GITHUB_CLIENT_SECRET,
-      },
-    }),
-  },
+  emailAndPassword: { enabled: true },
+  socialProviders: github,
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days (reasonable for user experience)
-    updateAge: 60 * 60 * 1, // 1 hour (refresh more frequently)
-    cookieCache: {
-      maxAge: 60 * 60 * 24 * 7, // 7 days for cookie cache
-    },
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60,
+    cookieCache: { enabled: true, maxAge: 5 * 60 },
   },
   advanced: {
-    // Use a repo-specific prefix so auth cookies do not collide with other
-    // Better Auth apps running on localhost.
+    // A repo-specific prefix keeps cookies apart from other Better Auth apps on localhost.
     cookiePrefix: process.env.BETTER_AUTH_COOKIE_PREFIX || "k8s-agents-auth",
-    database: {
-      generateId: () => {
-        // Generate user-friendly IDs similar to current system
-        const timestamp = Date.now();
-        const random = Math.random().toString(36).substring(2, 8);
-        return `user-${timestamp}-${random}`;
-      },
-    },
   },
   plugins: [
-    nextCookies(), // Enable Next.js cookie handling
     anonymous({
+      // Runs before the plugin deletes the guest, whose threads would otherwise cascade away.
       onLinkAccount: async ({ anonymousUser, newUser }) => {
-        try {
-          // Log when anonymous user links to a real account
-          console.log("Anonymous user linked to account:", {
-            anonymousUserId: anonymousUser.user.id,
-            newUserId: newUser.user.id,
-            newUserEmail: newUser.user.email,
-          });
-
-          // Transfer all threads from anonymous user to the new authenticated user
-          const client = await pool.connect();
-          try {
-            // Update all user_threads records to transfer ownership
-            const result = await client.query(
-              `UPDATE user_threads 
-               SET user_id = $1, updated_at = CURRENT_TIMESTAMP 
-               WHERE user_id = $2`,
-              [newUser.user.id, anonymousUser.user.id]
-            );
-
-            console.log(`Successfully transferred ${result.rowCount} threads from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
-          } catch (error) {
-            console.error("Error transferring threads during account linking:", error);
-            // Don't throw here to prevent blocking the account linking process
-          } finally {
-            client.release();
-          }
-
-          // Transfer rate limiting data (message counts) from anonymous user to authenticated user
-          try {
-            await rateLimiter.transferAnonymousUsage(anonymousUser.user.id, newUser.user.id);
-            console.log(`Successfully transferred rate limit data from anonymous user ${anonymousUser.user.id} to user ${newUser.user.id}`);
-          } catch (error) {
-            console.error("Error transferring rate limit data during account linking:", error);
-            // Don't throw here to prevent blocking the account linking process
-          }
-        } catch (error) {
-          console.error("Error in onLinkAccount callback:", error);
-          // Don't throw here to prevent blocking the account linking process
-        }
-        // Note: Anonymous user will be automatically deleted after this callback completes
+        if (newUser.user.id === anonymousUser.user.id || newUser.user.isAnonymous) return;
+        await db
+          .update(schema.threads)
+          .set({ userId: newUser.user.id })
+          .where(eq(schema.threads.userId, anonymousUser.user.id));
       },
     }),
+    nextCookies(),
   ],
 });
 
 export type Session = typeof auth.$Infer.Session;
-export type User = typeof auth.$Infer.Session.user;

@@ -1,76 +1,16 @@
-import logging
-import math
-import re
 import asyncio
+import logging
 from typing import Any
 
-import numexpr
-from langchain_core.tools import BaseTool, tool
-from langchain_mcp_adapters.client import MultiServerMCPClient
+import psycopg
+from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 
 from core import settings
+from core.settings import DatabaseType
 
 logger = logging.getLogger(__name__)
-
-async def get_mcp_tools() -> list:
-    try:
-        # Initialize MCP client to connect to postgres-mcp server
-        mcp_client = MultiServerMCPClient(
-            {
-                "postgres-mcp": {
-                    "url": settings.POSTGRES_MCP_URL,
-                    "transport": "sse",
-                }
-            }
-        )
-        
-        # Load MCP tools from the postgres server
-        mcp_tools = await mcp_client.get_tools()
-        logger.info(f"Successfully loaded {len(mcp_tools)} MCP tools from postgres server")
-        return mcp_tools
-        
-    except Exception as e:
-        # Fallback gracefully if MCP connection fails
-        logger.warning(f"Could not connect to MCP server at {settings.POSTGRES_MCP_URL}: {e}")
-        logger.info("Continuing with no tools...")
-        return []
-
-def calculator_func(expression: str) -> str:
-    """Calculates a math expression using numexpr.
-
-    Useful for when you need to answer questions about math using numexpr.
-    This tool is only for math questions and nothing else. Only input
-    math expressions.
-
-    Args:
-        expression (str): A valid numexpr formatted math expression.
-
-    Returns:
-        str: The result of the math expression.
-    """
-
-    try:
-        local_dict = {"pi": math.pi, "e": math.e}
-        output = str(
-            numexpr.evaluate(
-                expression.strip(),
-                global_dict={},  # restrict access to globals
-                local_dict=local_dict,  # add common mathematical functions
-            )
-        )
-        return re.sub(r"^\[|\]$", "", output)
-    except Exception as e:
-        raise ValueError(
-            f'calculator("{expression}") raised error: {e}.'
-            " Please try again with a valid numerical expression"
-        )
-
-
-calculator: BaseTool = tool(calculator_func)
-calculator.name = "Calculator"
-
 
 def format_contexts(docs):
     return "\n\n".join(doc.page_content for doc in docs)
@@ -180,6 +120,26 @@ def get_pgvector_connection():
     return f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD.get_secret_value()}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
 
 
+def web_collection_name(thread_id: str) -> str:
+    """One vector collection per conversation; sub-agents share the parent's thread_id."""
+    return f"web_search_{thread_id}"
+
+
+async def delete_web_collection(thread_id: str) -> None:
+    """Drop a conversation's web search collection. Its embeddings go with it (ON DELETE CASCADE)."""
+    if settings.DATABASE_TYPE != DatabaseType.POSTGRES:
+        return
+    conninfo = get_pgvector_connection().replace("postgresql+psycopg://", "postgresql://", 1)
+    async with await psycopg.AsyncConnection.connect(conninfo) as conn:
+        try:
+            await conn.execute(
+                "DELETE FROM langchain_pg_collection WHERE name = %s",
+                (web_collection_name(thread_id),),
+            )
+        except psycopg.errors.UndefinedTable:
+            pass  # nothing was ever stored
+
+
 def create_pgvector_instance(collection_name: str, async_mode: bool = False):
     """Create a PGVector instance for a given collection."""
     embeddings = get_embeddings()
@@ -267,17 +227,20 @@ async def _retriever_ainvoke_with_embedding_retry(retriever: Any, query: str, at
             await asyncio.sleep(delay_seconds)
 
 
-async def cleanup_temp_collection(collection_name: str) -> bool:
-    """Clean up temporary collection from the database."""
-    try:
-        pg_vector = create_pgvector_instance(collection_name, async_mode=True)
-        
-        # Delete the collection
-        await pg_vector.adelete_collection()
-        return True
-    except Exception as e:
-        print(f"Warning: Could not cleanup temporary collection {collection_name}: {e}")
-        return False
+async def _filtered_search(collection_name: str, query: str, filter_dict: dict[str, Any]) -> str:
+    """Search with the keyword filter, then without it if the filter matched nothing
+    (not every chunk carries every metadata field)."""
+    pg_vector = create_pgvector_instance(collection_name, async_mode=True)
+    documents = []
+    for search_filter in ([filter_dict, None] if filter_dict else [None]):
+        search_kwargs: dict[str, Any] = {"k": 5}
+        if search_filter:
+            search_kwargs["filter"] = search_filter
+        retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
+        documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
+        if documents:
+            break
+    return format_contexts(documents)
 
 
 @tool
@@ -298,20 +261,7 @@ async def projects_search(query: str) -> str:
     Returns:
         str: The formatted search results.
     """
-    pg_vector = create_pgvector_instance("richard-projects", async_mode=True)
-    
-    # Build metadata filter based on keywords in query
-    filter_dict = build_keyword_filter(query, collection_type="projects")
-    
-    # Create search kwargs with filter
-    search_kwargs: dict[str, Any] = {"k": 5}
-    if filter_dict:
-        search_kwargs["filter"] = filter_dict
-    
-    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
-    context_str = format_contexts(documents)
-    return context_str
+    return await _filtered_search("richard-projects", query, build_keyword_filter(query, collection_type="projects"))
 
 @tool
 async def resume_search(query: str) -> str:
@@ -331,17 +281,4 @@ async def resume_search(query: str) -> str:
     Returns:
         str: The formatted search results.
     """
-    pg_vector = create_pgvector_instance("richard-resume", async_mode=True)
-    
-    # Build metadata filter based on keywords in query
-    filter_dict = build_keyword_filter(query, collection_type="resume")
-    
-    # Create search kwargs with filter
-    search_kwargs: dict[str, Any] = {"k": 5}
-    if filter_dict:
-        search_kwargs["filter"] = filter_dict
-    
-    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
-    context_str = format_contexts(documents)
-    return context_str
+    return await _filtered_search("richard-resume", query, build_keyword_filter(query, collection_type="resume"))

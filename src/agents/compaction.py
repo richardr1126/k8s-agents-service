@@ -8,6 +8,7 @@ from typing import Any, cast
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 
+from agents.utils import internal_llm_config
 from core import settings
 from service.utils import convert_message_content_to_string
 
@@ -158,7 +159,9 @@ class CompactionManager:
                 )
             ),
         ]
-        summary_response = cast(AIMessage, await summary_model.ainvoke(summary_messages, config))
+        summary_response = cast(
+            AIMessage, await summary_model.ainvoke(summary_messages, internal_llm_config(config))
+        )
         updated_summary = convert_message_content_to_string(summary_response.content).strip()
         if not updated_summary:
             return CompactionOutcome(invoke_state=state, updated_summary=None, anchor_signature=None)

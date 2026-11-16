@@ -1,6 +1,6 @@
 # Creating a RAG assistant
 
-You can build a RAG assistant using PGVector with YugabyteDB or PostgreSQL.
+You can build a RAG assistant using PGVector on Postgres.
 
 ## Setting up PGVector Database
 
@@ -40,21 +40,14 @@ instructions = f"""
     """
 ```
 
-5. Open [`streamlit_app.py` file](../src/streamlit_app.py) and update the agent's welcome message:
-
-```python
-WELCOME = """Hello! I'm your AI assistant with access to a knowledge base of projects and technical documentation. Ask me anything!"""
-```
-
-6. Run the application and test your RAG assistant.
+5. Run the application and test your RAG assistant.
 
 ## Database Configuration
 
-The RAG assistant uses PGVector with YugabyteDB for production deployments, providing:
+The RAG assistant uses PGVector on Postgres (CloudNativePG on the cluster), providing:
 
 - **Vector Similarity Search**: Efficient semantic search using pgvector extensions
 - **Multiple Collections**: Support for different knowledge bases (e.g., "richard-projects", "acme")
 - **OpenRouter Embeddings**: Uses `qwen/qwen3-embedding-8b` for high-quality embeddings
-- **Production Scalability**: YugabyteDB's distributed architecture handles large document collections
 
 The database connection and embedding configuration is handled automatically through the application settings.

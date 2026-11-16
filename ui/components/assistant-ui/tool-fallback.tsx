@@ -1,9 +1,8 @@
-import { ToolCallContentPartComponent } from "@assistant-ui/react";
+import { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { ChevronDownIcon, ChevronUpIcon, WrenchIcon, SearchIcon, CalculatorIcon, CloudIcon } from "lucide-react";
 import { useState } from "react";
 import { Button } from "../ui/button";
 import { MarkdownString } from "./markdown-string";
-import { TransferToolFallback } from "../transfer-tool-ui";
 import { cn } from "@/lib/utils";
 import { Spinner } from "../ui/spinner";
 import { useContainerBreakpoint } from "@/hooks/use-container-breakpoint";
@@ -72,7 +71,7 @@ const extractSearchQuery = (argsText?: string): string | null => {
   return null;
 };
 
-export const ToolFallback: ToolCallContentPartComponent = (props) => {
+export const ToolFallback: ToolCallMessagePartComponent = (props) => {
   const { toolName, argsText, result } = props;
   const [isCollapsed, setIsCollapsed] = useState(true);
   const hasDetails = Boolean(argsText || result !== undefined);
@@ -82,11 +81,6 @@ export const ToolFallback: ToolCallContentPartComponent = (props) => {
   const hasSecondaryHeaderLine = Boolean(searchQuery || (!searchQuery && !isCollapsed));
   const useTopAlignedHeader = isNarrow && hasSecondaryHeaderLine;
 
-  // Main-agent dispatch tool uses a dedicated transfer card.
-  if (toolName === "task") {
-    return <TransferToolFallback {...props} />;
-  }
-  
   const formatResult = (result: unknown) => {
     if (typeof result === "string") {
       return result;

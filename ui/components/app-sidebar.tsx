@@ -1,5 +1,5 @@
 import * as React from "react"
-import { Github, MessagesSquare, Shield, LogOut, User, UserPlus } from "lucide-react"
+import { MessagesSquare, Shield, LogOut, User, UserPlus } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -15,7 +15,6 @@ import {
 import { ThreadList } from "@/components/assistant-ui/thread-list"
 import { showPrivacyPopup } from "@/components/privacy-popup"
 import { signOut, useSession } from "@/lib/auth-client"
-import { clearAuthenticationState, markSignedOut } from "@/lib/session-utils"
 import { useRouter } from "next/navigation"
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -23,10 +22,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    // Clear authentication state before signing out
-    markSignedOut();
-    clearAuthenticationState();
     await signOut();
+    router.push("/signin");
   };
 
   const handleCreateAccount = () => {
@@ -37,9 +34,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     router.push("/signin");
   };
 
-  // Check if user is anonymous using the isAnonymous field from better-auth
-  // Use Record<string, unknown> for session.user if type is unknown
-  const isAnonymous = session?.user && (session.user as Record<string, unknown>).isAnonymous === true;
+  const isAnonymous = session?.user.isAnonymous === true;
 
   return (
     <Sidebar {...props} >
@@ -135,7 +130,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarMenuButton size="sm" asChild>
               <Link href="https://github.com/richardr1126/k8s-agents-service" target="_blank">
                 <div className="flex aspect-square size-5 items-center justify-center rounded-md bg-sidebar-accent text-sidebar-accent-foreground">
-                  <Github className="size-3" />
+                  <svg className="size-3" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2"
+                    />
+                  </svg>
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold">Source Code</span>
