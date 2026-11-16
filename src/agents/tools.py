@@ -227,6 +227,22 @@ async def _retriever_ainvoke_with_embedding_retry(retriever: Any, query: str, at
             await asyncio.sleep(delay_seconds)
 
 
+async def _filtered_search(collection_name: str, query: str, filter_dict: dict[str, Any]) -> str:
+    """Search with the keyword filter, then without it if the filter matched nothing
+    (not every chunk carries every metadata field)."""
+    pg_vector = create_pgvector_instance(collection_name, async_mode=True)
+    documents = []
+    for search_filter in ([filter_dict, None] if filter_dict else [None]):
+        search_kwargs: dict[str, Any] = {"k": 5}
+        if search_filter:
+            search_kwargs["filter"] = search_filter
+        retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
+        documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
+        if documents:
+            break
+    return format_contexts(documents)
+
+
 @tool
 async def projects_search(query: str) -> str:
     """
@@ -245,20 +261,7 @@ async def projects_search(query: str) -> str:
     Returns:
         str: The formatted search results.
     """
-    pg_vector = create_pgvector_instance("richard-projects", async_mode=True)
-    
-    # Build metadata filter based on keywords in query
-    filter_dict = build_keyword_filter(query, collection_type="projects")
-    
-    # Create search kwargs with filter
-    search_kwargs: dict[str, Any] = {"k": 5}
-    if filter_dict:
-        search_kwargs["filter"] = filter_dict
-    
-    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
-    context_str = format_contexts(documents)
-    return context_str
+    return await _filtered_search("richard-projects", query, build_keyword_filter(query, collection_type="projects"))
 
 @tool
 async def resume_search(query: str) -> str:
@@ -278,17 +281,4 @@ async def resume_search(query: str) -> str:
     Returns:
         str: The formatted search results.
     """
-    pg_vector = create_pgvector_instance("richard-resume", async_mode=True)
-    
-    # Build metadata filter based on keywords in query
-    filter_dict = build_keyword_filter(query, collection_type="resume")
-    
-    # Create search kwargs with filter
-    search_kwargs: dict[str, Any] = {"k": 5}
-    if filter_dict:
-        search_kwargs["filter"] = filter_dict
-    
-    retriever = pg_vector.as_retriever(search_kwargs=search_kwargs)
-    documents = await _retriever_ainvoke_with_embedding_retry(retriever, query)
-    context_str = format_contexts(documents)
-    return context_str
+    return await _filtered_search("richard-resume", query, build_keyword_filter(query, collection_type="resume"))
