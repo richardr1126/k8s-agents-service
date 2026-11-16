@@ -1,12 +1,15 @@
 import os
+import time
+
+import openai
 import requests
-from dotenv import load_dotenv
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 from langchain_community.document_loaders import AsyncChromiumLoader, PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_postgres import PGVector
-from langchain_openai import OpenAIEmbeddings
 from langchain_core.documents import Document
+from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 load_dotenv()
 
@@ -207,6 +210,18 @@ def fetch_public_resume_pdf(doc_id: str, tmp_path: str = "resume.pdf"):
     return loader.load()
 
 
+def _add_with_backoff(pg_vector, docs, attempts: int = 6):
+    """Add documents, waiting and retrying when the embedding provider rate-limits."""
+    for attempt in range(attempts):
+        try:
+            pg_vector.add_documents(docs)
+            return
+        except openai.RateLimitError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2 ** (attempt + 1))
+
+
 def create_pgvector_collection(
     collection_name: str,
     documents,
@@ -243,38 +258,31 @@ def create_pgvector_collection(
         print(f"No non-empty documents to add for {collection_name}, skipping.")
         return pg_vector
 
-    try:
-        pg_vector.add_documents(docs_to_add)
-        print(f"Added {len(docs_to_add)} chunks to {collection_name}")
-    except ValueError as e:
-        if "No embedding data received" not in str(e):
-            raise
-        print(
-            f"Batch embed returned no data for {collection_name}. "
-            "Retrying with smaller batches."
-        )
-        added = 0
-        skipped = 0
-        batch_size = 8
-        for i in range(0, len(docs_to_add), batch_size):
-            batch = docs_to_add[i : i + batch_size]
-            try:
-                pg_vector.add_documents(batch)
-                added += len(batch)
-            except ValueError as batch_error:
-                if "No embedding data received" not in str(batch_error):
-                    raise
-                for doc in batch:
-                    try:
-                        pg_vector.add_documents([doc])
-                        added += 1
-                    except ValueError as single_error:
-                        if "No embedding data received" not in str(single_error):
-                            raise
-                        skipped += 1
+    # Small batches with waits on rate limits: embedding providers behind OpenRouter
+    # enforce per-minute token quotas. A batch that returns no embedding data is
+    # retried one document at a time, skipping the ones that still fail.
+    added = 0
+    skipped = 0
+    batch_size = 16
+    for i in range(0, len(docs_to_add), batch_size):
+        batch = docs_to_add[i : i + batch_size]
+        try:
+            _add_with_backoff(pg_vector, batch)
+            added += len(batch)
+        except ValueError as batch_error:
+            if "No embedding data received" not in str(batch_error):
+                raise
+            for doc in batch:
+                try:
+                    _add_with_backoff(pg_vector, [doc])
+                    added += 1
+                except ValueError as single_error:
+                    if "No embedding data received" not in str(single_error):
+                        raise
+                    skipped += 1
 
-        print(f"Added {added} chunks to {collection_name}; skipped {skipped} problematic chunks")
-    
+    suffix = f"; skipped {skipped} problematic chunks" if skipped else ""
+    print(f"Added {added} chunks to {collection_name}{suffix}")
     return pg_vector
 
 
