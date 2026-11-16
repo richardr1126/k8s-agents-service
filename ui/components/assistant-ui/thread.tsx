@@ -241,7 +241,8 @@ const LimitBanner: FC = () => {
 const UsageCounter: FC = () => {
   const { usage } = useChat();
   const tightest = usage?.reduce<(typeof usage)[number] | null>(
-    (min, w) => (!min || w.limit - w.used < min.limit - min.used ? w : min),
+    // On a tie, show the longer window: it says more about what's left.
+    (min, w) => (!min || w.limit - w.used <= min.limit - min.used ? w : min),
     null,
   );
   if (!tightest) return null;

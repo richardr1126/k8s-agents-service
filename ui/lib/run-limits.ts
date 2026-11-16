@@ -7,7 +7,8 @@ type WindowName = keyof typeof WINDOWS;
 
 export type RunLimit = { window: WindowName; limit: number };
 export type LimitedUser = { id: string; email: string; isAnonymous?: boolean | null };
-export type WindowUsage = RunLimit & { used: number; resetAt: string };
+/** `message` is set when the window is full, so the UI can say so before a run is refused. */
+export type WindowUsage = RunLimit & { used: number; resetAt: string; message?: string };
 export type Denial = RunLimit & { resetAt: string; message: string };
 
 const DEFAULTS = {
@@ -104,6 +105,9 @@ export async function getUsage(user: LimitedUser, now = new Date()): Promise<Win
   return limitsFor(user).map((limit) => {
     const start = windowStart(limit.window, now).getTime();
     const row = rows.find((r) => r.window === limit.window && r.windowStart.getTime() === start);
-    return { ...limit, used: row?.count ?? 0, resetAt: resetAt(limit.window, now).toISOString() };
+    const used = row?.count ?? 0;
+    const reset = resetAt(limit.window, now);
+    const message = used >= limit.limit ? denialMessage(limit, Boolean(user.isAnonymous), now, reset) : undefined;
+    return { ...limit, used, resetAt: reset.toISOString(), ...(message && { message }) };
   });
 }

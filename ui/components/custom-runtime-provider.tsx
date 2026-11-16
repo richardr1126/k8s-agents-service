@@ -36,6 +36,15 @@ function useUsage() {
   useEffect(() => {
     void loadUsage().then(setUsage);
   }, []);
+  // While a window is full, check again when it resets so the composer unlocks by itself.
+  useEffect(() => {
+    const resets = (usage ?? []).filter((w) => w.used >= w.limit).map((w) => Date.parse(w.resetAt));
+    if (resets.length === 0) return;
+    const delay = Math.max(0, Math.max(...resets) - Date.now()) + 1_000;
+    if (delay > 2 ** 31 - 1) return;
+    const timer = setTimeout(() => void refresh(), delay);
+    return () => clearTimeout(timer);
+  }, [usage, refresh]);
   return { usage, refresh };
 }
 
@@ -57,11 +66,12 @@ function RuntimeProvider({ serviceInfo, children }: { serviceInfo: ServiceInfo; 
     onRunFinalized: () => void refreshUsage(),
   });
 
-  // Shown until a window has room again.
-  const full = usage?.some((w) => w.used >= w.limit) ?? false;
+  // Shown, and sending blocked, until every window has room again.
+  const fullWindow = usage?.find((w) => w.used >= w.limit);
+  const shownLimitMessage = fullWindow ? (fullWindow.message ?? limitMessage) : null;
 
   return (
-    <ChatContext.Provider value={{ serviceInfo, usage, limitMessage: full ? limitMessage : null, ...selection }}>
+    <ChatContext.Provider value={{ serviceInfo, usage, limitMessage: shownLimitMessage, ...selection }}>
       <AssistantRuntimeProvider runtime={runtime}>{children}</AssistantRuntimeProvider>
     </ChatContext.Provider>
   );

@@ -11,9 +11,9 @@
       "action": "What skills does Richard have that are in demand in the current software engineering landscape? Can you provide recent job postings that align with his skill set?"
     },
     {
-      "title": "Social media feed performance",
-      "label": "Uses Web Agent + Postgres Agent",
-      "action": "What's the latest news about Brandon Sanderson or his books, and how is the Cosmere feed performing in response to recent events?"
+      "title": "Latest Brandon Sanderson news",
+      "label": "Uses Web Agent",
+      "action": "What's the latest news about Brandon Sanderson and his upcoming books?"
     },
     {
       "title": "What is Richard's most technical project?",

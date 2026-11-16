@@ -21,13 +21,14 @@ const AGENTS: Record<string, { label: string; icon: FC<{ className?: string }> }
 };
 
 type AgUiRunMetadata = { name?: string; description?: string; result?: string };
-type Phase = "running" | "done" | "error" | "waiting";
+type Phase = "running" | "done" | "error" | "waiting" | "stopped";
 
 function phaseOf(run: ThreadMessage | undefined, hasResult: boolean, isError: boolean): Phase {
-  const status = run?.status?.type;
-  if (status === "incomplete" || isError) return "error";
-  if (status === "requires-action") return "waiting";
-  if (status === "running" || (!run && !hasResult)) return "running";
+  const status = run?.status;
+  if (status?.type === "incomplete" && status.reason === "cancelled") return "stopped";
+  if (status?.type === "incomplete" || isError) return "error";
+  if (status?.type === "requires-action") return "waiting";
+  if (status?.type === "running" || (!run && !hasResult)) return "running";
   return "done";
 }
 
@@ -55,7 +56,7 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
   const agent = AGENTS[type] ?? { label: type, icon: WorkflowIcon };
   const phase = phaseOf(run, result !== undefined, Boolean(isError));
   const answer = meta.result ?? (typeof result === "string" ? result : undefined);
-  const failure = run?.status?.type === "incomplete" ? run.status.error : undefined;
+  const failure = phase === "error" && run?.status?.type === "incomplete" ? run.status.error : undefined;
   const error = failure === undefined || typeof failure === "string" ? failure : JSON.stringify(failure);
 
   // Open while running, closed once settled, unless the user has toggled it.
@@ -86,6 +87,7 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
         {phase === "running" && <Spinner className="text-muted-foreground" />}
         {phase === "waiting" && <PauseIcon className="size-3.5 text-amber-500" aria-label="Waiting for input" />}
         {phase === "error" && <span className="text-xs text-destructive">failed</span>}
+        {phase === "stopped" && <span className="text-xs text-muted-foreground">stopped</span>}
         <ChevronDownIcon className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
 
