@@ -47,9 +47,9 @@ class UserInput(BaseModel):
     model: SerializeAsAny[AllModelEnum] | None = Field(
         title="Model",
         description="LLM Model to use for the agent.",
-        default=OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
+        default=OpenRouterModelName.GEMINI_31_FLASH_LITE,
         examples=[
-            OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW,
+            OpenRouterModelName.GEMINI_31_FLASH_LITE,
         ],
     )
     thread_id: str | None = Field(

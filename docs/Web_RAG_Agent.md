@@ -70,7 +70,7 @@ POSTGRES_PASSWORD=your_password
 POSTGRES_DB=your_database
 
 # Model Configuration
-DEFAULT_MODEL=google/gemini-3.1-flash-lite-preview
+DEFAULT_MODEL=google/gemini-3.1-flash-lite
 ```
 
 ## Usage

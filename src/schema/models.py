@@ -80,11 +80,12 @@ class OllamaModelName(StrEnum):
 class OpenRouterModelName(StrEnum):
     """https://openrouter.ai/models"""
 
-    QWEN_36_27B = "qwen/qwen3.6-27b"
-    GEMINI_25_FLASH = "google/gemini-2.5-flash"
-    GEMINI_31_FLASH_LITE_PREVIEW = "google/gemini-3.1-flash-lite-preview"
-    CLAUDE_HAIKU_45 = "anthropic/claude-haiku-4.5"
-    GPT_54_MINI = "openai/gpt-5.4-mini"
+    GEMINI_31_FLASH_LITE = "google/gemini-3.1-flash-lite"
+    CLAUDE_HAIKU_55 = "anthropic/claude-haiku-5.5"
+    GPT_6_LUNA = "openai/gpt-6-luna"
+    DEEPSEEK_V41_FLASH = "deepseek/deepseek-v4.1-flash"
+    QWEN_38_27B = "qwen/qwen3.8-27b"
+
 
 class OpenAICompatibleName(StrEnum):
     """https://platform.openai.com/docs/guides/text-generation"""

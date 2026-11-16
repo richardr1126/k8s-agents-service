@@ -31,7 +31,7 @@ kubectl -n default create secret generic app-secrets \
   --from-literal=HOST=0.0.0.0 \
   --from-literal=PORT=8080 \
   --from-literal=OPENROUTER_API_KEY="${OPENROUTER_API_KEY}" \
-  --from-literal=DEFAULT_MODEL="google/gemini-3.1-flash-lite-preview" \
+  --from-literal=DEFAULT_MODEL="google/gemini-3.1-flash-lite" \
   --from-literal=LANGSMITH_TRACING="${tracing}" \
   --from-literal=LANGSMITH_API_KEY="${LANGSMITH_API_KEY:-}" \
   --from-literal=LANGSMITH_PROJECT=default \

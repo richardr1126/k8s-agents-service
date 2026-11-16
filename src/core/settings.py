@@ -176,7 +176,7 @@ class Settings(BaseSettings):
                     self.AVAILABLE_MODELS.update(set(OllamaModelName))
                 case Provider.OPENROUTER:
                     if self.DEFAULT_MODEL is None:
-                        self.DEFAULT_MODEL = OpenRouterModelName.GEMINI_31_FLASH_LITE_PREVIEW
+                        self.DEFAULT_MODEL = OpenRouterModelName.GEMINI_31_FLASH_LITE
                     self.AVAILABLE_MODELS.update(set(OpenRouterModelName))
                 case Provider.FAKE:
                     if self.DEFAULT_MODEL is None:

@@ -72,18 +72,18 @@ def test_get_model_fake():
 
 def test_get_model_openrouter_non_anthropic_uses_chat_openrouter():
     with patch.dict(os.environ, {"OPENROUTER_API_KEY": "test_key"}):
-        model = get_model(OpenRouterModelName.GPT_54_MINI)
+        model = get_model(OpenRouterModelName.GPT_6_LUNA)
         assert isinstance(model, ChatOpenRouter)
-        assert model.model_name == OpenRouterModelName.GPT_54_MINI.value
+        assert model.model_name == OpenRouterModelName.GPT_6_LUNA.value
         assert model.streaming is True
         assert model.openrouter_api_base == "https://openrouter.ai/api/v1"
 
 
 def test_get_model_openrouter_anthropic_prefix_uses_chat_anthropic():
     with patch.dict(os.environ, {"OPENROUTER_API_KEY": "test_key"}):
-        model = get_model(OpenRouterModelName.CLAUDE_HAIKU_45)
+        model = get_model(OpenRouterModelName.CLAUDE_HAIKU_55)
         assert isinstance(model, ChatAnthropic)
-        assert model.model == OpenRouterModelName.CLAUDE_HAIKU_45.value
+        assert model.model == OpenRouterModelName.CLAUDE_HAIKU_55.value
         assert model.streaming is True
         assert model.thinking == {"type": "enabled", "budget_tokens": 10000}
         assert model.anthropic_api_url == "https://openrouter.ai/api"

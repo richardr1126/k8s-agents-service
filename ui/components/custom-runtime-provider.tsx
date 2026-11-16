@@ -62,6 +62,7 @@ function RuntimeProvider({ serviceInfo, children }: { serviceInfo: ServiceInfo; 
     defaultModelId: serviceInfo.models.includes(serviceInfo.default_model)
       ? serviceInfo.default_model
       : (serviceInfo.models[0] ?? serviceInfo.default_model),
+    models: serviceInfo.models,
     onError,
     onRunFinalized: () => void refreshUsage(),
   });

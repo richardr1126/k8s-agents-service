@@ -30,12 +30,14 @@ async function loadThreads(): Promise<ThreadRow[] | null> {
 type Options = {
   defaultAgentId: string;
   defaultModelId: string;
+  /** Models the backend serves now; a thread saved with a retired model falls back to the default. */
+  models: string[];
   onError: (error: Error) => void;
   onRunFinalized: () => void;
 };
 
 /** One AG-UI runtime for the app: the current thread's agent, plus the user's thread list. */
-export function useAgentRuntime({ defaultAgentId, defaultModelId, onError, onRunFinalized }: Options) {
+export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onError, onRunFinalized }: Options) {
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const [agentId, setAgentId] = useState(defaultAgentId);
   const [modelId, setModelId] = useState(defaultModelId);
@@ -94,7 +96,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, onError, onRun
         setThreadId(id);
         if (row) {
           setAgentId(row.agentId);
-          if (row.modelId) setModelId(row.modelId);
+          setModelId(row.modelId && models.includes(row.modelId) ? row.modelId : defaultModelId);
         }
         return { messages: await loadHistory(id) };
       },
@@ -109,7 +111,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, onError, onRun
         if (id === threadId) await runtimeRef.current?.threads.switchToNewThread();
       },
     }),
-    [threadId, threads, refreshThreads],
+    [threadId, threads, refreshThreads, models, defaultModelId],
   );
 
   const runtime = useAgUiRuntime({
