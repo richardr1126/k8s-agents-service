@@ -107,14 +107,8 @@ cd ui && pnpm install && pnpm dev
 
 ### Kubernetes Deployment
 
-```sh
-# Clone the repository
-git clone https://github.com/richardr1126/k8s-agents-service.git
-cd k8s-agents-service
-
-```
-
-The service is being moved back onto the homelab cluster as an Argo CD app (in the k3s-cluster repo, `argocd/apps/`) with a CloudNativePG Postgres. Until then, `helm/manual_deploy.sh`, `helm/create_secrets.sh` and `helm/argocd.yaml` are outdated: they target the YugabyteDB cluster that was removed in November 2026.
+Argo CD runs the chart on the homelab k3s cluster with a CloudNativePG Postgres; see
+[Kubernetes Deployment](#kubernetes-deployment-1) for the secrets it needs.
 
 ### Key Files
 
@@ -132,7 +126,7 @@ The repository is structured as follows:
 
 **Kubernetes Deployment:**
 - `helm/agents-service/`: Complete Helm chart for the backend service
-- `helm/argocd.yaml`, `helm/manual_deploy.sh`, `helm/create_secrets.sh`: outdated (YugabyteDB era); see [Kubernetes Deployment](#kubernetes-deployment-1)
+- `helm/create_secrets.sh`: creates the `app-secrets` Secret the chart reads
 - `docker/`: Multi-architecture Dockerfiles for the service and cron job builds
 - `scripts/create_resume_vectors_cron.py`: Automated vector database update script for scheduled execution
 
@@ -206,68 +200,46 @@ This repository includes comprehensive Kubernetes deployment capabilities using 
 
 #### Prerequisites
 
-- Kubernetes cluster (1.19+)
+- Kubernetes cluster with the CloudNativePG operator
 - Helm 3.x
-- Postgres with pgvector (CloudNativePG recommended)
 - Docker registry access (GitHub Container Registry)
 
-#### Environment Configuration
+#### How it's deployed
 
-The deployment uses an enhanced environment configuration with separate secrets for different components:
+The chart in `helm/agents-service/` holds the service, its CronJob, the ingress for agents.richardr.dev, and a
+CloudNativePG `Cluster` (`templates/database.yaml`) that bootstraps the `agentsservice` database with pgvector.
+The pods read the database password from the `agents-service-db-app` Secret that CloudNativePG generates, and
+everything else from `app-secrets`.
+
+Argo CD deploys it from `main`: the Application is `argocd/apps/agents-service.yaml` in the
+[k3s-cluster](https://github.com/richardr1126/k3s-cluster) repo. Pushing to `main` builds the
+`k8s-agents-service` and `k8s-agents-cron` images (arm64, tagged `latest`), so the pods pin to arm64 nodes and
+always pull; restart the Deployment to pick up a new build.
+
+#### Secrets
+
+`helm/create_secrets.sh` applies `app-secrets` in the `default` namespace from `helm/.env`:
 
 ```bash
-# Core authentication and database
-AUTH_SECRET=your-bearer-token-secret
-ADMIN_POSTGRES_PASSWORD=admin-database-password  
-APP_POSTGRES_PASSWORD=application-database-password
-
-# API Keys
-OPENROUTER_API_KEY=your-openrouter-key
-LANGSMITH_API_KEY=your-langsmith-key  
-GITHUB_PAT=your-github-token-for-container-registry
+AUTH_SECRET=...          # bearer token; must match the UI's BACKEND_AUTH_TOKEN
+OPENROUTER_API_KEY=...
+TAVILY_API_KEY=...
+GDRIVE_DOC_ID=...
+LANGSMITH_API_KEY=...    # optional; turns on LangSmith tracing
 ```
 
-#### Quick Deploy with Helm
+Run it once before the first sync, and again whenever a key changes:
 
 ```sh
-# Navigate to helm directory
-cd helm
-
-# Copy and configure environment variables
-cp .env.example .env
-# Edit .env with your API keys, database passwords, and GitHub PAT
-
-# Run the deployment script
-./manual_deploy.sh
+./helm/create_secrets.sh
+kubectl rollout restart deployment/agents-service
 ```
 
-> **Outdated:** `manual_deploy.sh` and `create_secrets.sh` still create the database user and point the
-> service at the removed YugabyteDB cluster. They'll be replaced when the service moves to CloudNativePG.
-
-#### GitOps with ArgoCD
-
-> **Outdated:** the ArgoCD Application for this service now belongs in the k3s-cluster repo
-> (`argocd/apps/`). The steps below are the old way and no longer work as written.
-
-For GitOps deployments, use the included ArgoCD application manifest:
+#### Without Argo CD
 
 ```sh
-# Create secrets manually
-./create_secrets.sh
-
-kubectl apply -f helm/argocd.yaml
-```
-
-#### Manual Helm Deployment
-
-```sh
-# Create secrets manually
-./create_secrets.sh
-
-# Install with Helm
-helm install agents-service ./agents-service \
-  --set image.repository=ghcr.io/richardr1126/k8s-agents-service \
-  --set image.tag=latest
+./helm/create_secrets.sh
+helm install agents-service ./helm/agents-service   # the release must be named agents-service
 ```
 
 #### Automated Tasks with CronJobs
@@ -294,7 +266,7 @@ cronjob:
 
 **Required Environment Variables:**
 - `GDRIVE_DOC_ID`: Google Drive document ID for resume data
-- All database connection variables for vector storage
+- The database settings, which the chart sets
 - `OPENROUTER_API_KEY`: For model inference and embeddings
 
 #### Database Support
