@@ -2,11 +2,13 @@ import asyncio
 import logging
 from typing import Any
 
+import psycopg
 from langchain_core.tools import tool
 from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 
 from core import settings
+from core.settings import DatabaseType
 
 logger = logging.getLogger(__name__)
 
@@ -116,6 +118,26 @@ def get_embeddings():
 def get_pgvector_connection():
     """Get PGVector connection string."""
     return f"postgresql+psycopg://{settings.POSTGRES_USER}:{settings.POSTGRES_PASSWORD.get_secret_value()}@{settings.POSTGRES_HOST}:{settings.POSTGRES_PORT}/{settings.POSTGRES_DB}"
+
+
+def web_collection_name(thread_id: str) -> str:
+    """One vector collection per conversation; sub-agents share the parent's thread_id."""
+    return f"web_search_{thread_id}"
+
+
+async def delete_web_collection(thread_id: str) -> None:
+    """Drop a conversation's web search collection. Its embeddings go with it (ON DELETE CASCADE)."""
+    if settings.DATABASE_TYPE != DatabaseType.POSTGRES:
+        return
+    conninfo = get_pgvector_connection().replace("postgresql+psycopg://", "postgresql://", 1)
+    async with await psycopg.AsyncConnection.connect(conninfo) as conn:
+        try:
+            await conn.execute(
+                "DELETE FROM langchain_pg_collection WHERE name = %s",
+                (web_collection_name(thread_id),),
+            )
+        except psycopg.errors.UndefinedTable:
+            pass  # nothing was ever stored
 
 
 def create_pgvector_instance(collection_name: str, async_mode: bool = False):

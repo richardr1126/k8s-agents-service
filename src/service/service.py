@@ -15,6 +15,7 @@ from langgraph.types import Command
 from langsmith import Client as LangsmithClient
 
 from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
+from agents.tools import delete_web_collection
 from core import settings
 from memory import initialize_database, initialize_store
 from schema import (
@@ -262,6 +263,12 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
         except Exception as e:
             logger.warning(f"Error deleting thread {input.thread_id} from store: {e}")
             # Don't fail the entire operation if store deletion fails since store is optional
+
+        # Delete the conversation's web search vectors
+        try:
+            await delete_web_collection(input.thread_id)
+        except Exception as e:
+            logger.warning(f"Error deleting web search vectors for thread {input.thread_id}: {e}")
         
         return DeleteThreadResponse()
         

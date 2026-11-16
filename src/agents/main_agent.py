@@ -49,6 +49,9 @@ def _normalize_tool_result_content(value: Any) -> str:
         parts = [_normalize_tool_result_content(item) for item in value]
         return "".join(part for part in parts if part)
     if isinstance(value, dict):
+        # Skip non-text blocks such as Claude's "thinking" or "reasoning" blocks.
+        if value.get("type") not in (None, "text"):
+            return ""
         if isinstance(value.get("text"), str):
             return value["text"]
         if "content" in value:

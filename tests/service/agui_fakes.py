@@ -11,7 +11,6 @@ from langchain_core.messages import (
     AIMessageChunk,
     BaseMessage,
     HumanMessage,
-    SystemMessage,
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
@@ -165,7 +164,7 @@ WEB_ANSWER = "Rust 2.0 shipped in October."
 
 
 def web_responder(messages: list[BaseMessage]) -> AIMessage:
-    prompt = str(messages[0].content) if isinstance(messages[0], SystemMessage) else ""
+    prompt = str(messages[0].content) if messages else ""
     if "requires current web information" in prompt:
         args: dict[str, Any] = {"needs_web_search": True, "reasoning": "INTERNAL-first-run"}
         return AIMessage(

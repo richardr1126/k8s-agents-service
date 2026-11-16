@@ -1,8 +1,10 @@
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Literal, cast
 from uuid import uuid4
 
+import openai
 from langchain_community.tools import TavilySearchResults
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolCall, ToolMessage
@@ -12,7 +14,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, MessagesState, StateGraph
 from pydantic import BaseModel, Field
 
-from agents.tools import create_pgvector_instance, web_vector_search
+from agents.tools import create_pgvector_instance, web_collection_name, web_vector_search
 from agents.utils import internal_llm_config
 from core import get_model, settings
 from service.utils import normalize_messages_for_replay
@@ -104,10 +106,20 @@ async def store_search_results_in_vector_db(search_results: list[str], collectio
         # Split documents into chunks
         chunks = text_splitter.split_documents(documents)
         
-        # Add chunks to vector database (this is typically sync, but we can run it in executor if needed)
-        await pg_vector.aadd_documents(chunks)
-        
-        return len(chunks)
+        try:
+            await pg_vector.aadd_documents(chunks)
+            return len(chunks)
+        except openai.PermissionDeniedError:
+            # A provider content filter (e.g. OpenRouter's PII guardrail) rejected the
+            # batch. Retry chunk by chunk so one blocked chunk doesn't lose the rest.
+            results = await asyncio.gather(
+                *(pg_vector.aadd_documents([chunk]) for chunk in chunks), return_exceptions=True
+            )
+            stored = sum(not isinstance(r, BaseException) for r in results)
+            logger.warning("Embedding provider blocked %d of %d chunks", len(chunks) - stored, len(chunks))
+            if stored == 0:
+                raise
+            return stored
         
     except Exception as e:
         raise RuntimeError(f"Error storing search results in vector database: {str(e)}")
@@ -163,8 +175,7 @@ def _message_to_text(content: Any, default: str = "latest information") -> str:
 
 
 def get_collection_name_from_thread(config: RunnableConfig) -> str:
-    """One vector collection per conversation; sub-agents share the parent's thread_id."""
-    return f"web_search_{config['configurable']['thread_id']}"
+    return web_collection_name(config["configurable"]["thread_id"])
 
 
 async def generate_search_query_node(state: WebRagState, config: RunnableConfig) -> WebRagUpdate:
@@ -224,7 +235,7 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
         search_result = cast(
             SearchQuery,
             await structured_model.ainvoke(
-            [SystemMessage(content=search_query_prompt)], internal_llm_config(config)
+            [HumanMessage(content=search_query_prompt)], internal_llm_config(config)
             ),
         )
         optimized_query = search_result.optimized_query
@@ -237,10 +248,8 @@ async def generate_search_query_node(state: WebRagState, config: RunnableConfig)
         # Fallback to user query if optimization fails
         optimized_query = user_query
         
-        return {
-            "optimized_query": optimized_query,
-            "messages": [AIMessage(content=f"Query optimization failed, using original query: '{optimized_query}'")]
-        }
+        logger.warning("Query optimization failed, using the original query", exc_info=True)
+        return {"optimized_query": optimized_query}
 
 
 @tool
@@ -300,6 +309,8 @@ async def rag_response_node(state: WebRagState, config: RunnableConfig) -> WebRa
             system_prompt = f"""
             You are a helpful assistant that provides comprehensive answers based on recent web search results.
             Use the following context from web searches to answer the user's question.
+            The web search has already been run for you and its results are below; answer from
+            them directly and never say that you can't search the web.
             
             Today's date is {current_date}.
             
@@ -414,7 +425,7 @@ async def check_first_run_search_need_node(
         decision = cast(
             FirstRunSearchDecision,
             await structured_model.ainvoke(
-            [SystemMessage(content=first_run_prompt)], internal_llm_config(config)
+            [HumanMessage(content=first_run_prompt)], internal_llm_config(config)
             ),
         )
 
@@ -497,7 +508,7 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
         decision = cast(
             RelevanceDecision,
             await structured_model.ainvoke(
-            [SystemMessage(content=relevance_prompt)], internal_llm_config(config)
+            [HumanMessage(content=relevance_prompt)], internal_llm_config(config)
             ),
         )
 
@@ -509,18 +520,12 @@ async def check_relevance_node(state: WebRagState, config: RunnableConfig) -> We
         
     except RuntimeError:
         # If vector search fails (e.g., collection doesn't exist), we definitely need to search
-        return {
-            "is_search_relevant": False,
-            "messages": [AIMessage(content=f"Vector database not found for query: '{optimized_query}'. Will perform web search.")]
-        }
-    except Exception as e:
+        return {"is_search_relevant": False}
+    except Exception:
         # Fallback: if AI decision fails, use simple heuristic
+        logger.warning("Relevance check failed, falling back to a context-length heuristic", exc_info=True)
         context_exists = bool(existing_context and len(existing_context.strip()) > 100)
-        return {
-            "is_search_relevant": context_exists,
-            "has_search_data": context_exists,
-            "messages": [AIMessage(content=f"AI relevance assessment failed ({str(e)}), using fallback decision: {'Using existing context' if context_exists else 'Will search web'}")]
-        }
+        return {"is_search_relevant": context_exists, "has_search_data": context_exists}
 
 
 def route_after_first_run_check(state: WebRagState) -> Literal["rag_response", "generate_search_query"]:
