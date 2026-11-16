@@ -8,7 +8,7 @@ A Kubernetes deployment of an AI agents service built with LangGraph and FastAPI
 
 The chat interface is built with **Next.js 16**, **React 19**, **assistant-ui** and **Tailwind CSS 4**, and talks to the service over the [AG-UI protocol](https://docs.ag-ui.com). It is the only frontend. Sub-agent runs stream live as collapsible cards nested under the tool call that started them, and agent interrupts are answered from a banner above the composer. Visitors can sign up or continue as a guest, and per-user run limits (stricter for guests) are stored in Postgres. See [ui/README.md](ui/README.md).
 
-This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including a Helm chart, ArgoCD integration, YugabyteDB support, and multi-architecture container builds.
+This project extends [JoshuaC215's agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit) with Kubernetes deployment capabilities, including a Helm chart, GitOps deployment, Postgres with pgvector, and multi-architecture container builds.
 
 > **⚠️ Important Notice**: This project is currently in development and is **not fully featured for production** use. While it provides a solid foundation for Kubernetes deployment of AI agents, additional hardening, monitoring, and operational considerations may be needed for production environments.
 
@@ -22,7 +22,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 
 - **🎯 Kubernetes-Native**: Helm chart for the agent service
 - **🔄 GitOps Ready**: ArgoCD application manifests for automated deployments  
-- **🗄️ YugabyteDB Integration**: Distributed SQL database with pgvector extensions for RAG capabilities
+- **🗄️ Postgres + pgvector**: One Postgres database for conversation memory, long-term memory and RAG vectors
 - **🏗️ Multi-Architecture**: Docker builds for both AMD64 and ARM64 architectures for the service and cron containers
 - **📦 Container Registry**: Automated builds and publishing to GitHub Container Registry with separate image streams
 - **🔧 Deployment Scripts**: Comprehensive deployment automation with database setup, secrets management, and dependency updates
@@ -39,8 +39,8 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 1. **Multiple Agent Support**: Run multiple agents in the service and call by URL path. Available agents and models are described in `/info`
 1. **Asynchronous Design**: Utilizes async/await for efficient handling of concurrent requests.
 1. **Content Moderation**: Implements LlamaGuard for content moderation (requires Groq API key).
-1. **RAG Agent**: RAG implementation using PGVector with YugabyteDB - see [docs](docs/RAG_Assistant.md).
-1. **Thread Management**: Complete thread lifecycle management with proper deletion from both conversation memory (checkpointer) and long-term memory (store).
+1. **RAG Agent**: RAG implementation using PGVector on Postgres - see [docs](docs/RAG_Assistant.md).
+1. **Thread Management**: Deleting a thread removes its conversation memory (checkpointer), long-term memory (store) and its web search vectors.
 1. **Feedback Mechanism**: Includes a star-based feedback system integrated with LangSmith.
 1. **Docker Support**: Includes Dockerfiles and a docker compose file for easy development and deployment.
 1. **Testing**: Includes robust unit and integration tests for the full repo.
@@ -49,7 +49,7 @@ This fork adds Kubernetes deployment capabilities on top of the original toolkit
 
 1. **Helm Chart**: `agents-service` chart for the backend, with an optional CronJob
 1. **ArgoCD Integration**: GitOps-ready application manifests for automated deployments
-1. **YugabyteDB Support**: Enterprise-grade distributed SQL database with pgvector extension support for RAG capabilities
+1. **Postgres on Kubernetes**: Runs against a CloudNativePG cluster with the pgvector extension
 1. **Multi-Architecture Builds**: AMD64 and ARM64 Docker images for the service and cron job published to GitHub Container Registry
 1. **Automated Deployment Scripts**: Deployment automation with database setup and dependency management
 1. **Kubernetes Secrets Management**: Secure handling of API keys and database credentials with enhanced environment configuration
@@ -112,16 +112,9 @@ cd ui && pnpm install && pnpm dev
 git clone https://github.com/richardr1126/k8s-agents-service.git
 cd k8s-agents-service
 
-# Configure environment variables
-cp helm/.env.example helm/.env
-# Edit helm/.env with your API keys and secrets
-
-# Deploy to Kubernetes with YugabyteDB
-cd helm
-./manual_deploy.sh
 ```
 
-For ArgoCD deployments, see the k3s-cluster repo (`argocd/apps/`). `helm/argocd.yaml` is outdated.
+The service is being moved back onto the homelab cluster as an Argo CD app (in the k3s-cluster repo, `argocd/apps/`) with a CloudNativePG Postgres. Until then, `helm/manual_deploy.sh`, `helm/create_secrets.sh` and `helm/argocd.yaml` are outdated: they target the YugabyteDB cluster that was removed in November 2026.
 
 ### Key Files
 
@@ -139,9 +132,7 @@ The repository is structured as follows:
 
 **Kubernetes Deployment:**
 - `helm/agents-service/`: Complete Helm chart for the backend service
-- `helm/argocd.yaml`: outdated ArgoCD application manifest (reference only; see k3s-cluster)
-- `helm/manual_deploy.sh`: Deployment script with YugabyteDB setup
-- `helm/create_secrets.sh`: Kubernetes secrets management script
+- `helm/argocd.yaml`, `helm/manual_deploy.sh`, `helm/create_secrets.sh`: outdated (YugabyteDB era); see [Kubernetes Deployment](#kubernetes-deployment-1)
 - `docker/`: Multi-architecture Dockerfiles for the service and cron job builds
 - `scripts/create_resume_vectors_cron.py`: Automated vector database update script for scheduled execution
 
@@ -185,38 +176,24 @@ To customize the agent for your own use case:
 
 ### Database Configuration
 
-This fork uses **YugabyteDB with pgvector** instead of the original PostgreSQL/ChromaDB setup, providing several advantages:
-
-**YugabyteDB Benefits:**
-- **Distributed SQL**: Horizontal scaling and high availability out of the box
-- **PostgreSQL Compatibility**: Full SQL compliance with familiar PostgreSQL interfaces  
-- **Built-in pgvector**: Native vector similarity search for RAG applications
-- **Enterprise-Grade**: Reliability and performance features
+The service keeps everything in one Postgres database with the **pgvector** extension: LangGraph checkpoints (conversation memory), the long-term memory store, and the RAG vector collections. Locally that's the `pgvector/pgvector` container from `compose.yaml`; on the cluster it's a CloudNativePG cluster.
 
 **RAG Implementation:**
 - **PGVector Integration**: Uses `langchain-postgres` with PGVector for vector storage and retrieval
-- **Multiple Collections**: Supports multiple knowledge bases (e.g., "richard-projects" collection)
+- **Collections**: `richard-resume` and `richard-projects` for the resume agent, plus one `web_search_<thread_id>` collection per conversation for web research, dropped when the thread is deleted
 - **OpenRouter Embeddings**: Uses `qwen/qwen3-embedding-8b` for vector generation
 - **Automatic Setup**: Database schema and vector extensions are automatically configured
 
-The system supports three database options:
-- **YugabyteDB**: Distributed SQL with pgvector extensions (recommended)
-- **PostgreSQL**: Traditional PostgreSQL with pgvector extension  
-- **SQLite**: Local development and testing
+Set `DATABASE_TYPE=postgres` for Postgres, or `sqlite` for quick local runs and tests (no RAG vectors).
 
 ### Resume & Portfolio Data Setup
 
 The current implementation includes automated scripts for creating vector databases from resume and project data:
 
-- `scripts/create_resume_vectors.py`: Creates vector embeddings from resume data in `data/richard-resume/`
-- `data/richard-projects/`: Contains markdown files describing various projects
-- `data/richard-resume/`: Contains structured resume information (education, skills, experience)
+- `scripts/create_resume_vectors.py`: Loads the resume PDF from Google Drive (`GDRIVE_DOC_ID`), the project list and resume sections from richardr.dev, and each project's GitHub README, then embeds them into the `richard-resume` and `richard-projects` collections of a local Postgres (`localhost:5432`). Needs Playwright's Chromium: `uv run playwright install chromium`.
+- `scripts/create_resume_vectors_cron.py`: the same, run by the Kubernetes CronJob.
 
-To adapt this for your own portfolio:
-
-1. Replace the content in `data/` directories with your own resume and project information
-2. Run the vector creation scripts to populate your knowledge base
-3. Update agent descriptions in `src/agents/agents.py` to reflect your professional background
+To adapt this for your own portfolio, point the scripts at your own resume and project sources, run them, and update the agent descriptions in `src/agents/agents.py`.
 
 ### Handling Private Credential files
 
@@ -231,7 +208,7 @@ This repository includes comprehensive Kubernetes deployment capabilities using 
 
 - Kubernetes cluster (1.19+)
 - Helm 3.x
-- YugabyteDB or PostgreSQL database
+- Postgres with pgvector (CloudNativePG recommended)
 - Docker registry access (GitHub Container Registry)
 
 #### Environment Configuration
@@ -260,15 +237,12 @@ cd helm
 cp .env.example .env
 # Edit .env with your API keys, database passwords, and GitHub PAT
 
-# Run the deployment script (includes YugabyteDB setup)
+# Run the deployment script
 ./manual_deploy.sh
 ```
 
-This script will:
-- Build and push multi-architecture Docker images for the service to GitHub Container Registry
-- Set up YugabyteDB user and database with vector extensions
-- Create Kubernetes secrets with your API keys and configuration
-- Deploy the agents-service chart with Helm
+> **Outdated:** `manual_deploy.sh` and `create_secrets.sh` still create the database user and point the
+> service at the removed YugabyteDB cluster. They'll be replaced when the service moves to CloudNativePG.
 
 #### GitOps with ArgoCD
 
@@ -325,9 +299,8 @@ cronjob:
 
 #### Database Support
 
-- **YugabyteDB**: Distributed SQL with vector extensions (recommended)
-- **PostgreSQL**: Traditional PostgreSQL with pgvector extension
-- **SQLite**: For development only
+- **Postgres with pgvector**: required for RAG (CloudNativePG on the cluster)
+- **SQLite**: for development and tests only
 
 ### Docker Setup
 
@@ -379,7 +352,7 @@ This setup allows you to develop and test your changes in real-time without manu
 - `POST /{agent_id}/ag-ui`: runs an agent and streams [AG-UI](https://docs.ag-ui.com) events (`text/event-stream`). The body is an AG-UI `RunAgentInput`; `forwardedProps.model` picks the model and `forwardedProps.user_id` is passed to the agent. To answer an interrupt, send its id back in `resume`. Events from a sub-agent carry a `subagentRunId` and sit between its `SUBAGENT_STARTED` and `SUBAGENT_FINISHED`/`SUBAGENT_ERROR`, which come before the parent `task` call's `TOOL_CALL_RESULT`. An interrupt, including one raised inside a sub-agent, ends the run with `RUN_FINISHED.outcome` of type `interrupt`.
 - `POST /history`: `{"thread_id"}` returns `{"messages", "subagents"}`: the thread's AG-UI messages, with each sub-agent's messages (tagged with `subagentRunId`) just before its `task` result, and one `{subagentRunId, parentToolCallId, name, description, status, error?}` entry per sub-agent run.
 - `POST /{agent_id}/invoke`: runs an agent and returns its final message.
-- `DELETE /thread`: deletes a thread's checkpoints, sub-agent runs included, and its long-term memory.
+- `DELETE /thread`: deletes a thread's checkpoints, sub-agent runs included, its long-term memory, and its web search vector collection.
 - `GET /info`, `POST /feedback`, `GET /health`.
 
 When `AUTH_SECRET` is set, every endpoint except `/health` needs `Authorization: Bearer <AUTH_SECRET>`.
@@ -413,7 +386,7 @@ You can also run the agent service locally without Docker, just using a Python v
 
 The following are projects that drew code or inspiration from [JoshuaC215's original agent-service-toolkit](https://github.com/JoshuaC215/agent-service-toolkit):
 
-- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Kubernetes deployment with Helm charts and YugabyteDB integration
+- **[k8s-agents-service](https://github.com/richardr1126/k8s-agents-service)** (This repo) - Kubernetes deployment with Helm, GitOps and Postgres/pgvector, and an AG-UI chat UI
 - **[PolyRAG](https://github.com/QuentinFuxa/PolyRAG)** - Extends agent-service-toolkit with RAG capabilities over both PostgreSQL databases and PDF documents
 - **[alexrisch/agent-web-kit](https://github.com/alexrisch/agent-web-kit)** - A Next.JS frontend for agent-service-toolkit
 - **[raushan-in/dapa](https://github.com/raushan-in/dapa)** - Digital Arrest Protection App (DAPA) enables users to report financial scams and frauds efficiently via a user-friendly platform

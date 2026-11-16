@@ -11,7 +11,7 @@ The thread deletion system provides complete removal of conversation threads fro
 The deletion process involves two main components:
 
 1. **Frontend (UI Postgres, `threads` table)**: Thread metadata and ownership
-2. **Backend (YugabyteDB)**: Conversation memory and long-term storage
+2. **Backend (Postgres)**: Conversation memory, long-term storage and the thread's web search vectors
 
 ## API Endpoints
 
@@ -67,12 +67,13 @@ Frontend API route that checks the session user owns the thread, calls the backe
 - `threads` rows are deleted outright; there is no soft deletion
 - Rows cascade-delete with their owning `user`
 
-### YugabyteDB (Backend)
+### Postgres (Backend)
 - Uses LangGraph's built-in deletion methods
 - Automatically cleans up all related data:
   - Checkpoints table entries
   - Writes table entries
   - Store namespace data
+  - The thread's `web_search_<thread_id>` vector collection (its embeddings cascade)
 
 ## User Interface Changes
 
