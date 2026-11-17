@@ -12,7 +12,10 @@ import { signIn, useSession } from "@/lib/auth-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { showPrivacyPopup } from "@/components/privacy-popup";
-export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
+import type { PublicAuthConfig } from "@/lib/public-config";
+
+export default function SignIn({ config }: { config: PublicAuthConfig }) {
+  const { githubSignIn, allowGuests, signupPolicy } = config;
   const router = useRouter();
   // Load the new session before leaving, or the chat page would see none and send us back.
   const { refetch } = useSession();
@@ -76,21 +79,14 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
       });
 
       if (result.error) {
-        // Handle authentication errors
-        const errorMessage = result.error.message || "An unknown error occurred";
-        
-        if (errorMessage.toLowerCase().includes("invalid") || 
-            errorMessage.toLowerCase().includes("incorrect") ||
-            errorMessage.toLowerCase().includes("credentials")) {
-          setError("Invalid email or password. Please check your credentials and try again.");
-        } else if (errorMessage.toLowerCase().includes("user not found") ||
-                   errorMessage.toLowerCase().includes("account")) {
-          setError("No account found with this email address.");
-        } else if (errorMessage.toLowerCase().includes("blocked") ||
-                   errorMessage.toLowerCase().includes("suspended")) {
-          setError("Your account has been temporarily blocked. Please contact support.");
+        const { code, message } = result.error;
+        if (code === "INVALID_EMAIL_OR_PASSWORD") {
+          setError("Wrong email or password.");
+        } else if (code === "EMAIL_NOT_VERIFIED") {
+          setError(`Confirm your email first. We sent a new link to ${email.trim()}.`);
         } else {
-          setError(errorMessage || "An error occurred during sign in. Please try again.");
+          // Approval and suspension messages come from the server as they should be shown.
+          setError(message || "Couldn't sign in. Please try again.");
         }
       } else {
         await refetch();
@@ -116,7 +112,7 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
             Sign In
           </CardTitle>
           <CardDescription className="text-xs md:text-sm">
-            Enter your email below to login to your account, or continue as a guest
+            {allowGuests ? "Enter your email below to sign in, or continue as a guest" : "Enter your email below to sign in"}
           </CardDescription>
         </motion.div>
       </CardHeader>
@@ -167,12 +163,11 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
             <div className="grid gap-2">
               <div className="flex items-center">
                 <Label htmlFor="password">Password</Label>
-                <Link
-                    href="#"
-                    className="ml-auto inline-block text-sm underline"
-                  >
+                {config.email && (
+                  <Link href="/forgot-password" className="ml-auto inline-block text-sm underline">
                     Forgot your password?
                   </Link>
+                )}
               </div>
 
               <Input
@@ -264,6 +259,7 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
           </Button>
           )}
 
+          {allowGuests && (
           <Button
             variant="outline"
             className="w-full gap-2"
@@ -275,10 +271,10 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
                 const result = await signIn.anonymous();
                 if (result.error) throw new Error(result.error.message);
                 await refetch();
-        router.push('/');
+                router.push('/');
               } catch (e) {
                 console.error('Anonymous sign-in failed:', e);
-                setError('Unable to sign in anonymously. Please try again or use another method.');
+                setError(e instanceof Error && e.message ? e.message : 'Unable to continue as a guest. Please try another method.');
               } finally {
                 setLoadingGuest(false);
               }
@@ -293,10 +289,12 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
               </>
             )}
           </Button>
+          )}
         </div>
       </CardContent>
       <CardFooter>
         <div className="flex flex-col items-center w-full border-t py-4 gap-2">
+          {signupPolicy !== "closed" && (
           <p className="text-center text-xs text-neutral-500">
            Don&apos;t have an account?{" "}
             <Link
@@ -308,6 +306,7 @@ export default function SignIn({ githubSignIn }: { githubSignIn: boolean }) {
 							</span>
             </Link>
           </p>
+          )}
           <p className="text-center text-xs text-neutral-500">
             By signing in, you agree to our{" "}
             <button

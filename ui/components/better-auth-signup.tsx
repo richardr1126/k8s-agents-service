@@ -20,8 +20,12 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { showPrivacyPopup } from "@/components/privacy-popup";
+import { AuthCard, Notice } from "@/components/auth-card";
+import type { PublicAuthConfig } from "@/lib/public-config";
 
-export default function SignUp() {
+export default function SignUp({ config }: { config: PublicAuthConfig }) {
+	// "verify": check your inbox; "pending": waiting for an admin.
+	const [done, setDone] = useState<"verify" | "pending" | null>(null);
 	const [firstName, setFirstName] = useState("");
 	const [lastName, setLastName] = useState("");
 	const [email, setEmail] = useState("");
@@ -124,7 +128,10 @@ export default function SignUp() {
 				image: image ? await convertImageToBase64(image) : "",
 			});
 
-			if (result.error) {
+			if (result.error && config.signupPolicy === "approval" && result.error.status === 403) {
+				// The account exists; signing in is refused until an admin approves it.
+				setDone("pending");
+			} else if (result.error) {
 				// Handle signup errors
 				const errorMessage = result.error.message || "An unknown error occurred";
 				
@@ -139,6 +146,8 @@ export default function SignUp() {
 				} else {
 					setError(errorMessage);
 				}
+			} else if (config.email) {
+				setDone("verify");
 			} else {
 				// Success - automatically sign in
 				const signInResult = await signIn.email({
@@ -174,6 +183,28 @@ export default function SignUp() {
 			reader.readAsDataURL(file);
 		}
 	};
+
+	const backToSignIn = <Link href="/signin" className="underline">Back to sign in</Link>;
+	if (config.signupPolicy === "closed") {
+		return (
+			<AuthCard title="Sign-ups are closed" footer={backToSignIn}>
+				<p className="text-sm text-muted-foreground">New accounts aren&apos;t being created right now. Ask an admin for access.</p>
+			</AuthCard>
+		);
+	}
+	if (done) {
+		return (
+			<AuthCard title={done === "verify" ? "Check your email" : "Account created"} footer={backToSignIn}>
+				<Notice kind="success">
+					{done === "verify" ? (
+						<>We sent a confirmation link to <strong>{email.trim()}</strong>. It works for one hour.{config.signupPolicy === "approval" && " After you confirm, an admin still needs to approve the account."}</>
+					) : (
+						"An admin needs to approve your account before you can sign in."
+					)}
+				</Notice>
+			</AuthCard>
+		);
+	}
 
 	return (
 		<Card className="w-full max-w-md md:w-[480px]">
