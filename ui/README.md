@@ -5,7 +5,7 @@ The Next.js chat interface for the agents service. It is built with Next.js 16, 
 - Each run streams through `POST /api/ag-ui/[agentId]`. That route checks the session, thread ownership and run limits, then passes the backend's SSE stream through unchanged.
 - A sub-agent run (the main agent's `task` tool) renders as a card nested under its tool call. The card stays open while the run streams and collapses to its result when the run finishes. A reloaded thread rebuilds the same nesting from the backend's `/history`.
 - When an agent pauses for input (a LangGraph `interrupt()`), a banner above the composer asks for an answer, then resumes the run.
-- Sign-in uses email/password, GitHub (when it is configured) or **Continue as guest**.
+- Sign-in uses email/password, GitHub (when it is configured) or **Continue as guest**, as the admin settings allow.
 
 ## Quick start
 
@@ -20,30 +20,57 @@ The backend must be running. See the root README.
 
 ## Environment
 
+The environment holds only infrastructure. Everything an admin might change lives in the database as an admin setting.
+
 | Variable | Required | Description |
 |---|---|---|
 | `BACKEND_URL` | yes | Base URL of the FastAPI service, e.g. `http://localhost:8080` |
 | `BACKEND_AUTH_TOKEN` | no | Sent as `Bearer` to the backend; must match its `AUTH_SECRET` |
-| `POSTGRES_URL` | yes | Postgres for users, sessions, threads and run usage |
-| `BETTER_AUTH_SECRET` | yes | Session signing secret (`openssl rand -base64 32`) |
-| `NEXT_PUBLIC_BETTER_AUTH_URL` | yes | Public URL of this app |
-| `BETTER_AUTH_COOKIE_PREFIX` | no | Cookie name prefix, default `k8s-agents-auth` |
+| `POSTGRES_URL` | yes | Postgres for users, sessions, threads, run usage and settings |
+| `BETTER_AUTH_SECRET` | yes | Session signing secret (`openssl rand -base64 32`). It also encrypts the saved Resend key, so changing it means re-entering that key |
+| `BASE_URL` | no | Public URL. Defaults to the Vercel production domain on Vercel, else `http://localhost:3000` |
 | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | no | GitHub sign-in is enabled only when both are set |
-| `RUN_LIMIT_GUEST_PER_MINUTE`, `RUN_LIMIT_GUEST_PER_DAY` | no | Guest run limits, default 2 and 3 |
-| `RUN_LIMIT_USER_PER_MINUTE`, `RUN_LIMIT_USER_PER_DAY` | no | Signed-up user run limits, default 5 and 15 |
-| `RUN_LIMIT_EXEMPT_EMAILS` | no | Comma-separated account emails with no limits (never applies to guests) |
+| `BOOTSTRAP_ADMIN_EMAIL` | no | The first admin; see below |
+| `BOOTSTRAP_ADMIN_PASSWORD` or `_FILE` | no | Password for a new bootstrap admin account, 16+ characters |
+| `RUNTIME_SEED_JSON` or `RUNTIME_SEED_JSON_PATH` | no | Starting admin settings; see below |
 
-A run limit of `0` or less turns that window off. A value that is not a number falls back to the default.
+## Admin settings
+
+Admins change these at **/settings**:
+
+- **Access:** the sign-up policy (open, approval or closed) and whether guests are allowed.
+- **Run limits:** runs per minute and per day for guests and for accounts. `0` turns a window off.
+- **Models:** which of the backend's models are offered, the default model, and the model that names new chats.
+- **Email:** account email through [Resend](https://resend.com), for confirmation, password-reset and email-change links. While it is on, new accounts must confirm their email before signing in.
+- **Users:** approve, suspend, delete, make admin, or give unlimited runs.
+
+Each setting is defined once in `lib/settings/definitions.ts` (zod): its type, its default and its admin-panel text. Stored values live in the `admin_settings` table. A key with no stored value uses the default.
+
+### Seeding settings
+
+`RUNTIME_SEED_JSON` (inline) or `RUNTIME_SEED_JSON_PATH` (a file) supplies starting values. They are written at server start (`instrumentation.ts`), but only for keys with no stored value. Restarting with the same seed changes nothing, and changes made in /settings always win. `settings.example.json` shows every key.
+
+`settings.schema.json` is the seed's JSON Schema, generated from the definitions. Point `$schema` at it for editor completion. Regenerate it with `pnpm settings:schema` after changing a definition; a test fails while it is out of date.
+
+### First admin
+
+Set `BOOTSTRAP_ADMIN_EMAIL`. On the next start:
+
+- If an account with that email exists, it becomes an admin.
+- Otherwise an account is created with `BOOTSTRAP_ADMIN_PASSWORD` (or the file at `BOOTSTRAP_ADMIN_PASSWORD_FILE`). It gets admin rights only after you sign in and change that password, so the password in the environment never opens the admin pages.
+
+This happens once per database. A marker row is written in the same transaction, so the variables can stay set, or be removed afterwards. After that, admins grant admin rights to others in Users.
 
 ## Database
 
 The schema is managed with [Drizzle](https://orm.drizzle.team):
 
 - `db/auth-schema.ts` holds the better-auth tables (`user`, `session`, `account`, `verification`). It is generated by the better-auth CLI from `lib/auth.ts`.
-- `db/schema.ts` adds two tables:
+- `db/schema.ts` adds three tables:
   - `threads`: one row per conversation, with owner, title, agent, model and timestamps.
   - `run_usage`: per-user run counters for each limit window.
-- `db/migrations/` holds the SQL that drizzle-kit generates. `0000_init.sql` is the only migration.
+  - `admin_settings`: one JSON value per admin setting, plus internal markers.
+- `db/migrations/` holds the SQL that drizzle-kit generates.
 
 `pnpm db:migrate` (`db/migrate.mjs`) applies pending migrations. It holds a Postgres advisory lock while it runs, so several replicas can start at once safely. It reads `POSTGRES_URL` from the environment, `.env.local` or `.env`.
 
@@ -63,7 +90,7 @@ When a guest signs up or signs in, the plugin's `onLinkAccount` hook moves the g
 
 ## Run limits
 
-Every run goes through the AG-UI proxy, including an interrupt resume. Before forwarding, the proxy counts the run against fixed minute and day windows; both are aligned to UTC (`lib/run-limits.ts`). Each window is a single conditional upsert, `count + 1` only while it is below the limit, so concurrent runs cannot overshoot.
+Every run goes through the AG-UI proxy, including an interrupt resume. Before forwarding, the proxy counts the run against fixed minute and day windows; both are aligned to UTC (`lib/run-limits.ts`). The limits come from admin settings. Admins, and accounts marked unlimited, have none. Each window is a single conditional upsert, `count + 1` only while it is below the limit, so concurrent runs cannot overshoot.
 
 When a window is full, the proxy answers `429` with `{ error: "run_limit", window, limit, resetAt, message }`. The UI shows the message inline and above the composer. The composer counter shows the runs left in the tightest window (`GET /api/limits`).
 
@@ -77,7 +104,12 @@ When a window is full, the proxy answers `429` with `{ error: "run_limit", windo
 | `PATCH /api/threads/[id]` | Renames a thread |
 | `DELETE /api/threads/[id]` | Deletes a thread in the backend, then the row |
 | `GET /api/limits` | Run usage for each window |
-| `GET /api/service-info` | Agents and models from the backend `/info` |
+| `GET /api/service-info` | Agents and models from the backend `/info`, filtered by the model settings |
+| `POST /api/threads/[id]/revert` | Rolls a thread back to before a user message |
+| `GET/PUT/DELETE /api/admin/settings` | Admin settings; `DELETE ?key=` resets one |
+| `GET/PUT/DELETE /api/admin/email`, `POST /api/admin/email/test` | Account email config and a test send |
+| `GET /api/admin/users`, `PATCH/DELETE /api/admin/users/[id]` | Accounts, and role, access or limit changes |
+| `GET /api/admin/models` | Every model the backend serves |
 | `/api/auth/[...all]` | better-auth |
 
 Every thread route checks that the thread belongs to the session user, and answers `404` otherwise.

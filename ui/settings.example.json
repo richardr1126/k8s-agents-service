@@ -1,0 +1,23 @@
+{
+  "$schema": "./settings.schema.json",
+  "version": 1,
+  "settings": {
+    "signupPolicy": "open",
+    "allowGuests": true,
+    "runLimits": {
+      "guest": { "perMinute": 2, "perDay": 3 },
+      "user": { "perMinute": 5, "perDay": 15 }
+    },
+    "enabledModels": [],
+    "defaultModel": null,
+    "autoTitle": true,
+    "titleModel": "google/gemini-3.1-flash-lite"
+  },
+  "accountEmail": {
+    "enabled": true,
+    "senderName": "chat.richardr.dev",
+    "senderEmail": "accounts@mail.example.com",
+    "replyTo": null,
+    "apiKey": "re_your_resend_key"
+  }
+}

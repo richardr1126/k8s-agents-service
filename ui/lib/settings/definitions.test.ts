@@ -24,6 +24,11 @@ describe("settings definitions", () => {
     expect(seedSchema.safeParse({ version: 1, settings: { allowGuests: false } }).success).toBe(true);
   });
 
+  it("settings.example.json is a valid seed", () => {
+    const example = JSON.parse(readFileSync(new URL("../../settings.example.json", import.meta.url), "utf8"));
+    expect(seedSchema.safeParse(example).success).toBe(true);
+  });
+
   it("settings.schema.json is current (run pnpm settings:schema)", () => {
     const committed = JSON.parse(readFileSync(new URL("../../settings.schema.json", import.meta.url), "utf8"));
     expect(committed).toEqual(JSON.parse(JSON.stringify(seedJsonSchema())));
