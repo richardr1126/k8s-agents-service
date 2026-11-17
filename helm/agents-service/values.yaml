@@ -48,8 +48,9 @@ database:
 # This sets the container image more information can be found here: https://kubernetes.io/docs/concepts/containers/images/
 image:
   repository: ghcr.io/richardr1126/k8s-agents-service
-  # `latest` is rebuilt on every push to main, so always pull it.
-  pullPolicy: Always
+  pullPolicy: IfNotPresent
+  # `latest` is rebuilt on every push to main. On the cluster the Argo CD Image Updater pins
+  # each new build's digest here (k3s-cluster: argocd/image-updaters/agents-service.yaml).
   # Overrides the image tag whose default is the chart appVersion.
   tag: "latest"
 
@@ -80,7 +81,7 @@ cronjob:
   image:
     repository: ghcr.io/richardr1126/k8s-agents-cron
     tag: "latest"
-    pullPolicy: Always
+    pullPolicy: IfNotPresent
   # No need to override command/args - Dockerfile sets the correct CMD
   resources:
     requests:

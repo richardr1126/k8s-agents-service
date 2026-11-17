@@ -213,8 +213,9 @@ everything else from `app-secrets`.
 
 Argo CD deploys it from `main`: the Application is `argocd/apps/agents-service.yaml` in the
 [k3s-cluster](https://github.com/richardr1126/k3s-cluster) repo. Pushing to `main` builds the
-`k8s-agents-service` and `k8s-agents-cron` images (arm64, tagged `latest`), so the pods pin to arm64 nodes and
-always pull; restart the Deployment to pick up a new build.
+`k8s-agents-service` and `k8s-agents-cron` images (arm64, tagged `latest`), so the pods pin to arm64 nodes. The
+Argo CD Image Updater (k3s-cluster `argocd/image-updaters/`) sees each new digest within a couple of minutes and the
+Application syncs it automatically, so a push to `main` deploys itself.
 
 #### Secrets
 
