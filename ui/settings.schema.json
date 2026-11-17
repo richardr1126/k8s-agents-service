@@ -1,0 +1,166 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "number",
+      "const": 1
+    },
+    "settings": {
+      "description": "Admin settings to fill in on first start. Values an admin has set are never replaced.",
+      "type": "object",
+      "properties": {
+        "signupPolicy": {
+          "description": "New account sign-ups. Open lets anyone register; approval holds new accounts until an admin approves them; closed refuses new accounts.",
+          "type": "string",
+          "enum": [
+            "open",
+            "approval",
+            "closed"
+          ]
+        },
+        "allowGuests": {
+          "description": "Guest sessions. Shows “Continue as guest” on the sign-in page. Turning it off signs existing guests out.",
+          "type": "boolean"
+        },
+        "runLimits": {
+          "description": "Run limits. Agent runs each guest or account may start. Admins and exempt users have no limit.",
+          "type": "object",
+          "properties": {
+            "guest": {
+              "type": "object",
+              "properties": {
+                "perMinute": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Runs per minute. 0 turns the window off."
+                },
+                "perDay": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Runs per day. 0 turns the window off."
+                }
+              },
+              "required": [
+                "perMinute",
+                "perDay"
+              ]
+            },
+            "user": {
+              "type": "object",
+              "properties": {
+                "perMinute": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Runs per minute. 0 turns the window off."
+                },
+                "perDay": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 9007199254740991,
+                  "description": "Runs per day. 0 turns the window off."
+                }
+              },
+              "required": [
+                "perMinute",
+                "perDay"
+              ]
+            }
+          },
+          "required": [
+            "guest",
+            "user"
+          ]
+        },
+        "enabledModels": {
+          "description": "Models offered. Models people can pick, from those the agent service serves. Empty offers all of them.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "defaultModel": {
+          "description": "Default model. Model new chats start with. Unset uses the agent service's default.",
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "autoTitle": {
+          "description": "Name new chats automatically. Asks the title model for a short name after the first message.",
+          "type": "boolean"
+        },
+        "titleModel": {
+          "description": "Title model. Any OpenRouter model id that supports structured outputs. Pick a small, cheap one.",
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "accountEmail": {
+      "description": "Account email through Resend. Applied only when none is saved yet.",
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "default": false,
+          "description": "Send verification and password-reset emails.",
+          "type": "boolean"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Shown as the sender, for example “chat.richardr.dev”."
+        },
+        "senderEmail": {
+          "type": "string",
+          "format": "email",
+          "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$",
+          "description": "An address on a domain verified in Resend."
+        },
+        "replyTo": {
+          "default": null,
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "email",
+              "pattern": "^(?:[A-Za-z0-9_'+\\-]+\\.)*[A-Za-z0-9_'+\\-]*[A-Za-z0-9_+-]@(?:[A-Za-z0-9][A-Za-z0-9\\-]*\\.)+[A-Za-z]{2,}$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "apiKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Resend API key. Stored encrypted with BETTER_AUTH_SECRET."
+        }
+      },
+      "required": [
+        "senderName",
+        "senderEmail",
+        "apiKey"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "version"
+  ],
+  "additionalProperties": false,
+  "title": "chat.richardr.dev seed",
+  "description": "Starting values for admin settings, read from RUNTIME_SEED_JSON or RUNTIME_SEED_JSON_PATH."
+}

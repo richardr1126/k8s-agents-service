@@ -4,6 +4,7 @@ import {
   ErrorPrimitive,
   MessagePrimitive,
   ThreadPrimitive,
+  useAui,
   useAuiState,
 } from "@assistant-ui/react";
 import { motion } from "framer-motion";
@@ -15,16 +16,20 @@ import {
   ChevronDownIcon,
   CloudIcon,
   CopyIcon,
+  RefreshCwIcon,
   SearchIcon,
   SendHorizontalIcon,
   Square,
+  Undo2Icon,
   WrenchIcon,
 } from "lucide-react";
 import type { FC } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { AgentSelect } from "@/components/agent-select";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { useChat } from "@/components/custom-runtime-provider";
+import { useDialogs } from "@/components/dialogs";
 import { InterruptBanner } from "@/components/interrupt-banner";
 import { ModelSelect } from "@/components/model-select";
 import { SubagentToolCard } from "@/components/subagent-tool-ui";
@@ -39,7 +44,36 @@ import { ToolFallback } from "./tool-fallback";
 
 const MAX_CHARACTERS = 560;
 
+const focusComposer = () =>
+  document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message input"]')?.focus();
+
+/** Esc stops a response, ⌘/Ctrl+Shift+O starts a new chat, ⌘/Ctrl+K focuses the message box. */
+function useThreadShortcuts() {
+  const aui = useAui();
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (e.key === "Escape" && !e.defaultPrevented && aui.thread().getState().isRunning) {
+        // Leave Esc to an open dialog or menu.
+        if (document.querySelector('[role="dialog"], [role="listbox"], [role="menu"]')) return;
+        e.preventDefault();
+        aui.thread().cancelRun();
+      } else if (mod && e.shiftKey && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        void aui.threads().switchToNewThread();
+        setTimeout(focusComposer, 0);
+      } else if (mod && !e.shiftKey && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        focusComposer();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [aui]);
+}
+
 export const Thread: FC = () => {
+  useThreadShortcuts();
   return (
     <ThreadPrimitive.Root
       className="bg-background flex h-full w-full min-w-0 flex-col pb-2 sm:pb-0"
@@ -468,18 +502,64 @@ const AssistantMessage: FC = () => {
   );
 };
 
-const AssistantActionBar: FC = () => {
-  const message = useAuiState((s) => s.message);
-  
-  // Check if message has any text content (not just tool calls)
-  const hasTextContent = message.content.some(part => 
-    part.type === 'text' && part.text.trim().length > 0
+const CopyAction: FC = () => (
+  <ActionBarPrimitive.Copy asChild>
+    <TooltipIconButton tooltip="Copy">
+      <MessagePrimitive.If copied>
+        <CheckIcon />
+      </MessagePrimitive.If>
+      <MessagePrimitive.If copied={false}>
+        <CopyIcon />
+      </MessagePrimitive.If>
+    </TooltipIconButton>
+  </ActionBarPrimitive.Copy>
+);
+
+/** True while a run streams or a revert is in flight, when history must not change. */
+function useBusy() {
+  return useAuiState((s) => s.thread.isRunning);
+}
+
+const RegenerateAction: FC = () => {
+  const { regenerate, limitMessage } = useChat();
+  const busy = useBusy();
+  const [pending, setPending] = useState(false);
+  // The user message this answer replies to.
+  const userMessageId = useAuiState((s) => {
+    const index = s.thread.messages.findIndex((m) => m.id === s.message.id);
+    return s.thread.messages.slice(0, index).findLast((m) => m.role === "user")?.id;
+  });
+  if (!userMessageId) return null;
+
+  const onClick = async () => {
+    setPending(true);
+    try {
+      await regenerate(userMessageId);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not regenerate the answer.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <TooltipIconButton
+      tooltip={limitMessage ? "Run limit reached" : "Regenerate"}
+      disabled={busy || pending || Boolean(limitMessage)}
+      onClick={onClick}
+    >
+      <RefreshCwIcon className={cn(pending && "animate-spin")} />
+    </TooltipIconButton>
   );
-  
-  // Don't show action bar if message only contains tool calls
-  if (!hasTextContent) {
-    return null;
-  }
+};
+
+const AssistantActionBar: FC = () => {
+  // Hide the bar on messages that only hold tool calls.
+  const hasTextContent = useAuiState((s) =>
+    s.message.content.some((part) => part.type === "text" && part.text.trim().length > 0),
+  );
+  const isLast = useAuiState((s) => s.message.isLast);
+  if (!hasTextContent) return null;
 
   return (
     <ActionBarPrimitive.Root
@@ -489,19 +569,64 @@ const AssistantActionBar: FC = () => {
       // aui-assistant-action-bar-root
       className="text-muted-foreground data-floating:bg-background col-start-3 row-start-2 mt-2 ml-3 flex gap-1 data-floating:absolute data-floating:mt-1 data-floating:rounded-md data-floating:border data-floating:p-1 data-floating:shadow-sm"
     >
-      <ActionBarPrimitive.Copy asChild>
-        <TooltipIconButton tooltip="Copy">
-          <MessagePrimitive.If copied>
-            <CheckIcon />
-          </MessagePrimitive.If>
-          <MessagePrimitive.If copied={false}>
-            <CopyIcon />
-          </MessagePrimitive.If>
-        </TooltipIconButton>
-      </ActionBarPrimitive.Copy>
+      <CopyAction />
+      {isLast && <RegenerateAction />}
     </ActionBarPrimitive.Root>
   );
 };
+
+const UndoAction: FC = () => {
+  const { undo } = useChat();
+  const { confirm } = useDialogs();
+  const busy = useBusy();
+  const [pending, setPending] = useState(false);
+  const messageId = useAuiState((s) => s.message.id);
+  const isLast = useAuiState((s) => s.message.isLast);
+  const laterCount = useAuiState((s) => {
+    const index = s.thread.messages.findIndex((m) => m.id === s.message.id);
+    return s.thread.messages.length - index - 1;
+  });
+
+  const onClick = async () => {
+    const ok = await confirm({
+      title: "Revert to this message?",
+      description:
+        laterCount > 0 || !isLast
+          ? "This message and everything after it will be removed. Its text goes back into the message box so you can change it and send again."
+          : "This message will be removed. Its text goes back into the message box so you can change it and send again.",
+      confirmLabel: "Revert",
+      destructive: true,
+    });
+    if (!ok) return;
+    setPending(true);
+    try {
+      await undo(messageId);
+      toast.success("Conversation reverted");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not revert the conversation.");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <TooltipIconButton tooltip="Revert to here" disabled={busy || pending} onClick={onClick}>
+      <Undo2Icon className={cn(pending && "animate-pulse")} />
+    </TooltipIconButton>
+  );
+};
+
+const UserActionBar: FC = () => (
+  <ActionBarPrimitive.Root
+    hideWhenRunning
+    autohide="always"
+    // aui-user-action-bar-root
+    className="text-muted-foreground col-start-2 row-start-2 mt-1 flex justify-end gap-1"
+  >
+    <CopyAction />
+    <UndoAction />
+  </ActionBarPrimitive.Root>
+);
 
 const UserMessage: FC = () => {
   return (
@@ -517,6 +642,7 @@ const UserMessage: FC = () => {
         <div className="bg-muted text-foreground col-start-2 rounded-3xl px-5 py-2.5 break-words">
           <MessagePrimitive.Content components={{ Text: MarkdownText }} />
         </div>
+        <UserActionBar />
       </motion.div>
     </MessagePrimitive.Root>
   );

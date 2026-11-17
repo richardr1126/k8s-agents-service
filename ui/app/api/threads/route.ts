@@ -8,7 +8,7 @@ export async function GET() {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const rows = await db
-    .select({ id: threads.id, title: threads.title, agentId: threads.agentId, modelId: threads.modelId })
+    .select({ id: threads.id, title: threads.title, agentId: threads.agentId, modelId: threads.modelId, updatedAt: threads.updatedAt })
     .from(threads)
     .where(eq(threads.userId, session.user.id))
     .orderBy(desc(threads.updatedAt));

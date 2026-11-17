@@ -25,13 +25,19 @@ from schema import (
     DeleteThreadResponse,
     Feedback,
     FeedbackResponse,
+    RevertThreadInput,
+    RevertThreadResponse,
     ServiceMetadata,
+    TitleInput,
+    TitleResponse,
     UserInput,
 )
 from schema.subagent import HistoryResponse
 from service.agui import langfuse_callbacks
 from service.agui import router as agui_router
 from service.history import build_history
+from service.revert import RevertError, revert_thread
+from service.title import generate_title
 from service.utils import langchain_to_chat_message
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
@@ -223,6 +229,34 @@ async def history(input: ChatHistoryInput) -> HistoryResponse:
     agent: AgentGraph = get_agent(DEFAULT_AGENT)
     state = await agent.aget_state(config=RunnableConfig(configurable={"thread_id": input.thread_id}))
     return build_history(_extract_messages_from_state(state.values))
+
+
+@router.post("/thread/revert")
+async def revert(input: RevertThreadInput) -> RevertThreadResponse:
+    """Revert a thread to just before a user message and return that message's text.
+
+    Forks the newest checkpoint from before the message, so the next run
+    continues from there. Earlier checkpoints stay in the database.
+    """
+    try:
+        agent: AgentGraph = get_agent(input.agent_id or DEFAULT_AGENT)
+    except KeyError:
+        raise HTTPException(status_code=404, detail=f"Unknown agent {input.agent_id}")
+    try:
+        text = await revert_thread(agent, input.thread_id, input.message_id)
+    except RevertError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    return RevertThreadResponse(text=text)
+
+
+@router.post("/title")
+async def title(input: TitleInput) -> TitleResponse:
+    """Name a conversation from its first message with the small title model."""
+    try:
+        return TitleResponse(title=await generate_title(input.text, input.model))
+    except Exception as e:
+        logger.warning(f"Title generation failed: {e}")
+        raise HTTPException(status_code=502, detail="Title generation failed")
 
 
 @router.delete("/thread")

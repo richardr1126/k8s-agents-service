@@ -1,36 +1,32 @@
 import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { runUsage } from "@/db/schema";
+import type { Settings } from "@/lib/settings/definitions";
+import { getSettings } from "@/lib/settings/store";
 
 const WINDOWS = { minute: 60_000, day: 86_400_000 } as const;
 type WindowName = keyof typeof WINDOWS;
 
 export type RunLimit = { window: WindowName; limit: number };
-export type LimitedUser = { id: string; email: string; isAnonymous?: boolean | null };
+export type LimitedUser = {
+  id: string;
+  isAnonymous?: boolean | null;
+  isAdmin?: boolean | null;
+  runLimitExempt?: boolean | null;
+};
 /** `message` is set when the window is full, so the UI can say so before a run is refused. */
 export type WindowUsage = RunLimit & { used: number; resetAt: string; message?: string };
 export type Denial = RunLimit & { resetAt: string; message: string };
+export type RunLimits = Settings["runLimits"];
 
-const DEFAULTS = {
-  guest: { minute: 2, day: 3 },
-  user: { minute: 5, day: 15 },
-};
+const SETTING_FOR: Record<WindowName, "perMinute" | "perDay"> = { minute: "perMinute", day: "perDay" };
 
-type Env = Record<string, string | undefined>;
-
-/** The limits that apply to a user. Env vars override defaults; a value of 0 or less turns that window off. */
-export function limitsFor(user: LimitedUser, env: Env = process.env): RunLimit[] {
-  const exempt = (env.RUN_LIMIT_EXEMPT_EMAILS ?? "")
-    .split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-  if (!user.isAnonymous && exempt.includes(user.email.toLowerCase())) return [];
-
-  const tier = user.isAnonymous ? "guest" : "user";
+/** The limits that apply to a user under the admin settings. 0 turns a window off; admins and exempt users have none. */
+export function limitsFor(user: LimitedUser, limits: RunLimits): RunLimit[] {
+  if (!user.isAnonymous && (user.isAdmin || user.runLimitExempt)) return [];
+  const tier = limits[user.isAnonymous ? "guest" : "user"];
   return (Object.keys(WINDOWS) as WindowName[]).flatMap((window) => {
-    const raw = env[`RUN_LIMIT_${tier.toUpperCase()}_PER_${window.toUpperCase()}`];
-    const parsed = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
-    const limit = Number.isFinite(parsed) ? Math.floor(parsed) : DEFAULTS[tier][window];
+    const limit = tier[SETTING_FOR[window]];
     return limit > 0 ? [{ window, limit }] : [];
   });
 }
@@ -65,7 +61,7 @@ class LimitReached extends Error {
  * The conditional upsert makes the check and the increment one atomic step per window.
  */
 export async function admitRun(user: LimitedUser, now = new Date()): Promise<Denial | null> {
-  const limits = limitsFor(user);
+  const limits = limitsFor(user, (await getSettings()).values.runLimits);
   if (limits.length === 0) return null;
   try {
     await db.transaction(async (tx) => {
@@ -101,8 +97,9 @@ export async function admitRun(user: LimitedUser, now = new Date()): Promise<Den
 }
 
 export async function getUsage(user: LimitedUser, now = new Date()): Promise<WindowUsage[]> {
+  const limits = limitsFor(user, (await getSettings()).values.runLimits);
   const rows = await db.select().from(runUsage).where(eq(runUsage.userId, user.id));
-  return limitsFor(user).map((limit) => {
+  return limits.map((limit) => {
     const start = windowStart(limit.window, now).getTime();
     const row = rows.find((r) => r.window === limit.window && r.windowStart.getTime() === start);
     const used = row?.count ?? 0;

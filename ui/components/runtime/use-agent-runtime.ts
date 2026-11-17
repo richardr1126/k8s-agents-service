@@ -3,6 +3,7 @@
 import { HttpAgent } from "@ag-ui/client";
 import { useAgUiRuntime, type AgUiAssistantRuntime, type UseAgUiThreadListAdapter } from "@assistant-ui/react-ag-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { historyToThreadMessages } from "@/lib/agui-history";
 import type { History, ThreadRow } from "@/lib/types";
 
@@ -20,6 +21,16 @@ async function loadHistory(threadId: string) {
   const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}`);
   if (!res.ok) throw new Error(`Could not load the conversation (HTTP ${res.status})`);
   return historyToThreadMessages((await res.json()) as History);
+}
+
+/** Reverts the thread to just before a user message; resolves that message's text. */
+async function revertThread(threadId: string, messageId: string): Promise<string> {
+  const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/revert`, {
+    method: "POST",
+    body: JSON.stringify({ messageId }),
+  });
+  if (!res.ok) throw new Error(`Could not revert the conversation (HTTP ${res.status})`);
+  return ((await res.json()) as { text: string }).text;
 }
 
 async function loadThreads(): Promise<ThreadRow[] | null> {
@@ -101,7 +112,8 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
         return { messages: await loadHistory(id) };
       },
       onRename: async (id, title) => {
-        await fetch(`/api/threads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+        const res = await fetch(`/api/threads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+        if (!res.ok) throw new Error(`Could not rename the conversation (HTTP ${res.status})`);
         await refreshThreads();
       },
       onDelete: async (id) => {
@@ -136,5 +148,62 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
     if (threads[0]) void runtime.threads.switchToThread(threads[0].id);
   }, [threads, runtime]);
 
-  return { runtime, agentId, setAgentId, modelId, setModelId };
+  const threadIdRef = useRef(threadId);
+  useEffect(() => {
+    threadIdRef.current = threadId;
+  });
+
+  /**
+   * Drops the message and everything after it, then reloads the thread.
+   * Resolves the message's text, whether this thread is still open, and
+   * whether the transcript was reloaded. A failed reload never repeats the revert.
+   */
+  const revert = useCallback(
+    async (messageId: string) => {
+      const origin = threadId;
+      const text = await revertThread(origin, messageId);
+      const open = () => threadIdRef.current === origin;
+      let synced = false;
+      try {
+        const messages = await loadHistory(origin);
+        if (open()) {
+          runtimeRef.current?.thread.reset(messages);
+          synced = true;
+        }
+      } catch {
+        toast.error("Reverted, but the conversation didn't reload. Reopen it to see the change.");
+      }
+      void refreshThreads();
+      return { text, open: open(), synced };
+    },
+    [threadId, refreshThreads],
+  );
+
+  /** Reverts to before the message and puts its text back in the composer. */
+  const undo = useCallback(
+    async (messageId: string) => {
+      const { text, open } = await revert(messageId);
+      // Another conversation was opened meanwhile; leave its composer alone.
+      if (!open) return;
+      runtimeRef.current?.thread.composer.setText(text);
+      // Focus once the composer has the text, with the caret at the end.
+      setTimeout(() => {
+        const box = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message input"]');
+        box?.focus();
+        box?.setSelectionRange(box.value.length, box.value.length);
+      }, 0);
+    },
+    [revert],
+  );
+
+  /** Reverts to before the message and sends it again, for a fresh answer. */
+  const regenerate = useCallback(
+    async (messageId: string) => {
+      const { text, open, synced } = await revert(messageId);
+      if (open && synced) runtimeRef.current?.thread.append({ role: "user", content: [{ type: "text", text }] });
+    },
+    [revert],
+  );
+
+  return { runtime, agentId, setAgentId, modelId, setModelId, threads, undo, regenerate };
 }

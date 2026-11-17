@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { threads } from "@/db/schema";
 import { admitRun } from "@/lib/run-limits";
 import { backendFetch, getSession } from "@/lib/server";
+import { getSettings } from "@/lib/settings/store";
 
 type RunInput = {
   threadId?: unknown;
@@ -11,7 +12,7 @@ type RunInput = {
   [key: string]: unknown;
 };
 
-function titleFrom(messages: RunInput["messages"]): string {
+function lastUserText(messages: RunInput["messages"]): string {
   const content = messages?.findLast((m) => m.role === "user")?.content;
   const text =
     typeof content === "string"
@@ -19,8 +20,23 @@ function titleFrom(messages: RunInput["messages"]): string {
       : Array.isArray(content)
         ? content.map((part) => (part?.type === "text" ? part.text : "")).join(" ")
         : "";
-  const line = text.trim().replace(/\s+/g, " ");
-  return line ? line.slice(0, 80) : "New chat";
+  return text.trim().replace(/\s+/g, " ");
+}
+
+/** Replaces the placeholder title with one from the title model, unless the user renamed it first. */
+async function autoTitle(threadId: string, text: string, placeholder: string, model: string) {
+  try {
+    const res = await backendFetch("/title", { method: "POST", body: JSON.stringify({ text, model }) });
+    if (!res.ok) return;
+    const { title } = (await res.json()) as { title?: string };
+    if (!title?.trim()) return;
+    await db
+      .update(threads)
+      .set({ title: title.trim().slice(0, 200) })
+      .where(and(eq(threads.id, threadId), eq(threads.title, placeholder)));
+  } catch {
+    // The placeholder stays; titles are cosmetic.
+  }
 }
 
 /** Authenticates, applies run limits and thread ownership, then streams the backend's SSE through. */
@@ -29,7 +45,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentI
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { agentId } = await context.params;
-  const model = req.nextUrl.searchParams.get("model") || undefined;
+  const settings = (await getSettings()).values;
+  const requested = req.nextUrl.searchParams.get("model") || undefined;
+  if (requested && settings.enabledModels.length && !settings.enabledModels.includes(requested)) {
+    return NextResponse.json({ error: "That model is not offered" }, { status: 400 });
+  }
+  // The default may predate the offered list; then the first offered model stands in for it.
+  const offered = (m: string | undefined) => !settings.enabledModels.length || (m !== undefined && settings.enabledModels.includes(m));
+  const fallback = settings.defaultModel ?? undefined;
+  const model = requested ?? (offered(fallback) ? fallback : settings.enabledModels[0]);
   const input = (await req.json()) as RunInput;
   if (typeof input.threadId !== "string" || !input.threadId) {
     return NextResponse.json({ error: "threadId is required" }, { status: 400 });
@@ -51,9 +75,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentI
       .set({ agentId, modelId: model ?? null, updatedAt: new Date() })
       .where(and(eq(threads.id, threadId), eq(threads.userId, userId)));
   } else {
-    await db
-      .insert(threads)
-      .values({ id: threadId, userId, agentId, modelId: model ?? null, title: titleFrom(input.messages) });
+    const text = lastUserText(input.messages);
+    const placeholder = text ? text.slice(0, 80) : "New chat";
+    await db.insert(threads).values({ id: threadId, userId, agentId, modelId: model ?? null, title: placeholder });
+    // Starts now, alongside the run; `after` keeps the function alive until it settles.
+    if (text && settings.autoTitle) after(autoTitle(threadId, text, placeholder, settings.titleModel));
   }
 
   const upstream = await backendFetch(`/${encodeURIComponent(agentId)}/ag-ui`, {

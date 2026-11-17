@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PrivacyPopup } from "@/components/privacy-popup";
-import { Toaster } from "sonner";
+import { DialogsProvider } from "@/components/dialogs";
+import { Toaster } from "@/components/toaster";
 import { Analytics } from "@vercel/analytics/next"
 
 const geistSans = Geist({
@@ -40,7 +41,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-title" content="Chat AI" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {children}
+        <DialogsProvider>{children}</DialogsProvider>
         <PrivacyPopup />
         <Toaster />
         <Analytics />

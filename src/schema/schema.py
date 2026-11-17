@@ -178,3 +178,31 @@ class DeleteThreadResponse(BaseModel):
     
     status: Literal["success"] = "success"
     message: str = "Thread deleted successfully"
+
+
+class RevertThreadInput(BaseModel):
+    """Input for reverting a thread to just before one of its user messages."""
+
+    thread_id: str = Field(description="Thread ID to revert.")
+    message_id: str = Field(description="ID of the user message to revert; it and everything after it are removed.")
+    agent_id: str | None = Field(default=None, description="Agent the thread runs on. Defaults to the default agent.")
+
+
+class RevertThreadResponse(BaseModel):
+    """The reverted message's text, for putting back in the composer."""
+
+    text: str
+
+
+class TitleInput(BaseModel):
+    """Input for naming a conversation."""
+
+    text: str = Field(description="The conversation's first user message.", min_length=1)
+    model: str | None = Field(
+        default=None,
+        description="OpenRouter model id to name it with. Defaults to TITLE_MODEL.",
+    )
+
+
+class TitleResponse(BaseModel):
+    title: str

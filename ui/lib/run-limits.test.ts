@@ -1,37 +1,33 @@
 import { describe, expect, it } from "vitest";
+import { defaultSettings } from "./settings/definitions";
 import { denialMessage, limitsFor, resetAt, windowStart } from "./run-limits";
 
-const guest = { id: "g", email: "temp@guest.local", isAnonymous: true };
-const user = { id: "u", email: "Person@Example.com", isAnonymous: false };
+const guest = { id: "g", isAnonymous: true };
+const user = { id: "u", isAnonymous: false };
+const defaults = defaultSettings().runLimits;
 
 describe("limitsFor", () => {
   it("applies stricter defaults to guests", () => {
-    expect(limitsFor(guest, {})).toEqual([
+    expect(limitsFor(guest, defaults)).toEqual([
       { window: "minute", limit: 2 },
       { window: "day", limit: 3 },
     ]);
-    expect(limitsFor(user, {})).toEqual([
+    expect(limitsFor(user, defaults)).toEqual([
       { window: "minute", limit: 5 },
       { window: "day", limit: 15 },
     ]);
   });
 
-  it("reads overrides from env and turns a window off at 0 or below", () => {
-    const env = { RUN_LIMIT_GUEST_PER_DAY: "10", RUN_LIMIT_GUEST_PER_MINUTE: "0", RUN_LIMIT_USER_PER_DAY: "-1" };
-    expect(limitsFor(guest, env)).toEqual([{ window: "day", limit: 10 }]);
-    expect(limitsFor(user, env)).toEqual([{ window: "minute", limit: 5 }]);
+  it("turns a window off at 0", () => {
+    const limits = { guest: { perMinute: 0, perDay: 10 }, user: { perMinute: 5, perDay: 0 } };
+    expect(limitsFor(guest, limits)).toEqual([{ window: "day", limit: 10 }]);
+    expect(limitsFor(user, limits)).toEqual([{ window: "minute", limit: 5 }]);
   });
 
-  it("ignores values that are not numbers", () => {
-    expect(limitsFor(guest, { RUN_LIMIT_GUEST_PER_DAY: "lots", RUN_LIMIT_GUEST_PER_MINUTE: " " })).toEqual(
-      limitsFor(guest, {}),
-    );
-  });
-
-  it("exempts listed account emails, case-insensitively, but never guests", () => {
-    const env = { RUN_LIMIT_EXEMPT_EMAILS: "other@example.com, person@example.com" };
-    expect(limitsFor(user, env)).toEqual([]);
-    expect(limitsFor({ ...guest, email: "person@example.com" }, env)).toHaveLength(2);
+  it("exempts admins and exempt accounts, but never guests", () => {
+    expect(limitsFor({ ...user, isAdmin: true }, defaults)).toEqual([]);
+    expect(limitsFor({ ...user, runLimitExempt: true }, defaults)).toEqual([]);
+    expect(limitsFor({ ...guest, runLimitExempt: true }, defaults)).toHaveLength(2);
   });
 });
 

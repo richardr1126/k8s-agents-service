@@ -86,3 +86,16 @@ class ConfigurableModelGraph:
     def get_state(self, config: RunnableConfig | None = None, **kwargs: Any) -> Any:
         graph = self._graph_for_config(config)
         return graph.get_state(config=config, **kwargs)
+
+    async def aget_state_history(
+        self, config: RunnableConfig, **kwargs: Any
+    ) -> AsyncIterator[Any]:
+        graph = self._graph_for_config(config)
+        async for snapshot in graph.aget_state_history(config, **kwargs):
+            yield snapshot
+
+    async def aupdate_state(
+        self, config: RunnableConfig, values: Any, as_node: str | None = None, **kwargs: Any
+    ) -> RunnableConfig:
+        graph = self._graph_for_config(config)
+        return await graph.aupdate_state(config, values, as_node=as_node, **kwargs)
