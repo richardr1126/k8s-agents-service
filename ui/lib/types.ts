@@ -7,7 +7,7 @@ export type ServiceInfo = {
   default_model: string;
 };
 
-export type ThreadRow = { id: string; title: string; agentId: string; modelId: string | null };
+export type ThreadRow = { id: string; title: string; agentId: string; modelId: string | null; updatedAt: string };
 
 /** One sub-agent run in a thread, as returned by the backend's POST /history. */
 export type SubagentRun = {

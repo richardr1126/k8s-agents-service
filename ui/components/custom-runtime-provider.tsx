@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { toast } from "sonner";
 import { RunLimitError, useAgentRuntime } from "@/components/runtime/use-agent-runtime";
 import type { WindowUsage } from "@/lib/run-limits";
-import type { ServiceInfo } from "@/lib/types";
+import type { ServiceInfo, ThreadRow } from "@/lib/types";
 
 type ChatContextValue = {
   serviceInfo: ServiceInfo;
@@ -15,6 +15,10 @@ type ChatContextValue = {
   setModelId: (id: string) => void;
   usage: WindowUsage[] | null;
   limitMessage: string | null;
+  /** The user's threads, newest first; null while loading. */
+  threads: ThreadRow[] | null;
+  undo: (messageId: string) => Promise<void>;
+  regenerate: (messageId: string) => Promise<void>;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);

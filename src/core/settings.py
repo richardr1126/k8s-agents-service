@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     OPENROUTER_API_KEY: str | None = None
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
     OPENROUTER_EMBEDDING_MODEL: str = "qwen/qwen3-embedding-8b"
+    # Names new threads; any OpenRouter model with structured outputs works.
+    TITLE_MODEL: str = "google/gemini-3.1-flash-lite"
 
     # If DEFAULT_MODEL is None, it will be set in model_post_init
     DEFAULT_MODEL: AllModelEnum | None = None  # type: ignore[assignment]

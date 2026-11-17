@@ -7,7 +7,11 @@ from schema.schema import (
     DeleteThreadResponse,
     Feedback,
     FeedbackResponse,
+    RevertThreadInput,
+    RevertThreadResponse,
     ServiceMetadata,
+    TitleInput,
+    TitleResponse,
     UserInput,
 )
 
@@ -22,4 +26,8 @@ __all__ = [
     "ChatHistoryInput",
     "DeleteThreadInput",
     "DeleteThreadResponse",
+    "RevertThreadInput",
+    "RevertThreadResponse",
+    "TitleInput",
+    "TitleResponse",
 ]

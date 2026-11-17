@@ -22,6 +22,16 @@ async function loadHistory(threadId: string) {
   return historyToThreadMessages((await res.json()) as History);
 }
 
+/** Reverts the thread to just before a user message; resolves that message's text. */
+async function revertThread(threadId: string, messageId: string): Promise<string> {
+  const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/revert`, {
+    method: "POST",
+    body: JSON.stringify({ messageId }),
+  });
+  if (!res.ok) throw new Error(`Could not revert the conversation (HTTP ${res.status})`);
+  return ((await res.json()) as { text: string }).text;
+}
+
 async function loadThreads(): Promise<ThreadRow[] | null> {
   const res = await fetch("/api/threads");
   return res.ok ? res.json() : null;
@@ -101,7 +111,8 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
         return { messages: await loadHistory(id) };
       },
       onRename: async (id, title) => {
-        await fetch(`/api/threads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+        const res = await fetch(`/api/threads/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ title }) });
+        if (!res.ok) throw new Error(`Could not rename the conversation (HTTP ${res.status})`);
         await refreshThreads();
       },
       onDelete: async (id) => {
@@ -136,5 +147,41 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
     if (threads[0]) void runtime.threads.switchToThread(threads[0].id);
   }, [threads, runtime]);
 
-  return { runtime, agentId, setAgentId, modelId, setModelId };
+  /** Drops the message and everything after it, then reloads the thread. Resolves the message's text. */
+  const revert = useCallback(
+    async (messageId: string) => {
+      const text = await revertThread(threadId, messageId);
+      const messages = await loadHistory(threadId);
+      runtimeRef.current?.thread.reset(messages);
+      void refreshThreads();
+      return text;
+    },
+    [threadId, refreshThreads],
+  );
+
+  /** Reverts to before the message and puts its text back in the composer. */
+  const undo = useCallback(
+    async (messageId: string) => {
+      const text = await revert(messageId);
+      runtimeRef.current?.thread.composer.setText(text);
+      // Focus once the composer has the text, with the caret at the end.
+      setTimeout(() => {
+        const box = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message input"]');
+        box?.focus();
+        box?.setSelectionRange(box.value.length, box.value.length);
+      }, 0);
+    },
+    [revert],
+  );
+
+  /** Reverts to before the message and sends it again, for a fresh answer. */
+  const regenerate = useCallback(
+    async (messageId: string) => {
+      const text = await revert(messageId);
+      runtimeRef.current?.thread.append({ role: "user", content: [{ type: "text", text }] });
+    },
+    [revert],
+  );
+
+  return { runtime, agentId, setAgentId, modelId, setModelId, threads, undo, regenerate };
 }
