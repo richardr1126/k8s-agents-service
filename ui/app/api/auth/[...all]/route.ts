@@ -1,4 +1,8 @@
-import { auth } from "@/lib/auth";
-import { toNextJsHandler } from "better-auth/next-js";
+import { getAuth } from "@/lib/auth";
 
-export const { GET, POST } = toNextJsHandler(auth.handler);
+// The instance depends on admin settings (account email on or off), so it is looked up per request.
+async function handler(request: Request) {
+  return (await getAuth()).handler(request);
+}
+
+export { handler as GET, handler as POST };

@@ -253,7 +253,7 @@ async def revert(input: RevertThreadInput) -> RevertThreadResponse:
 async def title(input: TitleInput) -> TitleResponse:
     """Name a conversation from its first message with the small title model."""
     try:
-        return TitleResponse(title=await generate_title(input.text))
+        return TitleResponse(title=await generate_title(input.text, input.model))
     except Exception as e:
         logger.warning(f"Title generation failed: {e}")
         raise HTTPException(status_code=502, detail="Title generation failed")

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { threads } from "@/db/schema";
 import { admitRun } from "@/lib/run-limits";
 import { backendFetch, getSession } from "@/lib/server";
+import { getSettings } from "@/lib/settings/store";
 
 type RunInput = {
   threadId?: unknown;
@@ -23,9 +24,9 @@ function lastUserText(messages: RunInput["messages"]): string {
 }
 
 /** Replaces the placeholder title with one from the title model, unless the user renamed it first. */
-async function autoTitle(threadId: string, text: string, placeholder: string) {
+async function autoTitle(threadId: string, text: string, placeholder: string, model: string) {
   try {
-    const res = await backendFetch("/title", { method: "POST", body: JSON.stringify({ text }) });
+    const res = await backendFetch("/title", { method: "POST", body: JSON.stringify({ text, model }) });
     if (!res.ok) return;
     const { title } = (await res.json()) as { title?: string };
     if (!title?.trim()) return;
@@ -44,7 +45,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentI
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { agentId } = await context.params;
-  const model = req.nextUrl.searchParams.get("model") || undefined;
+  const settings = (await getSettings()).values;
+  const requested = req.nextUrl.searchParams.get("model") || undefined;
+  if (requested && settings.enabledModels.length && !settings.enabledModels.includes(requested)) {
+    return NextResponse.json({ error: "That model is not offered" }, { status: 400 });
+  }
+  const model = requested ?? settings.defaultModel ?? undefined;
   const input = (await req.json()) as RunInput;
   if (typeof input.threadId !== "string" || !input.threadId) {
     return NextResponse.json({ error: "threadId is required" }, { status: 400 });
@@ -70,7 +76,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentI
     const placeholder = text ? text.slice(0, 80) : "New chat";
     await db.insert(threads).values({ id: threadId, userId, agentId, modelId: model ?? null, title: placeholder });
     // Starts now, alongside the run; `after` keeps the function alive until it settles.
-    if (text) after(autoTitle(threadId, text, placeholder));
+    if (text && settings.autoTitle) after(autoTitle(threadId, text, placeholder, settings.titleModel));
   }
 
   const upstream = await backendFetch(`/${encodeURIComponent(agentId)}/ag-ui`, {

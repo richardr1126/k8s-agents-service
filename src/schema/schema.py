@@ -198,6 +198,10 @@ class TitleInput(BaseModel):
     """Input for naming a conversation."""
 
     text: str = Field(description="The conversation's first user message.", min_length=1)
+    model: str | None = Field(
+        default=None,
+        description="OpenRouter model id to name it with. Defaults to TITLE_MODEL.",
+    )
 
 
 class TitleResponse(BaseModel):

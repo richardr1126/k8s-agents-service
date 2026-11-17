@@ -17,9 +17,9 @@ class ThreadTitle(BaseModel):
     title: str = Field(description="2 to 6 word title for the conversation")
 
 
-def _model() -> ChatOpenRouter:
+def _model(model: str | None) -> ChatOpenRouter:
     return ChatOpenRouter(
-        model=settings.TITLE_MODEL,
+        model=model or settings.TITLE_MODEL,
         temperature=0,
         max_tokens=40,
         base_url=settings.OPENROUTER_BASE_URL,
@@ -27,8 +27,8 @@ def _model() -> ChatOpenRouter:
     )
 
 
-async def generate_title(text: str) -> str:
-    structured = _model().with_structured_output(ThreadTitle, method="json_schema")
+async def generate_title(text: str, model: str | None = None) -> str:
+    structured = _model(model).with_structured_output(ThreadTitle, method="json_schema")
     result = await structured.ainvoke(_PROMPT.format(text=text[:2000]))
     title = ThreadTitle.model_validate(result).title.strip().strip("\"'").rstrip(".")
     return " ".join(title.split())[:80]
