@@ -1,4 +1,4 @@
-import { index, integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 export * from "./auth-schema";
@@ -33,3 +33,14 @@ export const runUsage = pgTable(
   },
   (table) => [primaryKey({ columns: [table.userId, table.window, table.windowStart] })],
 );
+
+/**
+ * Admin settings and internal markers, one JSON value per key (see lib/settings).
+ * `source` says who wrote the value: json-seed, admin or system.
+ */
+export const adminSettings = pgTable("admin_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  source: text("source").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
