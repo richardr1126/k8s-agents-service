@@ -8,7 +8,7 @@ import { INITIAL_ADMIN_MARKER } from "@/lib/settings/store";
 
 const MIN_PASSWORD = 16;
 
-async function bootstrapPassword(): Promise<string | null> {
+export async function bootstrapPassword(): Promise<string | null> {
   if (process.env.BOOTSTRAP_ADMIN_PASSWORD) return process.env.BOOTSTRAP_ADMIN_PASSWORD;
   if (process.env.BOOTSTRAP_ADMIN_PASSWORD_FILE) {
     return (await readFile(process.env.BOOTSTRAP_ADMIN_PASSWORD_FILE, "utf8")).trim();

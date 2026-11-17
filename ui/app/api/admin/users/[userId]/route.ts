@@ -41,6 +41,14 @@ export async function DELETE(_req: NextRequest, context: { params: Promise<{ use
   if (error) return error;
   const { userId } = await context.params;
   if (userId === session.user.id) return NextResponse.json({ error: "Delete your own account from Account settings" }, { status: 400 });
+  // Sign the account out and block it first, so no new conversation starts during cleanup.
+  const [target] = await db
+    .update(user)
+    .set({ accessStatus: "suspended", updatedAt: new Date() })
+    .where(eq(user.id, userId))
+    .returning({ id: user.id });
+  if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
+  await db.delete(sessionTable).where(eq(sessionTable.userId, userId));
   try {
     await deleteBackendThreads(userId);
   } catch (e) {

@@ -36,6 +36,7 @@ export function UserAdmin() {
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [guests, setGuests] = useState(0);
   const [pendingCount, setPendingCount] = useState(0);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const seq = useRef(0);
 
   const load = useCallback(async () => {
@@ -52,10 +53,18 @@ export function UserAdmin() {
       setUsers(r.users);
       setGuests(r.guests);
       setPendingCount(pending.users.length);
+      setLoadError(null);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Couldn't load users");
+      if (id === seq.current) setLoadError(e instanceof Error ? e.message : "Couldn't load users");
     }
   }, [query, filter]);
+
+  // Refreshes after a change use the search and filter current at that time, not when the change started.
+  const loadRef = useRef(load);
+  useEffect(() => {
+    loadRef.current = load;
+  });
+  const reload = () => loadRef.current();
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -66,7 +75,7 @@ export function UserAdmin() {
     try {
       await api(`/api/admin/users/${user.id}`, { method: "PATCH", body: JSON.stringify(change) });
       toast.success(done);
-      load();
+      reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't update");
     }
@@ -83,7 +92,7 @@ export function UserAdmin() {
     try {
       await api(`/api/admin/users/${user.id}`, { method: "DELETE" });
       toast.success(`Deleted ${user.email}`);
-      load();
+      reload();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't delete");
     }
@@ -118,7 +127,12 @@ export function UserAdmin() {
           ))}
         </div>
       </div>
-      {users === null ? (
+      {loadError && users === null ? (
+        <div className="flex items-center gap-3 px-5 py-6 text-sm">
+          <span className="text-red-600 dark:text-red-400">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={reload}>Try again</Button>
+        </div>
+      ) : users === null ? (
         <div className="px-5 py-6"><Loader2 className="size-5 animate-spin text-muted-foreground" /></div>
       ) : users.length === 0 ? (
         <p className="px-5 py-6 text-sm text-muted-foreground">No accounts match.</p>

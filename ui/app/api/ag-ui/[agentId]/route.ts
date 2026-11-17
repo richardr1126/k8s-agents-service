@@ -50,7 +50,10 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentI
   if (requested && settings.enabledModels.length && !settings.enabledModels.includes(requested)) {
     return NextResponse.json({ error: "That model is not offered" }, { status: 400 });
   }
-  const model = requested ?? settings.defaultModel ?? undefined;
+  // The default may predate the offered list; then the first offered model stands in for it.
+  const offered = (m: string | undefined) => !settings.enabledModels.length || (m !== undefined && settings.enabledModels.includes(m));
+  const fallback = settings.defaultModel ?? undefined;
+  const model = requested ?? (offered(fallback) ? fallback : settings.enabledModels[0]);
   const input = (await req.json()) as RunInput;
   if (typeof input.threadId !== "string" || !input.threadId) {
     return NextResponse.json({ error: "threadId is required" }, { status: 400 });

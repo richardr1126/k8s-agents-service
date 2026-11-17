@@ -16,7 +16,7 @@ def _text(message: BaseMessage) -> str:
     content = message.content
     if isinstance(content, str):
         return content
-    return "".join(part.get("text", "") for part in content if isinstance(part, dict))
+    return "".join(part if isinstance(part, str) else part.get("text", "") for part in content if isinstance(part, (str, dict)))
 
 
 def _messages(values: Any) -> list[BaseMessage]:

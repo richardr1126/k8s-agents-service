@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { eq, inArray } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { cache } from "react";
 import { db } from "@/db";
 import { adminSettings } from "@/db/schema";
@@ -19,6 +19,8 @@ export type SettingsSnapshot = { values: Settings; sources: Record<SettingKey, S
 /** Internal keys in admin_settings that are not admin settings. */
 const ACCOUNT_EMAIL = "accountEmail";
 export const INITIAL_ADMIN_MARKER = "initialAdminBootstrapped";
+/** Keys the seed has filled in before; they are never seeded again. */
+const SEEDED_KEYS = "seededKeys";
 const KEY_PURPOSE = "resend-api-key";
 
 /**
@@ -150,8 +152,9 @@ async function readSeedText(): Promise<string | null> {
 
 /**
  * Fills in settings from RUNTIME_SEED_JSON (or the file at RUNTIME_SEED_JSON_PATH).
- * Only keys with no stored value are written, so admin changes always win and
- * restarting with the same seed changes nothing.
+ * Each key is seeded at most once per database: a key with a stored value, or
+ * one seeded before and since reset or removed by an admin, is left alone. So
+ * admin changes always win and restarting with the same seed changes nothing.
  */
 export async function applySeed(): Promise<void> {
   const text = await readSeedText();
@@ -168,10 +171,24 @@ export async function applySeed(): Promise<void> {
     rows.push({ key: ACCOUNT_EMAIL, value: storeEmail(seed.accountEmail), source: "json-seed" });
   }
   if (rows.length === 0) return;
-  const written = await db
-    .insert(adminSettings)
-    .values(rows)
-    .onConflictDoNothing({ target: adminSettings.key })
-    .returning({ key: adminSettings.key });
+  const written = await db.transaction(async (tx) => {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('runtime-seed'))`);
+    const [marker] = await tx.select().from(adminSettings).where(eq(adminSettings.key, SEEDED_KEYS));
+    const seeded = new Set(Array.isArray(marker?.value) ? (marker.value as string[]) : []);
+    const fresh = rows.filter((row) => !seeded.has(row.key));
+    if (fresh.length === 0) return [];
+    const inserted = await tx
+      .insert(adminSettings)
+      .values(fresh)
+      .onConflictDoNothing({ target: adminSettings.key })
+      .returning({ key: adminSettings.key });
+    // Keys that already had a value count as seeded too: the admin's value stands.
+    const value = [...new Set([...seeded, ...fresh.map((r) => r.key)])];
+    await tx
+      .insert(adminSettings)
+      .values({ key: SEEDED_KEYS, value, source: "system" })
+      .onConflictDoUpdate({ target: adminSettings.key, set: { value, updatedAt: new Date() } });
+    return inserted;
+  });
   if (written.length) console.log(`Seeded admin settings: ${written.map((r) => r.key).join(", ")}`);
 }

@@ -49,8 +49,16 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState("");
   const settledRef = useRef(false);
+  const requestRef = useRef<Request | null>(null);
 
   const show = useCallback((next: Request) => {
+    // A dialog opened over another cancels the first, so its caller isn't left waiting.
+    const previous = requestRef.current;
+    if (previous && !settledRef.current) {
+      if (previous.kind === "confirm") previous.resolve(false);
+      else previous.resolve(null);
+    }
+    requestRef.current = next;
     settledRef.current = false;
     setValue(next.kind === "prompt" ? (next.defaultValue ?? "") : "");
     setRequest(next);

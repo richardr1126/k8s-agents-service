@@ -1,12 +1,14 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { APIError } from "better-auth/api";
+import { verifyPassword } from "better-auth/crypto";
 import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { baseUrl } from "@/lib/base-url";
+import { bootstrapPassword } from "@/lib/bootstrap-admin";
 import { actionEmail, sendMail } from "@/lib/email";
 import { getMailer, getSettings } from "@/lib/settings/store";
 import { deleteBackendThreads } from "@/lib/user-data";
@@ -131,6 +133,13 @@ function buildAuth({ email }: AuthConfig) {
           after: async (account, ctx) => {
             if (!ctx || account.providerId !== "credential") return;
             if (ctx.path !== "/change-password" && ctx.path !== "/reset-password") return;
+            // Setting the same password again doesn't count as replacing it.
+            const envPassword = await bootstrapPassword().catch(() => null);
+            const [row] = await db
+              .select({ password: schema.account.password })
+              .from(schema.account)
+              .where(eq(schema.account.id, account.id));
+            if (envPassword && row?.password && (await verifyPassword({ hash: row.password, password: envPassword }))) return;
             const promoted = await db
               .update(schema.user)
               .set({ isAdmin: true, adminSource: "managed", updatedAt: new Date() })

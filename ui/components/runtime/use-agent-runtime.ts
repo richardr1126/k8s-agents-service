@@ -3,6 +3,7 @@
 import { HttpAgent } from "@ag-ui/client";
 import { useAgUiRuntime, type AgUiAssistantRuntime, type UseAgUiThreadListAdapter } from "@assistant-ui/react-ag-ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
 import { historyToThreadMessages } from "@/lib/agui-history";
 import type { History, ThreadRow } from "@/lib/types";
 
@@ -147,14 +148,33 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
     if (threads[0]) void runtime.threads.switchToThread(threads[0].id);
   }, [threads, runtime]);
 
-  /** Drops the message and everything after it, then reloads the thread. Resolves the message's text. */
+  const threadIdRef = useRef(threadId);
+  useEffect(() => {
+    threadIdRef.current = threadId;
+  });
+
+  /**
+   * Drops the message and everything after it, then reloads the thread.
+   * Resolves the message's text, whether this thread is still open, and
+   * whether the transcript was reloaded. A failed reload never repeats the revert.
+   */
   const revert = useCallback(
     async (messageId: string) => {
-      const text = await revertThread(threadId, messageId);
-      const messages = await loadHistory(threadId);
-      runtimeRef.current?.thread.reset(messages);
+      const origin = threadId;
+      const text = await revertThread(origin, messageId);
+      const open = () => threadIdRef.current === origin;
+      let synced = false;
+      try {
+        const messages = await loadHistory(origin);
+        if (open()) {
+          runtimeRef.current?.thread.reset(messages);
+          synced = true;
+        }
+      } catch {
+        toast.error("Reverted, but the conversation didn't reload. Reopen it to see the change.");
+      }
       void refreshThreads();
-      return text;
+      return { text, open: open(), synced };
     },
     [threadId, refreshThreads],
   );
@@ -162,7 +182,9 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
   /** Reverts to before the message and puts its text back in the composer. */
   const undo = useCallback(
     async (messageId: string) => {
-      const text = await revert(messageId);
+      const { text, open } = await revert(messageId);
+      // Another conversation was opened meanwhile; leave its composer alone.
+      if (!open) return;
       runtimeRef.current?.thread.composer.setText(text);
       // Focus once the composer has the text, with the caret at the end.
       setTimeout(() => {
@@ -177,8 +199,8 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
   /** Reverts to before the message and sends it again, for a fresh answer. */
   const regenerate = useCallback(
     async (messageId: string) => {
-      const text = await revert(messageId);
-      runtimeRef.current?.thread.append({ role: "user", content: [{ type: "text", text }] });
+      const { text, open, synced } = await revert(messageId);
+      if (open && synced) runtimeRef.current?.thread.append({ role: "user", content: [{ type: "text", text }] });
     },
     [revert],
   );

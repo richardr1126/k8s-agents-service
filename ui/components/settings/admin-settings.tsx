@@ -177,10 +177,15 @@ export function ModelSettings() {
   const [error, setError] = useState<string | null>(null);
   const [enabled, setEnabled] = useState<string[]>(values.enabledModels);
   const [titleModel, setTitleModel] = useState(values.titleModel);
-  const [synced, setSynced] = useState(values);
-  if (synced !== values) {
-    setSynced(values);
+  // Each draft follows only its own saved value, so saving one setting keeps the other's unsaved edits.
+  const [syncedEnabled, setSyncedEnabled] = useState(values.enabledModels);
+  if (syncedEnabled !== values.enabledModels) {
+    setSyncedEnabled(values.enabledModels);
     setEnabled(values.enabledModels);
+  }
+  const [syncedTitle, setSyncedTitle] = useState(values.titleModel);
+  if (syncedTitle !== values.titleModel) {
+    setSyncedTitle(values.titleModel);
     setTitleModel(values.titleModel);
   }
 

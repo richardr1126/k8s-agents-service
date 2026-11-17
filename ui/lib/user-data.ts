@@ -13,6 +13,8 @@ export async function deleteBackendThreads(userId: string): Promise<void> {
     rows.map(async ({ id }) => {
       const res = await backendFetch("/thread", { method: "DELETE", body: JSON.stringify({ thread_id: id }) });
       if (!res.ok) throw new Error(`thread ${id}: ${res.status}`);
+      // Gone in the backend, so a retry after a partial failure skips it.
+      await db.delete(threads).where(eq(threads.id, id));
     }),
   );
   const failed = results.filter((r) => r.status === "rejected");
