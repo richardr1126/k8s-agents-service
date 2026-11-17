@@ -20,6 +20,8 @@ type PromptOptions = {
   placeholder?: string;
   confirmLabel?: string;
   maxLength?: number;
+  destructive?: boolean;
+  inputType?: "text" | "password";
 };
 
 type Request =
@@ -68,7 +70,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
     if (!request || settledRef.current) return;
     settledRef.current = true;
     if (request.kind === "confirm") request.resolve(accepted);
-    else request.resolve(accepted && value.trim() ? value.trim() : null);
+    else request.resolve(accepted && value.trim() ? (request.inputType === "password" ? value : value.trim()) : null);
     setOpen(false);
   };
 
@@ -98,6 +100,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
                   autoFocus
                   value={value}
                   onChange={(e) => setValue(e.target.value)}
+                  type={request.inputType ?? "text"}
                   placeholder={request.placeholder}
                   maxLength={request.maxLength}
                   onFocus={(e) => e.currentTarget.select()}
@@ -110,7 +113,7 @@ export function DialogsProvider({ children }: { children: ReactNode }) {
                 <Button
                   type="submit"
                   autoFocus={request.kind === "confirm"}
-                  variant={request.kind === "confirm" && request.destructive ? "destructive" : "default"}
+                  variant={request.destructive ? "destructive" : "default"}
                   disabled={request.kind === "prompt" && !value.trim()}
                 >
                   {request.confirmLabel ?? (request.kind === "confirm" ? "Confirm" : "Save")}

@@ -9,6 +9,7 @@ import * as schema from "@/db/schema";
 import { baseUrl } from "@/lib/base-url";
 import { actionEmail, sendMail } from "@/lib/email";
 import { getMailer, getSettings } from "@/lib/settings/store";
+import { deleteBackendThreads } from "@/lib/user-data";
 
 /** Whether GitHub sign-in is configured; the sign-in page shows the button only then. */
 export const githubSignIn = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
@@ -82,7 +83,8 @@ function buildAuth({ email }: AuthConfig) {
         runLimitExempt: { type: "boolean", defaultValue: false, input: false },
       },
       ...(email && { changeEmail: { enabled: true } }),
-      deleteUser: { enabled: true },
+      // Conversations in the agent service go first; the rows here cascade with the user.
+      deleteUser: { enabled: true, beforeDelete: async (user) => deleteBackendThreads(user.id) },
     },
     session: {
       expiresIn: 60 * 60 * 24 * 7,

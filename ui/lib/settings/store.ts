@@ -92,16 +92,25 @@ async function readAccountEmail(): Promise<{ stored: StoredAccountEmail; source:
 export const getAccountEmail = cache(async (): Promise<AccountEmailConfig | null> => {
   const found = await readAccountEmail();
   if (!found) return null;
-  const { apiKey: _, ...rest } = found.stored;
-  return { ...rest, source: found.source };
+  const { enabled, senderName, senderEmail, replyTo, apiKeyLast4 } = found.stored;
+  return { enabled, senderName, senderEmail, replyTo, apiKeyLast4, source: found.source };
 });
 
 /** Everything needed to send, or null when account email is off or unusable. */
 export const getMailer = cache(async () => {
   const found = await readAccountEmail();
   if (!found?.stored.enabled) return null;
+  return unsealMailer(found.stored);
+});
+
+/** The saved config's key even while account email is off, for the admin's test button. */
+export async function getMailerForTest() {
+  const found = await readAccountEmail();
+  return found ? unsealMailer(found.stored) : null;
+}
+
+function unsealMailer(stored: StoredAccountEmail) {
   try {
-    const { stored } = found;
     return {
       apiKey: unseal(stored.apiKey, KEY_PURPOSE),
       from: `${stored.senderName} <${stored.senderEmail}>`,
@@ -111,7 +120,7 @@ export const getMailer = cache(async () => {
     console.error("Could not read the Resend API key; was BETTER_AUTH_SECRET changed?", error);
     return null;
   }
-});
+}
 
 /** Saves the config. Without `apiKey`, the saved key is kept. */
 export async function saveAccountEmail(input: AccountEmailInput): Promise<void> {
