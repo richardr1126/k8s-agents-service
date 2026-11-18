@@ -28,7 +28,7 @@ class Agent:
 agents: dict[str, Agent] = {
     "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
     "auto-router": Agent(
-        description="Hello! I'm an agent that routes between a resume assistant and a web research assistant.",
+        description="Hello! I'm an agent that routes between a resume assistant and a web research assistant. Ask follow-ups any time; they pick up where they left off.",
         graph=main_agent,
     ),
     "resume-agent": Agent(
