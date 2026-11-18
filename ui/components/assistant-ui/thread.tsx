@@ -11,17 +11,13 @@ import { motion } from "framer-motion";
 import {
   AlertCircle,
   ArrowDownIcon,
-  CalculatorIcon,
   CheckIcon,
   ChevronDownIcon,
-  CloudIcon,
   CopyIcon,
   RefreshCwIcon,
-  SearchIcon,
   SendHorizontalIcon,
   Square,
   Undo2Icon,
-  WrenchIcon,
 } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useMemo, useState } from "react";
@@ -40,7 +36,7 @@ import { cn } from "@/lib/utils";
 import agentSuggestions from "./agent-suggestions.json";
 import { MarkdownText } from "./markdown-text";
 import { ReasoningPart } from "./reasoning";
-import { ToolFallback } from "./tool-fallback";
+import { getToolDisplayName, getToolIcon, toolSpacing, ToolRow } from "./tool-fallback";
 import { WorkingIndicator } from "./working-indicator";
 
 const MAX_CHARACTERS = 560;
@@ -384,30 +380,11 @@ const MessageError: FC = () => {
   );
 };
 
-const ToolFallbackWrapper: FC<React.ComponentProps<typeof ToolFallback>> = (props) => {
-  return (
-    <div className="mb-3">
-      <ToolFallback {...props} />
-    </div>
-  );
-};
-
-const getGroupToolIcon = (toolName: string) => {
-  const name = toolName.toLowerCase();
-  if (name.includes("search") || name.includes("web")) {
-    return <SearchIcon className="h-3.5 w-3.5 text-blue-500 dark:text-blue-400" />;
-  }
-  if (name.includes("calculator") || name.includes("math")) {
-    return <CalculatorIcon className="h-3.5 w-3.5 text-green-500 dark:text-green-400" />;
-  }
-  if (name.includes("weather") || name.includes("climate")) {
-    return <CloudIcon className="h-3.5 w-3.5 text-cyan-500 dark:text-cyan-400" />;
-  }
-  return <WrenchIcon className="h-3.5 w-3.5 text-orange-500 dark:text-orange-400" />;
-};
-
-const getGroupToolDisplayName = (toolName: string) =>
-  toolName.replace(/[_-]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
+const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (props) => (
+  <div data-tool className={cn(toolSpacing, "mb-2")}>
+    <SubagentToolCard {...props} />
+  </div>
+);
 
 const ParallelToolGroup: FC<
   React.PropsWithChildren<{ startIndex: number; endIndex: number }>
@@ -439,34 +416,29 @@ const ParallelToolGroup: FC<
   }));
 
   return (
-    <details className="mb-3 overflow-hidden rounded-lg border border-border/50 bg-muted/20">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-1.5 px-2.5 py-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
+    <details data-tool className={cn("group/tools rounded-md border border-border/60 text-sm open:border-border", toolSpacing)}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1 [&::-webkit-details-marker]:hidden">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
           {groupTools.map((tool) => (
-            <span
-              key={tool.key}
-              className="inline-flex items-center gap-1 rounded-md border border-border/50 bg-background/70 px-2 py-1 text-xs font-normal text-foreground leading-none"
-            >
-              {getGroupToolIcon(tool.name)}
-              <span>{getGroupToolDisplayName(tool.name)}</span>
+            <span key={tool.key} className="inline-flex items-center gap-1.5 font-medium">
+              {getToolIcon(tool.name)}
+              {getToolDisplayName(tool.name)}
             </span>
           ))}
         </div>
-        <div className="shrink-0 flex items-center">
-          {isRunning ? (
-            <Spinner className="text-muted-foreground" />
-          ) : (
-            <ChevronDownIcon className="h-4 w-4 text-muted-foreground transition-transform [&::-webkit-details-marker]:hidden [&_details[open]_&]:rotate-180" />
-          )}
-        </div>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {completedCount}/{toolParts.length}
+        </span>
+        {isRunning ? (
+          <Spinner className="size-3.5 text-muted-foreground" />
+        ) : (
+          <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform duration-300 group-open/tools:rotate-180" />
+        )}
       </summary>
-      <div className="space-y-1.5 border-t border-border/40 p-2.5">
-        {children}
-      </div>
+      <div className="space-y-1 border-t border-dashed border-border/70 p-1.5 [&_[data-tool]]:mb-0">{children}</div>
     </details>
   );
 };
-
 
 const AssistantMessage: FC = () => {
   const hasBody = useAuiState((s) =>
@@ -493,7 +465,7 @@ const AssistantMessage: FC = () => {
             components={{
               Text: MarkdownText,
               Reasoning: ReasoningPart,
-              tools: { by_name: { task: SubagentToolCard }, Fallback: ToolFallbackWrapper },
+              tools: { by_name: { task: SubagentWrapper }, Fallback: ToolRow },
               ToolGroup: ParallelToolGroup,
             }}
           />
@@ -622,10 +594,13 @@ const UndoAction: FC = () => {
 
 const UserActionBar: FC = () => (
   <ActionBarPrimitive.Root
-    hideWhenRunning
-    autohide="always"
-    // aui-user-action-bar-root
-    className="text-muted-foreground col-start-2 row-start-2 mt-1 flex justify-end gap-1"
+    autohide="never"
+    // aui-user-action-bar-root: always shown, small until the message is hovered or focused
+    className={cn(
+      "text-muted-foreground col-start-2 row-start-2 mt-0.5 flex origin-top-right justify-end gap-1",
+      "scale-75 opacity-60 transition-[scale,opacity] duration-200 ease-out motion-reduce:transition-none",
+      "group-hover/user:scale-100 group-hover/user:opacity-100 focus-within:scale-100 focus-within:opacity-100",
+    )}
   >
     <CopyAction />
     <UndoAction />
@@ -637,7 +612,7 @@ const UserMessage: FC = () => {
     <MessagePrimitive.Root asChild>
       <motion.div
         // aui-user-message-root
-        className="mx-auto grid w-full max-w-[var(--thread-max-width)] auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-1 px-[var(--thread-padding-x)] py-4 [&:where(>*)]:col-start-2"
+        className="group/user mx-auto grid w-full max-w-[var(--thread-max-width)] auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-1 px-[var(--thread-padding-x)] py-4 [&:where(>*)]:col-start-2"
         initial={{ y: 5, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         data-role="user"

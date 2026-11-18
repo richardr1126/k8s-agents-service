@@ -5,6 +5,9 @@
 
 @theme inline {
   --color-background: var(--background);
+  --color-subagent: var(--subagent);
+  --color-subagent-border: var(--subagent-border);
+  --color-subagent-accent: var(--subagent-accent);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
@@ -76,6 +79,9 @@
   --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
   --sidebar-border: oklch(0.92 0.004 286.32);
   --sidebar-ring: oklch(0.705 0.015 286.067);
+  --subagent: oklch(0.975 0.012 285);
+  --subagent-border: oklch(0.89 0.035 285);
+  --subagent-accent: oklch(0.55 0.17 285);
 }
 
 .dark {
@@ -110,6 +116,9 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.552 0.016 285.938);
+  --subagent: oklch(0.2 0.022 285);
+  --subagent-border: oklch(0.32 0.045 285);
+  --subagent-accent: oklch(0.74 0.12 285);
 }
 
 @layer base {

@@ -1,46 +1,23 @@
-import { ToolCallMessagePartComponent } from "@assistant-ui/react";
-import { ChevronDownIcon, ChevronUpIcon, WrenchIcon, SearchIcon, CalculatorIcon, CloudIcon } from "lucide-react";
+import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
+import { CalculatorIcon, ChevronDownIcon, CloudIcon, SearchIcon, WrenchIcon } from "lucide-react";
 import { useState } from "react";
-import { Button } from "../ui/button";
-import { MarkdownString } from "./markdown-string";
+import { Fold } from "@/components/ui/fold";
+import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { Spinner } from "../ui/spinner";
-import { useContainerBreakpoint } from "@/hooks/use-container-breakpoint";
+import { MarkdownString } from "./markdown-string";
 
-const getToolIcon = (toolName: string) => {
+export const getToolIcon = (toolName: string, className?: string) => {
   const name = toolName.toLowerCase();
-  if (name.includes("search") || name.includes("web")) {
-    return <SearchIcon className="h-4 w-4 text-blue-500 dark:text-blue-400" />;
-  }
-  if (name.includes("calculator") || name.includes("math")) {
-    return <CalculatorIcon className="h-4 w-4 text-green-500 dark:text-green-400" />;
-  }
-  if (name.includes("weather") || name.includes("climate")) {
-    return <CloudIcon className="h-4 w-4 text-cyan-500 dark:text-cyan-400" />;
-  }
-  return <WrenchIcon className="h-4 w-4 text-orange-500 dark:text-orange-400" />;
+  const cls = cn("size-3.5 shrink-0", className);
+  if (name.includes("search") || name.includes("web")) return <SearchIcon className={cn(cls, "text-blue-500 dark:text-blue-400")} />;
+  if (name.includes("calculator") || name.includes("math"))
+    return <CalculatorIcon className={cn(cls, "text-green-500 dark:text-green-400")} />;
+  if (name.includes("weather") || name.includes("climate")) return <CloudIcon className={cn(cls, "text-cyan-500 dark:text-cyan-400")} />;
+  return <WrenchIcon className={cn(cls, "text-orange-500 dark:text-orange-400")} />;
 };
 
-const getToolBorderColor = (toolName: string) => {
-  const name = toolName.toLowerCase();
-  if (name.includes("search") || name.includes("web")) {
-    return "border-l-blue-500";
-  }
-  if (name.includes("calculator") || name.includes("math")) {
-    return "border-l-green-500";
-  }
-  if (name.includes("weather") || name.includes("climate")) {
-    return "border-l-cyan-500";
-  }
-  return "border-l-orange-500";
-};
-
-const getToolDisplayName = (toolName: string) => {
-  // Convert snake_case and kebab-case to Title Case
-  return toolName
-    .replace(/[_-]/g, " ")
-    .replace(/\b\w/g, l => l.toUpperCase());
-};
+export const getToolDisplayName = (toolName: string) =>
+  toolName.replace(/[_-]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase());
 
 const isSearchTool = (toolName: string) => {
   const name = toolName.toLowerCase();
@@ -51,19 +28,14 @@ const extractSearchQuery = (argsText?: string): string | null => {
   if (!argsText) return null;
   try {
     const parsed = JSON.parse(argsText) as Record<string, unknown>;
-    const directQuery = parsed.query;
-    if (typeof directQuery === "string" && directQuery.trim()) return directQuery.trim();
-
-    const directQ = parsed.q;
-    if (typeof directQ === "string" && directQ.trim()) return directQ.trim();
-
+    for (const key of ["query", "q"]) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
     const searchQuery = parsed.search_query;
-    if (Array.isArray(searchQuery)) {
-      const first = searchQuery[0];
-      if (first && typeof first === "object") {
-        const q = (first as Record<string, unknown>).q;
-        if (typeof q === "string" && q.trim()) return q.trim();
-      }
+    if (Array.isArray(searchQuery) && searchQuery[0] && typeof searchQuery[0] === "object") {
+      const q = (searchQuery[0] as Record<string, unknown>).q;
+      if (typeof q === "string" && q.trim()) return q.trim();
     }
   } catch {
     return null;
@@ -71,135 +43,71 @@ const extractSearchQuery = (argsText?: string): string | null => {
   return null;
 };
 
-export const ToolFallback: ToolCallMessagePartComponent = (props) => {
-  const { toolName, argsText, result } = props;
-  const [isCollapsed, setIsCollapsed] = useState(true);
-  const hasDetails = Boolean(argsText || result !== undefined);
-  const isLoading = result === undefined;
-  const searchQuery = isSearchTool(toolName) ? extractSearchQuery(argsText) : null;
-  const { containerRef, isNarrow } = useContainerBreakpoint<HTMLDivElement>(560);
-  const hasSecondaryHeaderLine = Boolean(searchQuery || (!searchQuery && !isCollapsed));
-  const useTopAlignedHeader = isNarrow && hasSecondaryHeaderLine;
+const formatResult = (result: unknown) => (typeof result === "string" ? result : JSON.stringify(result, null, 2));
 
-  const formatResult = (result: unknown) => {
-    if (typeof result === "string") {
-      return result;
-    }
-    return JSON.stringify(result, null, 2);
-  };
+/** One tool call as a slim outlined row; opens to show its arguments and result. */
+export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result }) => {
+  const [open, setOpen] = useState(false);
+  const isLoading = result === undefined;
+  const hasDetails = Boolean(argsText || !isLoading);
+  const searchQuery = isSearchTool(toolName) ? extractSearchQuery(argsText) : null;
 
   return (
-    <div ref={containerRef} className={cn(
-      "w-full overflow-hidden rounded-lg border border-border/50 bg-gradient-to-br from-background via-background to-muted/20 shadow-sm",
-      "border-l-4",
-      getToolBorderColor(toolName)
-    )}>
-      <div className={cn(
-        "bg-muted/30 px-2.5",
-        isCollapsed ? "py-1.5" : "border-b border-border/30 py-1.5"
-      )}>
-        <div className={cn("flex min-w-0 gap-1.5", useTopAlignedHeader ? "items-start" : "items-center")}>
-          <div className={cn(
-            "flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10",
-            useTopAlignedHeader ? "mt-0.5" : "mt-0",
-          )}>
-            {getToolIcon(toolName)}
-          </div>
-
-          <div className="min-w-0 flex-1">
-            {searchQuery ? (
-              <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-sm leading-snug">
-                <span className="font-medium text-foreground">{getToolDisplayName(toolName)}</span>
-                <span className="max-w-full break-words rounded bg-muted/40 px-1 py-0 text-[11px] text-muted-foreground">
-                  {searchQuery}
-                </span>
-              </div>
-            ) : (
-              <h4 className="break-words text-sm font-medium text-foreground sm:truncate">
-                {getToolDisplayName(toolName)}
-              </h4>
-            )}
-            {!searchQuery && !isCollapsed && (
-              <p className="mt-0.5 break-words text-xs text-muted-foreground">
-                ReAct agentic tool execution {result !== undefined ? 'completed' : 'in progress'}
-              </p>
-            )}
-          </div>
-
-          <div className={cn("shrink-0 items-center gap-0.5", isNarrow ? "hidden" : "flex")}>
-            {isLoading ? (
-              <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-                <Spinner className="text-muted-foreground" />
-              </div>
-            ) : hasDetails ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="h-5 w-5 p-0 hover:bg-muted/50"
-              >
-                {isCollapsed ? (
-                  <ChevronDownIcon className="h-3.5 w-3.5" />
-                ) : (
-                  <ChevronUpIcon className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            ) : null}
-          </div>
-        </div>
-
-        <div className={cn(
-          "mt-0 w-full items-center justify-end gap-0.5",
-          isNarrow ? "flex" : "hidden",
-        )}>
+    <div
+      className={cn(
+        "rounded-md border text-sm transition-colors",
+        open ? "border-border" : "border-border/60 hover:border-border",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        disabled={!hasDetails}
+        aria-expanded={open}
+        className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left"
+      >
+        {getToolIcon(toolName)}
+        <span className="shrink-0 font-medium">{getToolDisplayName(toolName)}</span>
+        {searchQuery && <span className="min-w-0 truncate text-xs text-muted-foreground">{searchQuery}</span>}
+        <span className="ml-auto flex shrink-0 items-center pl-1 text-muted-foreground">
           {isLoading ? (
-            <div className="flex h-5 w-5 shrink-0 items-center justify-center">
-              <Spinner className="text-muted-foreground" />
-            </div>
-          ) : hasDetails ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setIsCollapsed(!isCollapsed)}
-              className="h-5 w-5 p-0 hover:bg-muted/50"
-            >
-              {isCollapsed ? (
-                <ChevronDownIcon className="h-3.5 w-3.5" />
-              ) : (
-                <ChevronUpIcon className="h-3.5 w-3.5" />
-              )}
-            </Button>
-          ) : null}
-        </div>
-      </div>
-      
-      {!isCollapsed && hasDetails && (
-        <div className="divide-y divide-border/30">
-          {argsText && (
-            <div className="p-3">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Arguments
-              </p>
-              <div className="rounded-md bg-muted/50 p-2.5">
-                <pre className="overflow-x-auto whitespace-pre-wrap font-mono text-xs text-muted-foreground">
-                  {argsText}
-                </pre>
-              </div>
-            </div>
+            <Spinner className="size-3.5" />
+          ) : (
+            <ChevronDownIcon className={cn("size-3.5 transition-transform duration-300", open && "rotate-180")} />
           )}
-          
-          {result !== undefined && (
-            <div className="p-3">
-              <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                Result
-              </p>
-              <div className="max-h-72 overflow-y-auto rounded-md bg-muted/50 p-2.5">
+        </span>
+      </button>
+
+      <Fold open={open && hasDetails}>
+        <div className="space-y-2 border-t border-dashed border-border/70 px-2.5 py-2">
+          {argsText && (
+            <section>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Arguments</p>
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-muted/40 px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                {argsText}
+              </pre>
+            </section>
+          )}
+          {!isLoading && (
+            <section>
+              <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Result</p>
+              <div className="max-h-72 overflow-y-auto rounded bg-muted/40 px-2 py-1.5 text-xs">
                 <MarkdownString>{formatResult(result)}</MarkdownString>
               </div>
-            </div>
+            </section>
           )}
         </div>
-      )}
+      </Fold>
     </div>
   );
 };
+
+/** Consecutive tool calls stack tightly; the last one before text leaves room. */
+export const toolSpacing = "mb-1.5 [&:not(:has(+[data-tool]))]:mb-4";
+
+/** A tool row as a message part, spaced against its neighbours. */
+export const ToolRow: ToolCallMessagePartComponent = (props) => (
+  <div data-tool className={toolSpacing}>
+    <ToolFallback {...props} />
+  </div>
+);
