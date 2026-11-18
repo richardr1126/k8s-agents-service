@@ -1,9 +1,10 @@
 """Shared state and execution helpers for tool-loop style agents."""
 
+from collections.abc import Callable
 from typing import Any, Literal, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnableSerializable
 from langchain_core.tools import BaseTool
 from langgraph.graph import END, MessagesState
@@ -29,18 +30,23 @@ def wrap_tool_loop_model(
     prompt: str,
     bind_tools: bool = True,
     normalize_replay_messages: bool = False,
+    prepare_messages: Callable[[list[BaseMessage]], list[BaseMessage]] | None = None,
 ) -> RunnableSerializable[ToolLoopState, AIMessage]:
-    """Build a model runnable with a dynamic system prompt and optional tool binding."""
+    """Build a model runnable with a dynamic system prompt and optional tool binding.
+
+    `prepare_messages` rewrites what the model sees without touching stored state.
+    """
     model_runnable = model.bind_tools(tools) if bind_tools else model
-    preprocessor = RunnableLambda(
-        lambda state: [SystemMessage(content=prompt_with_compaction_summary(prompt, state))]
-        + (
-            normalize_messages_for_replay(state["messages"])
-            if normalize_replay_messages
-            else state["messages"]
-        ),
-        name="StateModifier",
-    )
+
+    def model_input(state: ToolLoopState) -> list[BaseMessage]:
+        messages = list(state["messages"])
+        if normalize_replay_messages:
+            messages = normalize_messages_for_replay(messages)
+        if prepare_messages:
+            messages = prepare_messages(messages)
+        return [SystemMessage(content=prompt_with_compaction_summary(prompt, state)), *messages]
+
+    preprocessor = RunnableLambda(model_input, name="StateModifier")
     return preprocessor | model_runnable  # type: ignore[return-value]
 
 

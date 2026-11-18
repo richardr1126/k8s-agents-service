@@ -16,8 +16,12 @@ class SubagentArtifact(BaseModel):
     description: str
     status: Literal["success", "error"] = "success"
     error: str | None = None
+    thread_id: str | None = Field(
+        default=None,
+        description="Sub-agent conversation this run belongs to; runs sharing one continue it",
+    )
     messages: list[dict[str, Any]] = Field(
-        default_factory=list, description="langchain messages_to_dict output"
+        default_factory=list, description="langchain messages_to_dict output, this run's own"
     )
 
 

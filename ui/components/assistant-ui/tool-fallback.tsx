@@ -55,8 +55,10 @@ export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText,
   return (
     <div
       className={cn(
-        "rounded-md border text-sm transition-colors",
-        open ? "border-border" : "border-border/60 hover:border-border",
+        "overflow-hidden rounded-md border border-border/70 text-sm",
+        // Back-to-back rows join into one stacked list.
+        "[[data-tool-row]:has(+[data-tool-row])>&]:rounded-b-none",
+        "[[data-tool-row]+[data-tool-row]>&]:rounded-t-none [[data-tool-row]+[data-tool-row]>&]:border-t-0",
       )}
     >
       <button
@@ -64,7 +66,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText,
         onClick={() => setOpen(!open)}
         disabled={!hasDetails}
         aria-expanded={open}
-        className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left"
+        className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left transition-colors enabled:hover:bg-muted/40"
       >
         {getToolIcon(toolName)}
         <span className="shrink-0 font-medium">{getToolDisplayName(toolName)}</span>
@@ -105,9 +107,13 @@ export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText,
 /** Consecutive tool calls stack tightly; the last one before text leaves room. */
 export const toolSpacing = "mb-1.5 [&:not(:has(+[data-tool]))]:mb-4";
 
-/** A tool row as a message part, spaced against its neighbours. */
+/** A tool row as a message part: joined to neighbouring rows, spaced from anything else. */
 export const ToolRow: ToolCallMessagePartComponent = (props) => (
-  <div data-tool className={toolSpacing}>
+  <div
+    data-tool
+    data-tool-row
+    className="mb-4 [&:has(+[data-tool-row])]:mb-0 [&:has(+[data-tool]:not([data-tool-row]))]:mb-1.5"
+  >
     <ToolFallback {...props} />
   </div>
 );

@@ -435,7 +435,7 @@ const ParallelToolGroup: FC<
           <ChevronDownIcon className="size-3.5 text-muted-foreground transition-transform duration-300 group-open/tools:rotate-180" />
         )}
       </summary>
-      <div className="space-y-1 border-t border-dashed border-border/70 p-1.5 [&_[data-tool]]:mb-0">{children}</div>
+      <div className="border-t border-dashed border-border/70 p-1.5 [&_[data-tool]]:mb-0">{children}</div>
     </details>
   );
 };

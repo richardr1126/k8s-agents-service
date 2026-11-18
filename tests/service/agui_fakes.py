@@ -96,7 +96,14 @@ def main_responder(messages: list[BaseMessage]) -> AIMessage:
         ]
         return AIMessage(content="", id=f"main-dispatch-{turn}", tool_calls=calls)
     results = [str(m.content) for m in messages if isinstance(m, ToolMessage)]
-    return AIMessage(content=f"Summary: {results[-1]}", id=f"main-answer-{turn}")
+    # The router sees each result's thread id, and like a real model keeps it to itself.
+    answer, tag, thread_id = results[-1].partition("\n\n[thread_id: ")
+    if tag:
+        SEEN_THREAD_IDS.append(thread_id.rstrip("]"))
+    return AIMessage(content=f"Summary: {answer}", id=f"main-answer-{turn}")
+
+
+SEEN_THREAD_IDS: list[str] = []
 
 
 # --- a generic sub-agent: model -> tools (ToolNode) -> model ------------------

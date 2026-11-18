@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+import agui_fakes
 import httpx
 import pytest
 import pytest_asyncio
@@ -169,6 +170,7 @@ async def test_single_subagent_stream(client: httpx.AsyncClient) -> None:
     )
     parent_text = [e["delta"] for e in events[last:] if e["type"] == "TEXT_MESSAGE_CONTENT"]
     assert "".join(parent_text) == f"Summary: {WEB_ANSWER}"
+    assert agui_fakes.SEEN_THREAD_IDS[-1] == "web-1"
 
 
 async def test_parallel_task_calls(client: httpx.AsyncClient) -> None:

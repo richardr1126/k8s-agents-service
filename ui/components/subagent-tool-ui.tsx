@@ -45,7 +45,7 @@ const SubagentMessage: FC = () => (
  * The `task` tool call: one sub-agent run. Its own messages arrive nested on the
  * part (live from SUBAGENT_* events, on reload from /history) and render inside.
  */
-export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: string; subagent_type?: string }> = ({
+export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: string; subagent_type?: string; thread_id?: string }> = ({
   args,
   result,
   isError,
@@ -85,6 +85,14 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
       >
         <Icon className="size-4 shrink-0 text-subagent-accent" />
         <span className="shrink-0 text-sm font-medium">{agent.label} agent</span>
+        {args.thread_id && (
+          <span
+            title="Continues this agent's previous conversation"
+            className="shrink-0 rounded-full border border-subagent-border px-1.5 text-[10px] leading-4 text-subagent-accent"
+          >
+            follow-up
+          </span>
+        )}
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {meta.description ?? args.description}
         </span>

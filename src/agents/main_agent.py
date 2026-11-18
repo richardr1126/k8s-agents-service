@@ -6,21 +6,28 @@ itself. Each sub-agent returns its final answer to the main agent as a
 ToolMessage whose artifact keeps the sub-agent's messages for history reload.
 """
 
-from datetime import datetime
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any, Literal, cast
+from datetime import datetime
+from typing import Annotated, Any, Literal, cast
+from uuid import uuid4
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    ToolMessage,
+    messages_from_dict,
+    messages_to_dict,
+)
 from langchain_core.runnables import RunnableConfig, RunnableSerializable
 from langchain_core.runnables.config import merge_configs
 from langchain_core.tools import InjectedToolCallId, tool
 from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt import ToolNode
+from langgraph.prebuilt import InjectedState, ToolNode
 from langgraph.prebuilt.tool_node import ToolCallRequest
-from typing_extensions import Annotated
 
 from agents.compaction import CompactionManager
 from agents.configurable_model_graph import ConfigurableModelGraph
@@ -74,6 +81,7 @@ How to work:
 1. Read the user's request.
 2. Pick the most appropriate sub-agent.
 3. Call the `task` tool with a clear, specific `description` that fully captures what that sub-agent should do. The sub-agent does NOT see the user's original message — it only sees your description, so include any necessary context.
+   - Every task result ends with `[thread_id: ...]`. For a follow-up to something a sub-agent already worked on (digging deeper, a related question, "what about X?"), pass that `thread_id` with the same `subagent_type`. The sub-agent then continues that conversation, remembering what it was asked, what it found and what it answered, so your description can build on it. Omit `thread_id` to start a new thread for an unrelated task. Thread ids are for you only; never mention them to the user.
 4. When the sub-agent returns, either:
    - Pass its answer back to the user (you may quote or lightly summarize it), OR
    - If the user's question requires multiple sub-agents, dispatch the next one.
@@ -93,9 +101,64 @@ def _resolve_sub_agent(subagent_type: str) -> Any:
         return rag_assistant
     if subagent_type == "web":
         return web_rag_agent
-    raise ValueError(
-        f"Unknown subagent_type '{subagent_type}'. Must be one of: resume, web."
-    )
+    raise ValueError(f"Unknown subagent_type '{subagent_type}'. Must be one of: resume, web.")
+
+
+THREAD_TAG = "thread_id"
+
+
+def _subagent_runs(messages: list[BaseMessage]) -> list[SubagentArtifact]:
+    """Every sub-agent run recorded on the conversation's `task` results, oldest first."""
+    runs = []
+    for message in messages:
+        artifact = getattr(message, "artifact", None)
+        if (
+            isinstance(message, ToolMessage)
+            and message.name == "task"
+            and isinstance(artifact, dict)
+            and artifact.get("type") == "subagent_run"
+        ):
+            runs.append(SubagentArtifact.model_validate(artifact))
+    return runs
+
+
+def _new_thread_id(runs: list[SubagentArtifact], subagent_type: str) -> str:
+    """Short, readable ids (`web-1`, `resume-2`) that models copy back reliably."""
+    used = {r.thread_id for r in runs if r.thread_id}
+    n = 1
+    while f"{subagent_type}-{n}" in used:
+        n += 1
+    return f"{subagent_type}-{n}"
+
+
+def _thread_transcript(runs: list[SubagentArtifact], thread_id: str) -> list[BaseMessage]:
+    """The thread's earlier turns: each run's task, then what the sub-agent did and said."""
+    transcript: list[BaseMessage] = []
+    for run in runs:
+        if run.thread_id != thread_id or run.status != "success":
+            continue
+        transcript.append(HumanMessage(content=run.description))
+        transcript.extend(
+            m for m in messages_from_dict(run.messages) if not isinstance(m, HumanMessage)
+        )
+    return transcript
+
+
+def _with_thread_tag(answer: str, thread_id: str) -> str:
+    return f"{answer}\n\n[{THREAD_TAG}: {thread_id}]"
+
+
+def _tag_threads(messages: list[BaseMessage]) -> list[BaseMessage]:
+    """Show the model each task result's thread_id. Stored and streamed results stay clean."""
+    out: list[BaseMessage] = []
+    for message in messages:
+        artifact = getattr(message, "artifact", None)
+        thread_id = artifact.get("thread_id") if isinstance(artifact, dict) else None
+        if isinstance(message, ToolMessage) and message.name == "task" and thread_id:
+            text = _normalize_tool_result_content(message.content)
+            message = message.model_copy(update={"content": _with_thread_tag(text, thread_id)})
+        out.append(message)
+    return out
 
 
 class SubagentError(Exception):
@@ -133,7 +196,13 @@ async def task(
         "Which sub-agent to dispatch to: 'resume' or 'web'.",
     ],
     tool_call_id: Annotated[str, InjectedToolCallId],
+    state: Annotated[dict[str, Any], InjectedState],
     config: RunnableConfig,
+    thread_id: Annotated[
+        str | None,
+        "To follow up on an earlier task, the thread_id from the end of its result; the "
+        "sub-agent then remembers that conversation. Omit to start a new thread.",
+    ] = None,
 ) -> ToolMessage:
     """Delegate a task to a specialized sub-agent and return its final answer."""
     # The sub-agent runs inside this tool's checkpoint namespace with the parent's
@@ -143,21 +212,49 @@ async def task(
         config,
         {"metadata": {"lc_agent_name": subagent_type}, "run_name": f"subagent:{subagent_type}"},
     )
+    runs = _subagent_runs(state.get("messages", []))
+    if thread_id:
+        thread = [r for r in runs if r.thread_id == thread_id]
+        if not thread:
+            known = ", ".join(
+                sorted({f"{r.thread_id} ({r.subagent_type})" for r in runs if r.thread_id})
+            )
+            raise SubagentError(
+                f"Unknown thread_id '{thread_id}'. Known threads: {known or 'none'}. "
+                "Omit thread_id to start a new thread."
+            )
+        if thread[0].subagent_type != subagent_type:
+            raise SubagentError(
+                f"Thread '{thread_id}' belongs to the '{thread[0].subagent_type}' sub-agent, "
+                f"not '{subagent_type}'."
+            )
+        prior = _thread_transcript(runs, thread_id)
+    else:
+        thread_id = _new_thread_id(runs, subagent_type)
+        prior = []
+    for message in prior:  # ids let this run's own messages be told apart afterwards
+        message.id = message.id or str(uuid4())
     try:
         sub_agent = _resolve_sub_agent(subagent_type)
-        result = await sub_agent.ainvoke({"messages": [("user", description)]}, sub_config)
+        result = await sub_agent.ainvoke(
+            {"messages": [*prior, HumanMessage(content=description)]}, sub_config
+        )
     except GraphBubbleUp:
         raise
     except Exception as e:
         raise SubagentError(f"Sub-agent '{subagent_type}' failed: {e}") from e
 
     messages = result["messages"]
+    # Only this run's messages are stored; earlier turns live on the runs they came from.
+    seen = {m.id for m in prior if m.id}
+    own = [m for m in messages if not isinstance(m, HumanMessage) and m.id not in seen]
     return _task_result(
         tool_call_id,
         config["configurable"]["checkpoint_ns"],
         {"subagent_type": subagent_type, "description": description},
         _normalize_tool_result_content(messages[-1].content),
-        messages=messages_to_dict([m for m in messages if not isinstance(m, HumanMessage)]),
+        thread_id=thread_id,
+        messages=messages_to_dict(own),
     )
 
 
@@ -202,6 +299,7 @@ def wrap_model(
             prompt=system_prompt,
             bind_tools=bind_tools,
             normalize_replay_messages=True,
+            prepare_messages=_tag_threads,
         ),
     )
 
