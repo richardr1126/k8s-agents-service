@@ -41,6 +41,7 @@ import agentSuggestions from "./agent-suggestions.json";
 import { MarkdownText } from "./markdown-text";
 import { ReasoningPart } from "./reasoning";
 import { ToolFallback } from "./tool-fallback";
+import { WorkingIndicator } from "./working-indicator";
 
 const MAX_CHARACTERS = 560;
 
@@ -472,7 +473,9 @@ const AssistantMessage: FC = () => {
     s.message.content.some((part) => part.type !== "text" || part.text.trim().length > 0),
   );
   const hasError = useAuiState((s) => s.message.status?.type === "incomplete" && s.message.status.reason === "error");
-  if (!hasBody && !hasError) return null;
+  // The newest message of a live run, which carries the working indicator.
+  const working = useAuiState((s) => s.thread.isRunning && s.message.isLast);
+  if (!hasBody && !hasError && !working) return null;
 
   return (
     <MessagePrimitive.Root asChild>
@@ -494,6 +497,7 @@ const AssistantMessage: FC = () => {
               ToolGroup: ParallelToolGroup,
             }}
           />
+          {working && <WorkingIndicator />}
           <MessageError />
         </div>
         <AssistantActionBar />
