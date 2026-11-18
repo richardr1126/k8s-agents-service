@@ -9,17 +9,45 @@ import {
   useIsMarkdownCodeBlock,
 } from "@assistant-ui/react-markdown";
 import remarkGfm from "remark-gfm";
-import { FC, memo, useState } from "react";
+import { FC, memo, useEffect, useState } from "react";
+import { useMessagePartText } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { cn } from "@/lib/utils";
 
+/** How long the dot stays after the last new text, so it doesn't flicker between chunks. */
+const WRITING_GRACE_MS = 900;
+
+/**
+ * True while new text is still arriving for this part. The part stays "running"
+ * while the model thinks or calls tools after it, which isn't writing.
+ */
+function useWriting() {
+  const { text, status } = useMessagePartText();
+  const running = status.type === "running";
+  const [seen, setSeen] = useState(text);
+  const [writing, setWriting] = useState(false);
+  if (text !== seen) {
+    setSeen(text);
+    if (running && text) setWriting(true);
+  }
+  useEffect(() => {
+    if (!writing) return;
+    const timer = setTimeout(() => setWriting(false), WRITING_GRACE_MS);
+    return () => clearTimeout(timer);
+  }, [writing, text]);
+  return running && writing;
+}
+
 const MarkdownTextImpl = () => {
+  const writing = useWriting();
   return (
     <MarkdownTextPrimitive
       remarkPlugins={[remarkGfm]}
       className="aui-md"
+      // dot.css draws the trailing dot for data-status="running"; show it only while writing.
+      containerProps={{ "data-status": writing ? "running" : "complete" } as object}
       components={defaultComponents}
     />
   );
