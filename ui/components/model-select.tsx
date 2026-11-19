@@ -18,7 +18,11 @@ export function ModelSelect() {
       <SelectContent className="text-sm">
         {serviceInfo.models.map((model) => (
           <SelectItem key={model} value={model}>
-            <span className="truncate">{model}</span>
+            {/* The provider prefix is noise on a phone; the model name is what fits. */}
+            <span className="truncate">
+              {model.includes("/") && <span className="hidden sm:inline">{model.slice(0, model.indexOf("/") + 1)}</span>}
+              {model.slice(model.indexOf("/") + 1)}
+            </span>
           </SelectItem>
         ))}
       </SelectContent>

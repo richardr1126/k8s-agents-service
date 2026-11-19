@@ -193,3 +193,13 @@
 @media (prefers-reduced-motion: reduce) {
   .working-shimmer { animation: none; background: none; color: var(--muted-foreground); }
 }
+
+/* A placeholder that appears only if loading takes a moment, so quick loads never flash it. */
+@keyframes fade-in-late {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.fade-in-late { animation: fade-in-late 0.2s ease-out 0.15s both; }
+@media (prefers-reduced-motion: reduce) {
+  .fade-in-late { animation-duration: 0s; }
+}

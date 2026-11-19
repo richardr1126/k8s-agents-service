@@ -30,16 +30,19 @@ import { InterruptBanner } from "@/components/interrupt-banner";
 import { ModelSelect } from "@/components/model-select";
 import { SubagentToolCard } from "@/components/subagent-tool-ui";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 import agentSuggestions from "./agent-suggestions.json";
+import { ConversationSkeleton } from "./loading-skeletons";
 import { MarkdownText } from "./markdown-text";
 import { ReasoningPart } from "./reasoning";
 import { getToolDisplayName, getToolIcon, toolSpacing, ToolRow } from "./tool-fallback";
 import { WorkingIndicator } from "./working-indicator";
 
 const MAX_CHARACTERS = 560;
+
+/** Phones and tablets: focusing the composer on load would pop the keyboard over the conversation. */
+const isTouch = () => typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
 
 const focusComposer = () =>
   document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message input"]')?.focus();
@@ -80,7 +83,7 @@ export const Thread: FC = () => {
       }}
     >
       <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
-        <ThreadWelcome />
+        <ThreadBody />
         <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
         <ThreadPrimitive.If empty={false}>
           <motion.div className="min-h-6 min-w-6 shrink-0" />
@@ -88,74 +91,6 @@ export const Thread: FC = () => {
       </ThreadPrimitive.Viewport>
       <Composer />
     </ThreadPrimitive.Root>
-  );
-};
-
-export const ThreadLoadingSkeleton: FC = () => {
-  return (
-    <div className="bg-background flex h-full flex-col">
-      {/* Skeleton for main content area */}
-      <div className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
-        <div className="mx-auto flex w-full max-w-[48rem] flex-grow flex-col px-2">
-          {/* Welcome section skeleton */}
-          <div className="flex w-full flex-grow flex-col items-center justify-center">
-            <div className="flex size-full flex-col justify-center px-8 md:mt-20">
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="mb-4"
-              >
-                <Skeleton className="h-8 w-32 md:h-10 md:w-40" />
-              </motion.div>
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="mb-8"
-              >
-                <Skeleton className="h-6 w-64 md:h-8 md:w-80" />
-              </motion.div>
-            </div>
-          </div>
-          
-          {/* Suggestions skeleton */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="grid w-full gap-2 sm:grid-cols-2 mb-4"
-          >
-            {[1, 2, 3, 4].map((i) => (
-              <div key={i} className={`h-auto w-full ${i === 4 ? 'hidden sm:block' : ''}`}>
-              <Skeleton className="h-9 sm:14 w-full rounded-lg" />
-              </div>
-            ))}
-          </motion.div>
-        </div>
-      </div>
-
-      {/* Composer skeleton */}
-      <div className="bg-background relative mx-auto flex w-full max-w-[48rem] flex-col gap-4 px-2 pb-4 md:pb-6">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.5 }}
-          className="relative flex w-full flex-col rounded-2xl"
-        >
-          {/* Input skeleton */}
-          <Skeleton className="h-15 w-full rounded-t-2xl" />
-          {/* Action bar skeleton */}
-          <div className="bg-muted border-border dark:border-muted-foreground/15 relative flex items-center justify-between rounded-b-2xl border-x border-b p-2">
-            <div className="flex items-center gap-2">
-              <Skeleton className="h-8 w-24" />
-              <Skeleton className="h-8 w-24" />
-            </div>
-            <Skeleton className="h-8 w-8 rounded-full" />
-          </div>
-        </motion.div>
-      </div>
-    </div>
   );
 };
 
@@ -172,6 +107,15 @@ const ThreadScrollToBottom: FC = () => {
       </TooltipIconButton>
     </ThreadPrimitive.ScrollToBottom>
   );
+};
+
+/** The welcome for a new chat, or a skeleton while a conversation's history loads. */
+const ThreadBody: FC = () => {
+  const { loadingThread, booting } = useChat();
+  const empty = useAuiState((s) => s.thread.messages.length === 0);
+  if (!loadingThread) return <ThreadWelcome />;
+  // At boot the skeleton is already on screen, so carry it on; a switch waits a beat first.
+  return empty ? <ConversationSkeleton delayed={!booting} /> : null;
 };
 
 const ThreadWelcome: FC = () => {
@@ -191,7 +135,7 @@ const ThreadWelcome: FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              transition={{ delay: 0.5 }}
+              transition={{ duration: 0.25 }}
               // aui-thread-welcome-message-motion-1
               className="text-lg md:text-2xl font-semibold"
             >
@@ -201,7 +145,7 @@ const ThreadWelcome: FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 10 }}
-              transition={{ delay: 0.6 }}
+              transition={{ duration: 0.25, delay: 0.05 }}
               // aui-thread-welcome-message-motion-2
               className="text-muted-foreground/65 text-lg md:text-2xl"
             >
@@ -215,9 +159,10 @@ const ThreadWelcome: FC = () => {
 };
 
 const ThreadWelcomeSuggestions: FC = () => {
-  const { agentId } = useChat();
+  const { agentId, loadingThread } = useChat();
   const suggestions =
     agentSuggestions[agentId as keyof typeof agentSuggestions] ?? agentSuggestions["auto-router"];
+  if (loadingThread) return null;
 
   return (
     // aui-thread-welcome-suggestions
@@ -227,7 +172,7 @@ const ThreadWelcomeSuggestions: FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 20 }}
-          transition={{ delay: 0.05 * index }}
+          transition={{ duration: 0.25, delay: 0.1 + 0.04 * index }}
           key={`suggested-action-${suggestedAction.title}-${index}`}
           // aui-thread-welcome-suggestion-display
           className="[&:nth-child(n+4)]:hidden sm:[&:nth-child(n+4)]:block"
@@ -241,7 +186,7 @@ const ThreadWelcomeSuggestions: FC = () => {
             <Button
               variant="ghost"
               // aui-thread-welcome-suggestion
-              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-wrap items-start justify-start gap-[0.1rem] rounded-lg border px-3 py-2 text-left text-sm sm:flex-col"
+              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-col items-start justify-start gap-[0.1rem] rounded-lg border px-3 py-2 text-left text-sm"
               aria-label={suggestedAction.action}
             >
               {/* aui-thread-welcome-suggestion-text-1 */}
@@ -296,7 +241,9 @@ const Composer: FC = () => {
   const isSendDisabled = Boolean(limitMessage) || isOverLimit || text.trim().length === 0;
 
   return (
-    <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)] pb-4 md:pb-6">
+    <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)] pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-6">
+      {/* Messages fade out into the composer rather than cutting off at its edge. */}
+      <div className="from-background pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t to-transparent" />
       <ThreadScrollToBottom />
       <ThreadPrimitive.Empty>
         <ThreadWelcomeSuggestions />
@@ -311,7 +258,7 @@ const Composer: FC = () => {
             isOverLimit && "border-destructive focus:ring-destructive",
           )}
           rows={1}
-          autoFocus
+          autoFocus={!isTouch()}
           aria-label="Message input"
           submitMode={isSendDisabled ? "none" : "enter"}
         />

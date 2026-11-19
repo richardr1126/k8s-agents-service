@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PrivacyPopup } from "@/components/privacy-popup";
@@ -19,6 +19,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "chat.richardr.dev",
   description: "AI Chat Assistant by Richard Roberson",
+};
+
+// Draw under the notch and home indicator (the app pads for them), and let the
+// on-screen keyboard shrink the page so the composer stays above it.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
 };
 
 export default function RootLayout({

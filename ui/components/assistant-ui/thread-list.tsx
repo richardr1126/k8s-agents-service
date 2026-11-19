@@ -6,19 +6,28 @@ import {
   useAuiState,
 } from "@assistant-ui/react";
 import { CirclePlusIcon, Loader2, MessageSquareDashedIcon, PencilIcon, Trash2Icon } from "lucide-react";
-import { motion } from "framer-motion";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useChat } from "@/components/custom-runtime-provider";
 import { useDialogs } from "@/components/dialogs";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
+import { useSidebar } from "@/components/ui/sidebar";
+import { ThreadListLoading } from "@/components/assistant-ui/loading-skeletons";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { historyQuery } from "@/lib/queries";
 import type { ThreadRow } from "@/lib/types";
 
 export const ThreadList: FC = () => {
+  const { isMobile, setOpenMobile } = useSidebar();
   return (
-    <ThreadListPrimitive.Root className="flex flex-col items-stretch gap-1.5">
+    <ThreadListPrimitive.Root
+      className="flex flex-col items-stretch gap-1.5"
+      // On a phone the sidebar covers the chat; close it once a conversation is picked.
+      onClick={(e) => {
+        if (isMobile && (e.target as Element).closest("[data-opens-thread]")) setOpenMobile(false);
+      }}
+    >
       <ThreadListNew />
       <ThreadListItems />
     </ThreadListPrimitive.Root>
@@ -28,7 +37,7 @@ export const ThreadList: FC = () => {
 const ThreadListNew: FC = () => {
   return (
     <ThreadListPrimitive.New asChild>
-      <Button className="data-active:bg-muted hover:bg-muted flex items-center justify-start gap-2 mx-2 rounded-lg px-2.5 py-2 text-start text-md md:text-sm" variant="ghost">
+      <Button data-opens-thread className="data-active:bg-muted hover:bg-muted flex items-center justify-start gap-2 mx-2 rounded-lg px-2.5 py-2 text-start text-md md:text-sm" variant="ghost">
         <CirclePlusIcon />
         Start new chat
       </Button>
@@ -93,30 +102,17 @@ const ThreadListItems: FC = () => {
   );
 };
 
-const ThreadListLoading: FC = () => {
-  return (
-    <div className="flex flex-col items-stretch gap-1.5">
-      {[78, 64, 90, 70, 84].map((width, index) => (
-        <motion.div
-          key={index}
-          initial={{ opacity: 0, y: 5 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 * index }}
-          className="flex items-center gap-2 mx-2 rounded-lg min-h-[44px] py-1"
-        >
-          <div className="flex-grow px-1 py-1">
-            <Skeleton className="h-6" style={{ width: `${width}%` }} />
-          </div>
-        </motion.div>
-      ))}
-    </div>
-  );
-};
-
 const ThreadListItem: FC = () => {
+  const queryClient = useQueryClient();
+  const id = useAuiState((s) => s.threadListItem.id);
+  // Fetch on hover or focus, so the click opens it from cache.
+  const prefetch = () => void queryClient.prefetchQuery(historyQuery(id));
   return (
-    <ThreadListItemPrimitive.Root className="group/item data-active:bg-muted hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring flex items-center gap-1 mx-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2">
-      <ThreadListItemPrimitive.Trigger className="min-w-0 flex-grow px-3 py-2 text-start">
+    <ThreadListItemPrimitive.Root
+      onPointerEnter={prefetch}
+      onFocus={prefetch}
+      className="group/item data-active:bg-muted hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring flex items-center gap-1 mx-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2">
+      <ThreadListItemPrimitive.Trigger data-opens-thread className="min-w-0 flex-grow px-3 py-2 text-start">
         <div className="flex items-center gap-2">
           <ThreadListItemTitle />
           <ThreadListItemLoading />
