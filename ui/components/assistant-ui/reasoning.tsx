@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FC } from "react";
+import { useState, type FC } from "react";
 import { useMessagePartReasoning } from "@assistant-ui/react";
 import { ChevronDownIcon } from "lucide-react";
 
@@ -11,12 +11,12 @@ export const ReasoningPart: FC = () => {
   const reasoning = useMessagePartReasoning();
   const isStreaming = reasoning.status.type === "running";
   const [isOpen, setIsOpen] = useState(isStreaming);
-
-  useEffect(() => {
-    if (isStreaming) {
-      setIsOpen(true);
-    }
-  }, [isStreaming, reasoning.text]);
+  // Open when thinking starts; after that the reader decides.
+  const [wasStreaming, setWasStreaming] = useState(isStreaming);
+  if (isStreaming !== wasStreaming) {
+    setWasStreaming(isStreaming);
+    if (isStreaming) setIsOpen(true);
+  }
 
   return (
     <details

@@ -10,9 +10,9 @@ export function AgentSelect() {
     <Select value={agentId} onValueChange={setAgentId}>
       <SelectTrigger
         aria-label="Agent"
-        className="h-6.5 max-w-33 sm:max-w-50 text-xs m-0 px-1 py-0.5 sm:px-2 sm:py-1 w-auto inline-flex items-center gap-1 bg-background/40 dark:bg-background/30 border-muted-foreground/20"
+        className="text-muted-foreground hover:text-foreground hover:bg-accent data-[state=open]:bg-accent data-[state=open]:text-foreground h-7 max-w-36 sm:max-w-52 w-auto gap-1.5 rounded-md border-0 bg-transparent px-2 text-xs font-medium shadow-none dark:bg-transparent dark:hover:bg-accent focus-visible:ring-[3px] [&>svg:last-child]:opacity-60"
       >
-        <Bot className="h-3 w-3 text-muted-foreground" />
+        <Bot className="size-3.5" />
         <SelectValue placeholder="Agent" className="truncate text-clip" />
       </SelectTrigger>
       <SelectContent>

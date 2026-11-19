@@ -1,501 +1,311 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardFooter,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { useState } from "react";
-import { Loader2, X, AlertTriangle, CheckCircle, Eye, EyeOff } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { signUp, signIn, useSession } from "@/lib/auth-client";
-import { toast } from "sonner";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
+import { CheckIcon, ImagePlusIcon, Loader2, XIcon } from "lucide-react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
+import { AuthCard, AuthLink, Notice } from "@/components/auth-card";
 import { showPrivacyPopup } from "@/components/privacy-popup";
-import { AuthCard, Notice } from "@/components/auth-card";
+import { Button } from "@/components/ui/button";
+import { Field, PasswordInput } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { signIn, signUp, useSession } from "@/lib/auth-client";
 import type { PublicAuthConfig } from "@/lib/public-config";
+import { cn } from "@/lib/utils";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const PASSWORD_CHECKS = [
+  { label: "8+ characters", test: (p: string) => p.length >= 8 },
+  { label: "Uppercase", test: (p: string) => /[A-Z]/.test(p) },
+  { label: "Lowercase", test: (p: string) => /[a-z]/.test(p) },
+  { label: "Number", test: (p: string) => /\d/.test(p) },
+  { label: "Symbol", test: (p: string) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
+];
+/** How many of the checks a password needs. */
+const MIN_STRENGTH = 3;
+const STRENGTH = ["Very weak", "Weak", "Fair", "Good", "Strong"];
+
+function passwordStrength(password: string) {
+  const passed = PASSWORD_CHECKS.map((check) => check.test(password));
+  return { passed, strength: passed.filter(Boolean).length };
+}
+
+/** A five-step bar and the checks it counts. */
+function StrengthMeter({ password }: { password: string }) {
+  const { passed, strength } = passwordStrength(password);
+  const ok = strength >= MIN_STRENGTH;
+  return (
+    <div className="grid gap-2" aria-live="polite">
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 gap-1">
+          {PASSWORD_CHECKS.map((_, i) => (
+            <span
+              key={i}
+              className={cn(
+                "h-1 flex-1 rounded-full transition-colors",
+                i < strength ? (ok ? "bg-success" : strength === 2 ? "bg-warning" : "bg-destructive") : "bg-muted",
+              )}
+            />
+          ))}
+        </div>
+        <span className={cn("w-16 text-right text-xs", ok ? "text-success" : "text-muted-foreground")}>
+          {STRENGTH[Math.max(0, strength - 1)]}
+        </span>
+      </div>
+      <ul className="flex flex-wrap gap-x-3 gap-y-1">
+        {PASSWORD_CHECKS.map((check, i) => (
+          <li
+            key={check.label}
+            className={cn("flex items-center gap-1 text-xs", passed[i] ? "text-foreground" : "text-muted-foreground")}
+          >
+            <CheckIcon className={cn("size-3", passed[i] ? "text-success" : "opacity-30")} />
+            {check.label}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+/** Longest display name accepted. */
+const MAX_NAME = 60;
+
+type Errors = Partial<Record<"name" | "email" | "password" | "passwordConfirmation", string>>;
 
 export default function SignUp({ config }: { config: PublicAuthConfig }) {
-	// "verify": check your inbox; "pending": waiting for an admin.
-	const [done, setDone] = useState<"verify" | "pending" | null>(null);
-	const [firstName, setFirstName] = useState("");
-	const [lastName, setLastName] = useState("");
-	const [email, setEmail] = useState("");
-	const [password, setPassword] = useState("");
-	const [passwordConfirmation, setPasswordConfirmation] = useState("");
-	const [image, setImage] = useState<File | null>(null);
-	const [imagePreview, setImagePreview] = useState<string | null>(null);
-	const [showPassword, setShowPassword] = useState(false);
-	const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
-	const router = useRouter();
-	const { refetch } = useSession();
-	const [loading, setLoading] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-	const [validationErrors, setValidationErrors] = useState<{
-		firstName?: string;
-		lastName?: string;
-		email?: string;
-		password?: string;
-		passwordConfirmation?: string;
-	}>({});
+  // "verify": check your inbox; "pending": waiting for an admin.
+  const [done, setDone] = useState<"verify" | "pending" | null>(null);
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [image, setImage] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  const { refetch } = useSession();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Errors>({});
 
-	// Password strength validation
-	const validatePassword = (password: string) => {
-		const checks = {
-			length: password.length >= 8,
-			uppercase: /[A-Z]/.test(password),
-			lowercase: /[a-z]/.test(password),
-			number: /\d/.test(password),
-			special: /[!@#$%^&*(),.?":{}|<>]/.test(password)
-		};
-		
-		const strength = Object.values(checks).filter(Boolean).length;
-		return { checks, strength };
-	};
+  /** An onChange that also clears that field's error. */
+  const edit = (set: (value: string) => void, field: keyof Errors) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    set(e.target.value);
+    setError(null);
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }));
+  };
 
-	// Email validation
-	const validateEmail = (email: string): boolean => {
-		const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-		return emailRegex.test(email);
-	};
+  const validate = () => {
+    const next: Errors = {};
+    const trimmed = name.trim();
+    if (!trimmed) next.name = "Choose a display name.";
+    else if (trimmed.length < 2) next.name = "At least 2 characters.";
+    else if (trimmed.length > MAX_NAME) next.name = `At most ${MAX_NAME} characters.`;
+    if (!email.trim()) next.email = "Enter your email.";
+    else if (!EMAIL_PATTERN.test(email.trim())) next.email = "That doesn't look like an email address.";
+    if (!password) next.password = "Choose a password.";
+    else if (passwordStrength(password).strength < MIN_STRENGTH) next.password = "Too weak. Meet at least three of the checks.";
+    if (!passwordConfirmation) next.passwordConfirmation = "Type the password again.";
+    else if (password !== passwordConfirmation) next.passwordConfirmation = "The passwords don't match.";
+    const found = Object.fromEntries(Object.entries(next).filter(([, v]) => v)) as Errors;
+    setErrors(found);
+    return Object.keys(found).length === 0;
+  };
 
-	// Form validation
-	const validateForm = (): boolean => {
-		const errors: typeof validationErrors = {};
-		
-		if (!firstName.trim()) {
-			errors.firstName = "First name is required";
-		} else if (firstName.trim().length < 2) {
-			errors.firstName = "First name must be at least 2 characters";
-		}
-		
-		if (!lastName.trim()) {
-			errors.lastName = "Last name is required";
-		} else if (lastName.trim().length < 2) {
-			errors.lastName = "Last name must be at least 2 characters";
-		}
-		
-		if (!email.trim()) {
-			errors.email = "Email is required";
-		} else if (!validateEmail(email)) {
-			errors.email = "Please enter a valid email address";
-		}
-		
-		if (!password) {
-			errors.password = "Password is required";
-		} else {
-			const { strength } = validatePassword(password);
-			if (strength < 3) {
-				errors.password = "Password is too weak. Include uppercase, lowercase, number, and special character";
-			}
-		}
-		
-		if (!passwordConfirmation) {
-			errors.passwordConfirmation = "Please confirm your password";
-		} else if (password !== passwordConfirmation) {
-			errors.passwordConfirmation = "Passwords do not match";
-		}
-		
-		setValidationErrors(errors);
-		return Object.keys(errors).length === 0;
-	};
+  const handleSignUp = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setError(null);
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      const result = await signUp.email({
+        email: email.trim(),
+        password,
+        name: name.trim(),
+        image: image ? await convertImageToBase64(image) : "",
+      });
 
-	const handleSignUp = async () => {
-		// Clear previous errors
-		setError(null);
-		setValidationErrors({});
-		
-		// Validate form
-		if (!validateForm()) {
-			return;
-		}
+      if (result.error && config.signupPolicy === "approval" && result.error.status === 403) {
+        // The account exists; signing in is refused until an admin approves it.
+        setDone("pending");
+      } else if (result.error) {
+        const message = result.error.message || "Something went wrong.";
+        const lower = message.toLowerCase();
+        if (lower.includes("already exists") || lower.includes("email already") || lower.includes("user already")) {
+          setError("An account with this email already exists. Sign in instead, or use another email.");
+        } else if (lower.includes("invalid email")) {
+          setError("That doesn't look like an email address.");
+        } else if (lower.includes("password")) {
+          setError("The password doesn't meet the requirements. Choose a stronger one.");
+        } else {
+          setError(message);
+        }
+      } else if (config.email) {
+        setDone("verify");
+      } else {
+        // No email confirmation: sign straight in.
+        const signInResult = await signIn.email({ email: email.trim(), password });
+        if (signInResult.error) {
+          toast.success("Account created. Sign in to continue.");
+          router.push("/signin");
+        } else {
+          toast.success("Account created. Welcome!");
+          await refetch();
+          router.push("/");
+        }
+      }
+    } catch (err) {
+      console.error("Signup error:", err);
+      setError("Couldn't reach the server. Check your connection and try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-		setLoading(true);
-		
-		try {
-			const result = await signUp.email({
-				email: email.trim(),
-				password,
-				name: `${firstName.trim()} ${lastName.trim()}`,
-				image: image ? await convertImageToBase64(image) : "",
-			});
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImage(file);
+    const reader = new FileReader();
+    reader.onloadend = () => setImagePreview(reader.result as string);
+    reader.readAsDataURL(file);
+  };
 
-			if (result.error && config.signupPolicy === "approval" && result.error.status === 403) {
-				// The account exists; signing in is refused until an admin approves it.
-				setDone("pending");
-			} else if (result.error) {
-				// Handle signup errors
-				const errorMessage = result.error.message || "An unknown error occurred";
-				
-				if (errorMessage.toLowerCase().includes("already exists") ||
-					errorMessage.toLowerCase().includes("email already") ||
-					errorMessage.toLowerCase().includes("user already")) {
-					setError("An account with this email already exists. Please use a different email or try signing in.");
-				} else if (errorMessage.toLowerCase().includes("invalid email")) {
-					setError("Please enter a valid email address.");
-				} else if (errorMessage.toLowerCase().includes("password")) {
-					setError("Password does not meet security requirements. Please choose a stronger password.");
-				} else {
-					setError(errorMessage);
-				}
-			} else if (config.email) {
-				setDone("verify");
-			} else {
-				// Success - automatically sign in
-				const signInResult = await signIn.email({
-					email: email.trim(),
-					password,
-				});
+  const clearImage = () => {
+    setImage(null);
+    setImagePreview(null);
+    if (fileRef.current) fileRef.current.value = "";
+  };
 
-				if (signInResult.error) {
-					toast.success("Account created successfully! Please sign in.");
-					router.push("/signin");
-				} else {
-					toast.success("Account created and signed in successfully!");
-					await refetch();
-					router.push("/");
-				}
-			}
-		} catch (err) {
-			console.error("Signup error:", err);
-			setError("Unable to connect to the server. Please check your internet connection and try again.");
-		} finally {
-			setLoading(false);
-		}
-	};
+  const backToSignIn = <AuthLink href="/signin">Back to sign in</AuthLink>;
+  if (config.signupPolicy === "closed") {
+    return (
+      <AuthCard title="Sign-ups are closed" footer={backToSignIn}>
+        <p className="text-muted-foreground text-sm">
+          New accounts aren&apos;t being created right now. Ask an admin for access.
+        </p>
+      </AuthCard>
+    );
+  }
+  if (done) {
+    return (
+      <AuthCard title={done === "verify" ? "Check your email" : "Account created"} footer={backToSignIn}>
+        <Notice kind="success">
+          {done === "verify" ? (
+            <>
+              We sent a confirmation link to <strong>{email.trim()}</strong>. It works for one hour.
+              {config.signupPolicy === "approval" && " After you confirm, an admin still needs to approve the account."}
+            </>
+          ) : (
+            "An admin needs to approve your account before you can sign in."
+          )}
+        </Notice>
+      </AuthCard>
+    );
+  }
 
-	const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-		const file = e.target.files?.[0];
-		if (file) {
-			setImage(file);
-			const reader = new FileReader();
-			reader.onloadend = () => {
-				setImagePreview(reader.result as string);
-			};
-			reader.readAsDataURL(file);
-		}
-	};
-
-	const backToSignIn = <Link href="/signin" className="underline">Back to sign in</Link>;
-	if (config.signupPolicy === "closed") {
-		return (
-			<AuthCard title="Sign-ups are closed" footer={backToSignIn}>
-				<p className="text-sm text-muted-foreground">New accounts aren&apos;t being created right now. Ask an admin for access.</p>
-			</AuthCard>
-		);
-	}
-	if (done) {
-		return (
-			<AuthCard title={done === "verify" ? "Check your email" : "Account created"} footer={backToSignIn}>
-				<Notice kind="success">
-					{done === "verify" ? (
-						<>We sent a confirmation link to <strong>{email.trim()}</strong>. It works for one hour.{config.signupPolicy === "approval" && " After you confirm, an admin still needs to approve the account."}</>
-					) : (
-						"An admin needs to approve your account before you can sign in."
-					)}
-				</Notice>
-			</AuthCard>
-		);
-	}
-
-	return (
-		<Card className="w-full max-w-md md:w-[480px]">
-			<CardHeader>
-				<motion.div
-					animate={{ y: 0 }}
-					transition={{ duration: 0.3, ease: "easeInOut" }}
-				>
-					<CardTitle className="text-lg md:text-xl">Sign Up</CardTitle>
-					<CardDescription className="text-xs md:text-sm">
-						Enter your information to create an account
-					</CardDescription>
-				</motion.div>
-			</CardHeader>
-			<CardContent>
-				<div className="grid gap-4">
-					{/* Animated error alert */}
-					<AnimatePresence>
-						{error && (
-							<motion.div
-								initial={{ opacity: 0, height: 0 }}
-								animate={{ opacity: 1, height: "auto" }}
-								exit={{ opacity: 0, height: 0 }}
-								transition={{ duration: 0.3, ease: "easeInOut" }}
-								className="overflow-hidden"
-							>
-								<div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md dark:bg-red-950 dark:border-red-800">
-									<AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-									<div className="flex-1 text-sm text-red-700 dark:text-red-300">
-										{error}
-									</div>
-								</div>
-							</motion.div>
-						)}
-					</AnimatePresence>
-
-					<div className="grid grid-cols-2 gap-4">
-						<div className="grid gap-2">
-							<Label htmlFor="first-name">First name</Label>
-							<Input
-								id="first-name"
-								placeholder="Richard"
-								required
-								onChange={(e) => {
-									setFirstName(e.target.value);
-								}}
-								value={firstName}
-								className={validationErrors.firstName ? "border-red-500" : ""}
-							/>
-							{validationErrors.firstName && (
-								<p className="text-sm text-red-600 dark:text-red-400">
-									{validationErrors.firstName}
-								</p>
-							)}
-						</div>
-						<div className="grid gap-2">
-							<Label htmlFor="last-name">Last name</Label>
-							<Input
-								id="last-name"
-								placeholder="Roberson"
-								required
-								onChange={(e) => {
-									setLastName(e.target.value);
-								}}
-								value={lastName}
-								className={validationErrors.lastName ? "border-red-500" : ""}
-							/>
-							{validationErrors.lastName && (
-								<p className="text-sm text-red-600 dark:text-red-400">
-									{validationErrors.lastName}
-								</p>
-							)}
-						</div>
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="email">Email</Label>
-						<Input
-							id="email"
-							type="email"
-							placeholder="me@example.com"
-							required
-							onChange={(e) => {
-								setEmail(e.target.value);
-							}}
-							value={email}
-							className={validationErrors.email ? "border-red-500" : ""}
-						/>
-						{validationErrors.email && (
-							<p className="text-sm text-red-600 dark:text-red-400">
-								{validationErrors.email}
-							</p>
-						)}
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="password">Password</Label>
-						<div className="relative">
-							<Input
-								id="password"
-								type={showPassword ? "text" : "password"}
-								value={password}
-								onChange={(e) => setPassword(e.target.value)}
-								autoComplete="new-password"
-								placeholder="Password"
-								className={validationErrors.password ? "border-red-500 pr-10" : "pr-10"}
-							/>
-							<button
-								type="button"
-								className="absolute inset-y-0 right-0 pr-3 flex items-center"
-								onClick={() => setShowPassword(!showPassword)}
-							>
-								{showPassword ? (
-									<EyeOff className="h-4 w-4 text-gray-400" />
-								) : (
-									<Eye className="h-4 w-4 text-gray-400" />
-								)}
-							</button>
-						</div>
-						{password && (
-							<div className="space-y-1">
-								<p className="text-xs text-gray-600 dark:text-gray-400">Password strength:</p>
-								{(() => {
-									const { checks, strength } = validatePassword(password);
-									const strengthLabels = ["Very Weak", "Weak", "Fair", "Good", "Strong"];
-									const strengthColors = ["bg-red-500", "bg-orange-500", "bg-yellow-500", "bg-blue-500", "bg-green-500"];
-									
-									return (
-										<div className="space-y-1">
-											<div className="flex space-x-1">
-												{[0, 1, 2, 3, 4].map((i) => (
-													<div
-														key={i}
-														className={`h-1 flex-1 rounded ${
-															i < strength ? strengthColors[strength - 1] : "bg-gray-200 dark:bg-gray-700"
-														}`}
-													/>
-												))}
-											</div>
-											<p className={`text-xs ${strength >= 3 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
-												{strengthLabels[strength - 1] || "Very Weak"}
-											</p>
-											<div className="text-xs space-y-0.5">
-												{Object.entries(checks).map(([key, passed]) => (
-													<div key={key} className={`flex items-center gap-1 ${passed ? "text-green-600 dark:text-green-400" : "text-gray-500 dark:text-gray-400"}`}>
-														{passed ? <CheckCircle className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-current" />}
-														<span>
-															{key === "length" && "At least 8 characters"}
-															{key === "uppercase" && "Uppercase letter"}
-															{key === "lowercase" && "Lowercase letter"}
-															{key === "number" && "Number"}
-															{key === "special" && "Special character"}
-														</span>
-													</div>
-												))}
-											</div>
-										</div>
-									);
-								})()}
-							</div>
-						)}
-						{validationErrors.password && (
-							<p className="text-sm text-red-600 dark:text-red-400">
-								{validationErrors.password}
-							</p>
-						)}
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="password_confirmation">Confirm Password</Label>
-						<div className="relative">
-							<Input
-								id="password_confirmation"
-								type={showPasswordConfirmation ? "text" : "password"}
-								value={passwordConfirmation}
-								onChange={(e) => setPasswordConfirmation(e.target.value)}
-								autoComplete="new-password"
-								placeholder="Confirm Password"
-								className={validationErrors.passwordConfirmation ? "border-red-500 pr-10" : "pr-10"}
-							/>
-							<button
-								type="button"
-								className="absolute inset-y-0 right-0 pr-3 flex items-center"
-								onClick={() => setShowPasswordConfirmation(!showPasswordConfirmation)}
-							>
-								{showPasswordConfirmation ? (
-									<EyeOff className="h-4 w-4 text-gray-400" />
-								) : (
-									<Eye className="h-4 w-4 text-gray-400" />
-								)}
-							</button>
-						</div>
-						{passwordConfirmation && password && (
-							<div className={`flex items-center gap-1 text-xs ${
-								password === passwordConfirmation 
-									? "text-green-600 dark:text-green-400" 
-									: "text-red-600 dark:text-red-400"
-							}`}>
-								{password === passwordConfirmation ? (
-									<CheckCircle className="h-3 w-3" />
-								) : (
-									<AlertTriangle className="h-3 w-3" />
-								)}
-								<span>
-									{password === passwordConfirmation ? "Passwords match" : "Passwords do not match"}
-								</span>
-							</div>
-						)}
-						{validationErrors.passwordConfirmation && (
-							<p className="text-sm text-red-600 dark:text-red-400">
-								{validationErrors.passwordConfirmation}
-							</p>
-						)}
-					</div>
-					<div className="grid gap-2">
-						<Label htmlFor="image">Profile Image (optional)</Label>
-						<div className="flex items-end gap-4">
-							{imagePreview && (
-								<div className="relative w-16 h-16 rounded-sm overflow-hidden">
-									<Image
-										src={imagePreview}
-										alt="Profile preview"
-										fill
-										className="object-cover"
-									/>
-								</div>
-							)}
-							<div className="flex items-center gap-2 w-full">
-								<Input
-									id="image"
-									type="file"
-									accept="image/*"
-									onChange={handleImageChange}
-									className="w-full"
-								/>
-								{imagePreview && (
-									<X
-										className="cursor-pointer"
-										onClick={() => {
-											setImage(null);
-											setImagePreview(null);
-										}}
-									/>
-								)}
-							</div>
-						</div>
-					</div>
-					<Button
-						type="submit"
-						className="w-full"
-						disabled={loading}
-						onClick={handleSignUp}
-					>
-						{loading ? (
-							<Loader2 size={16} className="animate-spin" />
-						) : (
-							"Create an account"
-						)}
-					</Button>
-				</div>
-			</CardContent>
-			<CardFooter>
-				<div className="flex flex-col items-center w-full border-t py-4 gap-2">
-					<p className="text-center text-xs text-neutral-500">
-						Already have an account?{" "}
-						<Link
-							href="/signin"
-							className="underline"
-						>
-							<span className="dark:text-white/70 cursor-pointer">
-								Sign in
-							</span>
-						</Link>
-					</p>
-					<p className="text-center text-xs text-neutral-500">
-						By creating an account, you agree to our{" "}
-						<button
-							onClick={() => showPrivacyPopup()}
-							className="underline hover:text-neutral-700 dark:hover:text-neutral-300"
-						>
-							Privacy Policy
-						</button>
-					</p>
-				</div>
-			</CardFooter>
-		</Card>
-	);
+  return (
+    <AuthCard
+      wide
+      title="Create your account"
+      description={
+        config.signupPolicy === "approval"
+          ? "An admin approves new accounts before they can sign in."
+          : "Keep your conversations and pick them up anywhere."
+      }
+      footer={
+        <>
+          <p>
+            Already have an account? <AuthLink href="/signin">Sign in</AuthLink>
+          </p>
+          <p>
+            By creating an account you agree to the{" "}
+            <button type="button" onClick={() => showPrivacyPopup()} className="text-foreground underline-offset-4 hover:underline">
+              privacy policy
+            </button>
+            .
+          </p>
+        </>
+      }
+    >
+      {error && <Notice kind="error">{error}</Notice>}
+      <form onSubmit={handleSignUp} noValidate className="grid gap-4">
+        <Field label="Display name" required hint={errors.name ? undefined : "How you appear in the app. You can change it later."} error={errors.name}>
+          {(control) => (
+            <Input
+              {...control}
+              autoComplete="nickname"
+              placeholder="e.g. Alex"
+              maxLength={MAX_NAME}
+              value={name}
+              onChange={edit(setName, "name")}
+            />
+          )}
+        </Field>
+        <Field label="Email" required error={errors.email}>
+          {(control) => (
+            <Input {...control} type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={edit(setEmail, "email")} />
+          )}
+        </Field>
+        <Field label="Password" required error={errors.password}>
+          {(control) => <PasswordInput {...control} autoComplete="new-password" value={password} onChange={edit(setPassword, "password")} />}
+        </Field>
+        {password && <StrengthMeter password={password} />}
+        <Field
+          label="Confirm password"
+          required
+          error={errors.passwordConfirmation}
+          hint={passwordConfirmation && password === passwordConfirmation ? "Passwords match." : undefined}
+        >
+          {(control) => (
+            <PasswordInput
+              {...control}
+              autoComplete="new-password"
+              value={passwordConfirmation}
+              onChange={edit(setPasswordConfirmation, "passwordConfirmation")}
+            />
+          )}
+        </Field>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border outline-none focus-visible:ring-2"
+            aria-label={imagePreview ? "Change profile picture" : "Add a profile picture"}
+          >
+            {imagePreview ? (
+              <Image src={imagePreview} alt="" fill className="object-cover" />
+            ) : (
+              <ImagePlusIcon className="size-4" />
+            )}
+          </button>
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="font-medium">Profile picture</p>
+            <p className="text-muted-foreground truncate text-xs">{image ? image.name : "Optional"}</p>
+          </div>
+          {imagePreview && (
+            <Button type="button" variant="ghost" size="icon-sm" onClick={clearImage} aria-label="Remove profile picture">
+              <XIcon />
+            </Button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" onChange={handleImageChange} className="sr-only" tabIndex={-1} />
+        </div>
+        <Button type="submit" className="mt-1 w-full" disabled={loading}>
+          {loading && <Loader2 className="animate-spin" />}
+          Create account
+        </Button>
+      </form>
+    </AuthCard>
+  );
 }
 
 async function convertImageToBase64(file: File): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onloadend = () => resolve(reader.result as string);
-		reader.onerror = reject;
-		reader.readAsDataURL(file);
-	});
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

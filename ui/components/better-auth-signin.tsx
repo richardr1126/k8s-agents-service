@@ -1,18 +1,22 @@
 "use client";
 
+import { Loader2, UserIcon } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { AuthCard, AuthDivider, AuthLink, Notice } from "@/components/auth-card";
+import { showPrivacyPopup } from "@/components/privacy-popup";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Field, PasswordInput } from "@/components/ui/field";
+import { GitHubIcon } from "@/components/ui/icons";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { useState } from "react";
-import { Loader2, AlertTriangle, User } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { signIn, useSession } from "@/lib/auth-client";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { showPrivacyPopup } from "@/components/privacy-popup";
 import type { PublicAuthConfig } from "@/lib/public-config";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+type Pending = "email" | "github" | "guest" | null;
 
 export default function SignIn({ config }: { config: PublicAuthConfig }) {
   const { githubSignIn, allowGuests, signupPolicy } = config;
@@ -21,303 +25,164 @@ export default function SignIn({ config }: { config: PublicAuthConfig }) {
   const { refetch } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loadingEmail, setLoadingEmail] = useState(false);
-  const [loadingGithub, setLoadingGithub] = useState(false);
-  const [loadingGuest, setLoadingGuest] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true); // Default to true for better UX
+  const [rememberMe, setRememberMe] = useState(true);
+  const [pending, setPending] = useState<Pending>(null);
   const [error, setError] = useState<string | null>(null);
-  const [validationErrors, setValidationErrors] = useState<{
-    email?: string;
-    password?: string;
-  }>({});
-  const isAnyLoading = loadingEmail || loadingGithub || loadingGuest;
+  const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
 
-  // Email validation
-  const validateEmail = (email: string): boolean => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  // Note: We intentionally do not auto-clear errors in an effect to avoid flicker
-  // We'll clear errors only when the user edits inputs in onChange handlers.
-
-  // Handle form validation
-  const validateForm = (): boolean => {
-    const errors: { email?: string; password?: string } = {};
-    
-    if (!email.trim()) {
-      errors.email = "Email is required";
-    } else if (!validateEmail(email)) {
-      errors.email = "Please enter a valid email address";
-    }
-    
-    if (!password.trim()) {
-      errors.password = "Password is required";
-    }
-    
-    setValidationErrors(errors);
+  const validate = () => {
+    const errors: typeof fieldErrors = {};
+    if (!email.trim()) errors.email = "Enter your email.";
+    else if (!EMAIL_PATTERN.test(email.trim())) errors.email = "That doesn't look like an email address.";
+    if (!password) errors.password = "Enter your password.";
+    setFieldErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
-  const handleSignIn = async () => {
-    // Clear previous errors
+  const enter = async () => {
+    await refetch();
+    router.push("/");
+  };
+
+  const signInWithEmail = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
-    setValidationErrors({});
-    
-    // Validate form
-    if (!validateForm()) {
-      return;
-    }
-
-    setLoadingEmail(true);
-    
+    if (!validate()) return;
+    setPending("email");
     try {
-      const result = await signIn.email({
-        email: email.trim(),
-        password,
-        rememberMe
-      });
-
-      if (result.error) {
-        const { code, message } = result.error;
-        if (code === "INVALID_EMAIL_OR_PASSWORD") {
-          setError("Wrong email or password.");
-        } else if (code === "EMAIL_NOT_VERIFIED") {
-          setError(`Confirm your email first. We sent a new link to ${email.trim()}.`);
-        } else {
-          // Approval and suspension messages come from the server as they should be shown.
-          setError(message || "Couldn't sign in. Please try again.");
-        }
-      } else {
-        await refetch();
-        router.push('/');
-      }
+      const result = await signIn.email({ email: email.trim(), password, rememberMe });
+      if (!result.error) return await enter();
+      const { code, message } = result.error;
+      if (code === "INVALID_EMAIL_OR_PASSWORD") setError("Wrong email or password.");
+      else if (code === "EMAIL_NOT_VERIFIED") setError(`Confirm your email first. We sent a new link to ${email.trim()}.`);
+      // Approval and suspension messages come from the server as they should be shown.
+      else setError(message || "Couldn't sign in. Please try again.");
     } catch (err) {
       console.error("Sign in error:", err);
-      setError("Unable to connect to the server. Please check your internet connection and try again.");
+      setError("Couldn't reach the server. Check your connection and try again.");
     } finally {
-      setLoadingEmail(false);
+      setPending(null);
     }
   };
 
+  const signInWithGitHub = () =>
+    signIn.social(
+      { provider: "github", callbackURL: "/" },
+      { onRequest: () => setPending("github"), onResponse: () => setPending(null) },
+    );
+
+  const continueAsGuest = async () => {
+    setPending("guest");
+    setError(null);
+    try {
+      const result = await signIn.anonymous();
+      if (result.error) throw new Error(result.error.message);
+      await enter();
+    } catch (e) {
+      console.error("Anonymous sign-in failed:", e);
+      setError(e instanceof Error && e.message ? e.message : "Couldn't continue as a guest. Try another way.");
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const busy = pending !== null;
+  const spinner = <Loader2 className="animate-spin" />;
+  const alternatives = githubSignIn || allowGuests;
+
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        {/* Animated header content */}
-        <motion.div
-          animate={{ y: 0 }}
-          transition={{ duration: 0.3, ease: "easeInOut" }}
-        >
-          <CardTitle className="text-lg md:text-xl">
-            Sign In
-          </CardTitle>
-          <CardDescription className="text-xs md:text-sm">
-            {allowGuests ? "Enter your email below to sign in, or continue as a guest" : "Enter your email below to sign in"}
-          </CardDescription>
-        </motion.div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid gap-4">
-          {/* Animated error alert */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="overflow-hidden"
-              >
-                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-md dark:bg-red-950 dark:border-red-800">
-                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
-                  <div className="flex-1 text-sm text-red-700 dark:text-red-300">
-                    {error}
-                  </div>
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="me@example.com"
-                required
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (error) setError(null);
-                  if (validationErrors.email) setValidationErrors((prev) => ({ ...prev, email: undefined }));
-                }}
-                value={email}
-                className={validationErrors.email ? "border-red-500" : ""}
-              />
-              {validationErrors.email && (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {validationErrors.email}
-                </p>
-              )}
-            </div>
-
-            <div className="grid gap-2">
-              <div className="flex items-center">
-                <Label htmlFor="password">Password</Label>
-                {config.email && (
-                  <Link href="/forgot-password" className="ml-auto inline-block text-sm underline">
-                    Forgot your password?
-                  </Link>
-                )}
-              </div>
-
-              <Input
-                id="password"
-                type="password"
-                placeholder="password"
-                autoComplete="password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (error) setError(null);
-                  if (validationErrors.password) setValidationErrors((prev) => ({ ...prev, password: undefined }));
-                }}
-                className={validationErrors.password ? "border-red-500" : ""}
-              />
-              {validationErrors.password && (
-                <p className="text-sm text-red-600 dark:text-red-400">
-                  {validationErrors.password}
-                </p>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="remember"
-                checked={rememberMe}
-                onCheckedChange={(checked) => setRememberMe(Boolean(checked))}
-              />
-              <Label htmlFor="remember">Remember me</Label>
-            </div>
-
-          
-
-          <Button
-              type="submit"
-              className="w-full"
-              disabled={isAnyLoading}
-              onClick={handleSignIn}
-            >
-              {loadingEmail ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <p> Login </p>
-              )}
-            </Button>
-
-          
-
-          {githubSignIn && (
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            disabled={isAnyLoading}
-            onClick={async () => {
-              await signIn.social(
-              {
-                provider: "github",
-                callbackURL: "/"
-              },
-              {
-                onRequest: () => {
-                   setLoadingGithub(true);
-                },
-                onResponse: () => {
-                   setLoadingGithub(false);
-                },
-               },
-              );
-            }}
-          >
-            {loadingGithub ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="1em"
-                  height="1em"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    fill="currentColor"
-                    d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33s1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2"
-                  ></path>
-                </svg>
-                Sign in with GitHub
-              </>
-            )}
-          </Button>
-          )}
-
-          {allowGuests && (
-          <Button
-            variant="outline"
-            className="w-full gap-2"
-            disabled={isAnyLoading}
-            onClick={async () => {
-              try {
-                setLoadingGuest(true);
-                setError(null);
-                const result = await signIn.anonymous();
-                if (result.error) throw new Error(result.error.message);
-                await refetch();
-                router.push('/');
-              } catch (e) {
-                console.error('Anonymous sign-in failed:', e);
-                setError(e instanceof Error && e.message ? e.message : 'Unable to continue as a guest. Please try another method.');
-              } finally {
-                setLoadingGuest(false);
-              }
-            }}
-          >
-            {loadingGuest ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <>
-                <User className="h-4 w-4" />
-                Continue as guest
-              </>
-            )}
-          </Button>
-          )}
-        </div>
-      </CardContent>
-      <CardFooter>
-        <div className="flex flex-col items-center w-full border-t py-4 gap-2">
+    <AuthCard
+      title="Welcome back"
+      description={allowGuests ? "Sign in to your account, or try it out as a guest." : "Sign in to your account."}
+      footer={
+        <>
           {signupPolicy !== "closed" && (
-          <p className="text-center text-xs text-neutral-500">
-           Don&apos;t have an account?{" "}
-            <Link
-              href="/signup"
-              className="underline"
-            >
-              <span className="dark:text-white/70 cursor-pointer">
-								Sign up
-							</span>
-            </Link>
-          </p>
+            <p>
+              Don&apos;t have an account? <AuthLink href="/signup">Sign up</AuthLink>
+            </p>
           )}
-          <p className="text-center text-xs text-neutral-500">
-            By signing in, you agree to our{" "}
-            <button
-              onClick={() => showPrivacyPopup()}
-              className="underline hover:text-neutral-700 dark:hover:text-neutral-300"
-            >
-              Privacy Policy
+          <p>
+            By continuing you agree to the{" "}
+            <button type="button" onClick={() => showPrivacyPopup()} className="text-foreground underline-offset-4 hover:underline">
+              privacy policy
             </button>
+            .
           </p>
+        </>
+      }
+    >
+      {error && <Notice kind="error">{error}</Notice>}
+
+      {alternatives && (
+        <div className="grid gap-2">
+          {githubSignIn && (
+            <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={signInWithGitHub}>
+              {pending === "github" ? spinner : <GitHubIcon />}
+              Continue with GitHub
+            </Button>
+          )}
+          {allowGuests && (
+            <Button type="button" variant="outline" className="w-full" disabled={busy} onClick={continueAsGuest}>
+              {pending === "guest" ? spinner : <UserIcon />}
+              Continue as guest
+            </Button>
+          )}
         </div>
-      </CardFooter>
-    </Card>
+      )}
+      {alternatives && <AuthDivider>or with email</AuthDivider>}
+
+      <form onSubmit={signInWithEmail} noValidate className="grid gap-4">
+        <Field label="Email" error={fieldErrors.email}>
+          {(control) => (
+            <Input
+              {...control}
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setError(null);
+                setFieldErrors((prev) => ({ ...prev, email: undefined }));
+              }}
+            />
+          )}
+        </Field>
+        <Field
+          label="Password"
+          error={fieldErrors.password}
+          action={
+            config.email && (
+              <AuthLink href="/forgot-password" className="text-muted-foreground hover:text-foreground text-xs font-normal">
+                Forgot password?
+              </AuthLink>
+            )
+          }
+        >
+          {(control) => (
+            <PasswordInput
+              {...control}
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(null);
+                setFieldErrors((prev) => ({ ...prev, password: undefined }));
+              }}
+            />
+          )}
+        </Field>
+        <div className="flex items-center gap-2">
+          <Checkbox id="remember" checked={rememberMe} onCheckedChange={(checked) => setRememberMe(Boolean(checked))} />
+          <Label htmlFor="remember" className="text-muted-foreground text-[13px] font-normal">
+            Keep me signed in
+          </Label>
+        </div>
+        <Button type="submit" className="w-full" disabled={busy}>
+          {pending === "email" && spinner}
+          Sign in
+        </Button>
+      </form>
+    </AuthCard>
   );
 }

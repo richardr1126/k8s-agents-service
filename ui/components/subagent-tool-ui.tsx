@@ -6,7 +6,7 @@ import {
   type ThreadMessage,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { ChevronDownIcon, GlobeIcon, ListTreeIcon, PauseIcon, UserIcon, WorkflowIcon } from "lucide-react";
+import { ChevronDownIcon, GlobeIcon, PauseIcon, UserIcon, WorkflowIcon } from "lucide-react";
 import { useState, type FC } from "react";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
@@ -81,7 +81,8 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
         type="button"
         onClick={() => setToggled(!open)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        title={open ? "Show only the result" : "Show the full run"}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-subagent-border/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
       >
         <Icon className="size-4 shrink-0 text-subagent-accent" />
         <span className="shrink-0 text-sm font-medium">{agent.label} agent</span>
@@ -96,8 +97,13 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
           {meta.description ?? args.description}
         </span>
+        {settled && steps > 0 && (
+          <span className="hidden shrink-0 text-xs text-muted-foreground tabular-nums sm:inline">
+            {steps} tool {steps === 1 ? "call" : "calls"}
+          </span>
+        )}
         {phase === "running" && <Spinner className="text-muted-foreground" />}
-        {phase === "waiting" && <PauseIcon className="size-3.5 text-amber-500" aria-label="Waiting for input" />}
+        {phase === "waiting" && <PauseIcon className="size-3.5 text-warning" aria-label="Waiting for input" />}
         {phase === "error" && <span className="text-xs text-destructive">failed</span>}
         {phase === "stopped" && <span className="text-xs text-muted-foreground">stopped</span>}
         <ChevronDownIcon className={cn("size-4 shrink-0 text-muted-foreground transition-transform duration-300", open && "rotate-180")} />
@@ -123,17 +129,6 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
         )}
       </Fold>
 
-      {settled && run && (
-        <button
-          type="button"
-          onClick={() => setToggled(!open)}
-          className="flex w-full items-center gap-1.5 border-t border-subagent-border/70 px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-subagent-border/30 hover:text-foreground"
-        >
-          <ListTreeIcon className="size-3.5" />
-          {open ? "Show only the result" : "Show full run"}
-          {steps > 0 && <span className="text-muted-foreground/70">· {steps} tool {steps === 1 ? "call" : "calls"}</span>}
-        </button>
-      )}
     </div>
   );
 };

@@ -1,14 +1,12 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { toast } from "sonner";
-import { AuthCard, Notice } from "@/components/auth-card";
+import { AuthCard, AuthLink, Notice } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, PasswordInput } from "@/components/ui/field";
 import { authClient } from "@/lib/auth-client";
 
 function ResetPasswordForm() {
@@ -20,7 +18,7 @@ function ResetPasswordForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const back = <Link href="/forgot-password" className="underline">Request a new link</Link>;
+  const back = <AuthLink href="/forgot-password">Request a new link</AuthLink>;
   if (!token || params.get("error")) {
     return (
       <AuthCard title="This link doesn't work" footer={back}>
@@ -45,16 +43,19 @@ function ResetPasswordForm() {
     <AuthCard title="Choose a new password" description="This signs you out everywhere else." footer={back}>
       <form onSubmit={submit} className="grid gap-4">
         {error && <Notice kind="error">{error}</Notice>}
-        <div className="grid gap-2">
-          <Label htmlFor="password">New password</Label>
-          <Input id="password" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        <div className="grid gap-2">
-          <Label htmlFor="confirm">Confirm new password</Label>
-          <Input id="confirm" type="password" autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-        </div>
+        <Field label="New password" hint="At least 8 characters.">
+          {(control) => (
+            <PasswordInput {...control} autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
+          )}
+        </Field>
+        <Field label="Confirm new password">
+          {(control) => (
+            <PasswordInput {...control} autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          )}
+        </Field>
         <Button type="submit" disabled={loading || password.length < 8}>
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Change password"}
+          {loading && <Loader2 className="animate-spin" />}
+          Change password
         </Button>
       </form>
     </AuthCard>

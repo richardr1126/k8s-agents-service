@@ -114,13 +114,26 @@ When a window is full, the proxy answers `429` with `{ error: "run_limit", windo
 
 Every thread route checks that the thread belongs to the session user, and answers `404` otherwise.
 
+## UI components
+
+Screens are built from shared pieces, so a new page looks like the rest without new styles.
+
+- **Tokens** live in `app/globals.css`: cool zinc surfaces, hairline borders and one violet `brand` accent, plus `success`, `warning` and `destructive`. Use the token classes (`bg-muted`, `text-brand`, `border`) rather than raw palette colors such as `red-600`.
+- **Primitives** live in `components/ui`: `Button`, `Badge`, `Alert`, `Field` with `PasswordInput`, `Switch`, `DropdownMenu`, `Kbd`, `EmptyState`, `BrandMark`, `Fold`, `Skeleton` and the shadcn sidebar, dialog, select and tooltip.
+- **Composites** sit next to the feature that uses them: `components/auth-card.tsx` frames every account page, `components/settings/parts.tsx` holds settings sections and rows, and `components/assistant-ui` holds the chat.
+- **Gallery:** while `pnpm dev` runs, `/dev/ui` shows every primitive in its states, in both themes. It returns 404 in production. Add new primitives there.
+
+Data the browser reads goes through TanStack Query; the query definitions are in `lib/queries.ts`.
+
 ## Scripts
 
 ```bash
 pnpm dev           # development server
 pnpm build         # production build
 pnpm start         # serve the build
-pnpm lint          # ESLint
+pnpm check         # typecheck, lint and test: run before pushing
+pnpm typecheck     # tsc
+pnpm lint          # ESLint, failing on any warning
 pnpm test          # Vitest: history conversion and run limits
 pnpm db:migrate    # apply migrations
 pnpm db:generate   # regenerate the auth schema and a new migration

@@ -136,7 +136,7 @@ export function EmailSettings() {
       </Row>
       <div className="flex flex-wrap justify-end gap-2 px-5 py-4">
         {config && (
-          <Button variant="ghost" className="text-red-600 hover:text-red-700 dark:text-red-400" disabled={busy !== null} onClick={remove}>
+          <Button variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={busy !== null} onClick={remove}>
             {busy === "remove" ? <Loader2 className="size-4 animate-spin" /> : "Remove"}
           </Button>
         )}

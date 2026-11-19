@@ -129,7 +129,7 @@ export function UserAdmin() {
       </div>
       {loadError && users === null ? (
         <div className="flex items-center gap-3 px-5 py-6 text-sm">
-          <span className="text-red-600 dark:text-red-400">{loadError}</span>
+          <span className="text-destructive">{loadError}</span>
           <Button size="sm" variant="outline" onClick={reload}>Try again</Button>
         </div>
       ) : users === null ? (
@@ -172,7 +172,7 @@ function UserRow({ user, self, onPatch, onDelete }: { user: AdminUser; self: boo
     <button
       type="button"
       role="menuitem"
-      className={cn("w-full rounded px-2.5 py-1.5 text-left text-sm hover:bg-muted", danger && "text-red-600 dark:text-red-400")}
+      className={cn("w-full rounded px-2.5 py-1.5 text-left text-sm hover:bg-muted", danger && "text-destructive")}
       onClick={() => {
         setOpen(false);
         action();

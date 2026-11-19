@@ -1,49 +1,96 @@
-import { useMemo, type FC } from "react";
+import { createContext, useContext, useMemo, useState, type FC } from "react";
 import {
   ThreadListItemPrimitive,
   ThreadListPrimitive,
   useAui,
   useAuiState,
 } from "@assistant-ui/react";
-import { CirclePlusIcon, Loader2, MessageSquareDashedIcon, PencilIcon, Trash2Icon } from "lucide-react";
+import { Loader2, MessageSquareDashedIcon, PencilIcon, SearchIcon, SquarePenIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { useChat } from "@/components/custom-runtime-provider";
 import { useDialogs } from "@/components/dialogs";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Kbd } from "@/components/ui/kbd";
 import { useSidebar } from "@/components/ui/sidebar";
 import { ThreadListLoading } from "@/components/assistant-ui/loading-skeletons";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
 import { historyQuery } from "@/lib/queries";
 import type { ThreadRow } from "@/lib/types";
+import { useIsMac } from "@/lib/use-platform";
+
+/** The search text, lowercased; empty shows every conversation. */
+const FilterContext = createContext("");
 
 export const ThreadList: FC = () => {
   const { isMobile, setOpenMobile } = useSidebar();
+  const [query, setQuery] = useState("");
   return (
     <ThreadListPrimitive.Root
-      className="flex flex-col items-stretch gap-1.5"
+      className="flex flex-col items-stretch"
       // On a phone the sidebar covers the chat; close it once a conversation is picked.
       onClick={(e) => {
         if (isMobile && (e.target as Element).closest("[data-opens-thread]")) setOpenMobile(false);
       }}
     >
-      <ThreadListNew />
-      <ThreadListItems />
+      <div className="bg-sidebar sticky top-0 z-10 flex flex-col gap-1 px-1 pt-1 pb-2">
+        <ThreadListNew />
+        <ThreadListSearch value={query} onChange={setQuery} />
+      </div>
+      <FilterContext.Provider value={query.trim().toLowerCase()}>
+        <ThreadListItems />
+      </FilterContext.Provider>
     </ThreadListPrimitive.Root>
   );
 };
 
 const ThreadListNew: FC = () => {
+  const mac = useIsMac();
   return (
     <ThreadListPrimitive.New asChild>
-      <Button data-opens-thread className="data-active:bg-muted hover:bg-muted flex items-center justify-start gap-2 mx-2 rounded-lg px-2.5 py-2 text-start text-md md:text-sm" variant="ghost">
-        <CirclePlusIcon />
-        Start new chat
+      <Button
+        data-opens-thread
+        variant="outline"
+        className="bg-background dark:bg-card h-9 justify-start gap-2 px-2.5 text-[15px] font-medium shadow-xs md:h-8 md:text-sm"
+      >
+        <SquarePenIcon className="size-4" />
+        New chat
+        <span className="ml-auto hidden items-center gap-0.5 md:flex" aria-hidden>
+          <Kbd>{mac ? "⌘" : "Ctrl"}</Kbd>
+          <Kbd>⇧</Kbd>
+          <Kbd>O</Kbd>
+        </span>
       </Button>
     </ThreadListPrimitive.New>
   );
 };
+
+const ThreadListSearch: FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => (
+  <label className="text-muted-foreground focus-within:text-foreground relative flex items-center">
+    <SearchIcon className="pointer-events-none absolute left-2.5 size-3.5" />
+    <input
+      type="search"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => e.key === "Escape" && onChange("")}
+      placeholder="Search chats"
+      aria-label="Search conversations"
+      className="placeholder:text-muted-foreground text-foreground focus-visible:border-ring focus-visible:ring-ring/25 h-9 w-full rounded-md border border-transparent bg-transparent pr-7 pl-8 text-base outline-none hover:bg-sidebar-accent/60 focus-visible:bg-background focus-visible:ring-[3px] md:h-8 md:text-sm [&::-webkit-search-cancel-button]:hidden"
+    />
+    {value && (
+      <button
+        type="button"
+        onClick={() => onChange("")}
+        aria-label="Clear search"
+        className="hover:text-foreground absolute right-1.5 rounded p-0.5"
+      >
+        <XIcon className="size-3.5" />
+      </button>
+    )}
+  </label>
+);
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -74,31 +121,39 @@ const ThreadListItems: FC = () => {
   const isLoading = useAuiState((s) => s.threads.isLoading);
   const count = useAuiState((s) => s.threads.threadIds.length);
   const { threads } = useChat();
-  const headers = useMemo(() => groupHeaders(threads ?? []), [threads]);
+  const filter = useContext(FilterContext);
+  const matches = useMemo(
+    () => (threads ?? []).filter((t) => !filter || (t.title ?? "new chat").toLowerCase().includes(filter)),
+    [threads, filter],
+  );
+  const shown = useMemo(() => new Set(matches.map((t) => t.id)), [matches]);
+  const headers = useMemo(() => groupHeaders(matches), [matches]);
 
   if (isLoading) return <ThreadListLoading />;
   if (count === 0) {
-    return (
-      <div className="text-muted-foreground mx-2 flex flex-col items-center gap-2 px-3 py-8 text-center text-sm">
-        <MessageSquareDashedIcon className="size-5" />
-        <p>No conversations yet</p>
-      </div>
-    );
+    return <EmptyState icon={MessageSquareDashedIcon} title="No conversations yet" description="Your chats will show up here." />;
+  }
+  if (filter && matches.length === 0) {
+    return <EmptyState icon={SearchIcon} title="No matches" description="Try a different word." />;
   }
 
   return (
-    <ThreadListPrimitive.Items>
-      {({ threadListItem }) => (
-        <>
-          {headers.has(threadListItem.id) && (
-            <p className="text-muted-foreground mx-2 mt-3 px-3 text-xs font-medium first:mt-0">
-              {headers.get(threadListItem.id)}
-            </p>
-          )}
-          <ThreadListItem />
-        </>
-      )}
-    </ThreadListPrimitive.Items>
+    <div className="flex flex-col gap-px px-1 pb-2">
+      <ThreadListPrimitive.Items>
+        {({ threadListItem }) =>
+          shown.has(threadListItem.id) || (!filter && threads === null) ? (
+            <>
+              {headers.has(threadListItem.id) && (
+                <p className="text-muted-foreground px-2.5 pt-4 pb-1 text-xs font-medium first:pt-1">
+                  {headers.get(threadListItem.id)}
+                </p>
+              )}
+              <ThreadListItem />
+            </>
+          ) : null
+        }
+      </ThreadListPrimitive.Items>
+    </div>
   );
 };
 
@@ -111,14 +166,16 @@ const ThreadListItem: FC = () => {
     <ThreadListItemPrimitive.Root
       onPointerEnter={prefetch}
       onFocus={prefetch}
-      className="group/item data-active:bg-muted hover:bg-muted focus-visible:bg-muted focus-visible:ring-ring flex items-center gap-1 mx-2 rounded-lg transition-all focus-visible:outline-none focus-visible:ring-2">
-      <ThreadListItemPrimitive.Trigger data-opens-thread className="min-w-0 flex-grow px-3 py-2 text-start">
-        <div className="flex items-center gap-2">
-          <ThreadListItemTitle />
-          <ThreadListItemLoading />
-        </div>
+      className="group/item data-active:bg-sidebar-accent data-active:text-sidebar-accent-foreground hover:bg-sidebar-accent/70 focus-within:bg-sidebar-accent/70 relative flex h-9 items-center rounded-md transition-colors md:h-8"
+    >
+      <ThreadListItemPrimitive.Trigger
+        data-opens-thread
+        className="focus-visible:ring-ring flex h-full min-w-0 flex-grow items-center gap-2 rounded-md px-2.5 text-start outline-none focus-visible:ring-2"
+      >
+        <ThreadListItemTitle />
+        <ThreadListItemLoading />
       </ThreadListItemPrimitive.Trigger>
-      <div className="mr-1 flex shrink-0 items-center opacity-100 transition-opacity md:opacity-0 md:group-hover/item:opacity-100 md:group-focus-within/item:opacity-100 md:group-data-active/item:opacity-100">
+      <div className="bg-sidebar-accent absolute right-0.5 flex shrink-0 items-center rounded-md opacity-100 transition-opacity md:opacity-0 md:group-focus-within/item:opacity-100 md:group-hover/item:opacity-100">
         <ThreadListItemRename />
         <ThreadListItemDelete />
       </div>
@@ -128,7 +185,7 @@ const ThreadListItem: FC = () => {
 
 const ThreadListItemTitle: FC = () => {
   return (
-    <p className="truncate text-md md:text-sm md:leading-tight">
+    <p className="truncate text-[15px] md:text-[13px]">
       <ThreadListItemPrimitive.Title fallback="New Chat" />
     </p>
   );
@@ -165,7 +222,7 @@ const ThreadListItemRename: FC = () => {
   };
 
   return (
-    <TooltipIconButton className="text-foreground/60 size-7 p-0" variant="ghost" tooltip="Rename" onClick={onClick}>
+    <TooltipIconButton className="text-muted-foreground hover:text-foreground size-7 p-0" variant="ghost" tooltip="Rename" onClick={onClick}>
       <PencilIcon className="size-3.5" />
     </TooltipIconButton>
   );
@@ -199,7 +256,7 @@ const ThreadListItemDelete: FC = () => {
   };
 
   return (
-    <TooltipIconButton className="hover:text-destructive text-foreground/60 size-7 p-0" variant="ghost" tooltip="Delete" onClick={onClick}>
+    <TooltipIconButton className="hover:text-destructive text-muted-foreground size-7 p-0" variant="ghost" tooltip="Delete" onClick={onClick}>
       <Trash2Icon className="size-3.5" />
     </TooltipIconButton>
   );

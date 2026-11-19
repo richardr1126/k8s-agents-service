@@ -7,16 +7,18 @@ import {
   useAui,
   useAuiState,
 } from "@assistant-ui/react";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import {
-  AlertCircle,
+  AlertTriangleIcon,
   ArrowDownIcon,
+  ArrowUpIcon,
+  ArrowUpRightIcon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
   RefreshCwIcon,
-  SendHorizontalIcon,
-  Square,
+  SparklesIcon,
+  SquareIcon,
   Undo2Icon,
 } from "lucide-react";
 import type { FC } from "react";
@@ -29,8 +31,10 @@ import { useDialogs } from "@/components/dialogs";
 import { InterruptBanner } from "@/components/interrupt-banner";
 import { ModelSelect } from "@/components/model-select";
 import { SubagentToolCard } from "@/components/subagent-tool-ui";
+import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import agentSuggestions from "./agent-suggestions.json";
 import { ConversationSkeleton } from "./loading-skeletons";
@@ -76,17 +80,20 @@ export const Thread: FC = () => {
   useThreadShortcuts();
   return (
     <ThreadPrimitive.Root
-      className="bg-background flex h-full w-full min-w-0 flex-col pb-2 sm:pb-0"
+      className="bg-background flex h-full w-full min-w-0 flex-col"
       style={{
-        ["--thread-max-width" as string]: "48rem",
-        ["--thread-padding-x" as string]: "0.7rem",
+        ["--thread-max-width" as string]: "46rem",
+        ["--thread-padding-x" as string]: "1rem",
       }}
     >
-      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col gap-0 overflow-y-scroll pt-8">
+      <ThreadPrimitive.Viewport className="relative flex min-w-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
+        {/* Messages fade out under the header rather than cutting off at its edge. */}
+        <div className="from-background pointer-events-none sticky top-0 z-10 -mb-4 h-4 shrink-0 bg-gradient-to-b to-transparent" />
+        <div className="h-4 shrink-0" />
         <ThreadBody />
         <ThreadPrimitive.Messages components={{ UserMessage, AssistantMessage }} />
         <ThreadPrimitive.If empty={false}>
-          <motion.div className="min-h-6 min-w-6 shrink-0" />
+          <div className="min-h-8 shrink-0" />
         </ThreadPrimitive.If>
       </ThreadPrimitive.Viewport>
       <Composer />
@@ -94,20 +101,17 @@ export const Thread: FC = () => {
   );
 };
 
-const ThreadScrollToBottom: FC = () => {
-  return (
-    <ThreadPrimitive.ScrollToBottom asChild>
-      <TooltipIconButton
-        tooltip="Scroll to bottom"
-        variant="outline"
-        // aui-thread-scroll-to-bottom
-        className="dark:bg-background dark:hover:bg-accent absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
-      >
-        <ArrowDownIcon />
-      </TooltipIconButton>
-    </ThreadPrimitive.ScrollToBottom>
-  );
-};
+const ThreadScrollToBottom: FC = () => (
+  <ThreadPrimitive.ScrollToBottom asChild>
+    <TooltipIconButton
+      tooltip="Scroll to bottom"
+      variant="outline"
+      className="bg-background absolute -top-11 z-10 size-8 self-center rounded-full shadow-md disabled:invisible dark:bg-card"
+    >
+      <ArrowDownIcon />
+    </TooltipIconButton>
+  </ThreadPrimitive.ScrollToBottom>
+);
 
 /** The welcome for a new chat, or a skeleton while a conversation's history loads. */
 const ThreadBody: FC = () => {
@@ -118,41 +122,37 @@ const ThreadBody: FC = () => {
   return empty ? <ConversationSkeleton delayed={!booting} /> : null;
 };
 
+function greeting(now = new Date()) {
+  const hour = now.getHours();
+  return hour < 5 ? "Up late" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+}
+
 const ThreadWelcome: FC = () => {
   const { serviceInfo, agentId } = useChat();
-  const currentAgent = serviceInfo.agents.find((agent) => agent.key === agentId);
-  const welcomeMessage = currentAgent?.description || "How can I help you today?";
+  const { data: session } = useSession();
+  const agent = serviceInfo.agents.find((a) => a.key === agentId);
+  const firstName = session?.user.isAnonymous ? null : session?.user.name?.split(" ")[0];
+  const reduceMotion = useReducedMotion();
 
   return (
     <ThreadPrimitive.Empty>
-      {/* aui-thread-welcome-root */}
-      <div className="mx-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col px-[var(--thread-padding-x)]">
-        {/* aui-thread-welcome-center */}
-        <div className="flex w-full flex-grow flex-col items-center justify-center">
-          {/* aui-thread-welcome-message */}
-          <div className="flex size-full flex-col justify-center px-8 md:mt-20">
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.25 }}
-              // aui-thread-welcome-message-motion-1
-              className="text-lg md:text-2xl font-semibold"
-            >
-              Welcome
-            </motion.div>
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 10 }}
-              transition={{ duration: 0.25, delay: 0.05 }}
-              // aui-thread-welcome-message-motion-2
-              className="text-muted-foreground/65 text-lg md:text-2xl"
-            >
-              {welcomeMessage}
-            </motion.div>
-          </div>
-        </div>
+      <div className="mx-auto flex w-full max-w-[var(--thread-max-width)] flex-grow flex-col justify-center px-[var(--thread-padding-x)] pb-6">
+        <motion.div
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
+          <span className="bg-brand-soft text-brand flex size-10 items-center justify-center rounded-xl">
+            <SparklesIcon className="size-5" />
+          </span>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight md:text-3xl">
+            {greeting()}
+            {firstName && `, ${firstName}`}
+          </h1>
+          <p className="text-muted-foreground mt-2 max-w-xl text-[15px] leading-relaxed">
+            {agent?.description || "How can I help you today?"}
+          </p>
+        </motion.div>
       </div>
     </ThreadPrimitive.Empty>
   );
@@ -160,40 +160,33 @@ const ThreadWelcome: FC = () => {
 
 const ThreadWelcomeSuggestions: FC = () => {
   const { agentId, loadingThread } = useChat();
+  const reduceMotion = useReducedMotion();
   const suggestions =
     agentSuggestions[agentId as keyof typeof agentSuggestions] ?? agentSuggestions["auto-router"];
   if (loadingThread) return null;
 
   return (
-    // aui-thread-welcome-suggestions
     <div className="grid w-full gap-2 sm:grid-cols-2">
-      {suggestions.map((suggestedAction, index) => (
+      {suggestions.map((suggestion, index) => (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          key={`${suggestion.title}-${index}`}
+          initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: 20 }}
-          transition={{ duration: 0.25, delay: 0.1 + 0.04 * index }}
-          key={`suggested-action-${suggestedAction.title}-${index}`}
-          // aui-thread-welcome-suggestion-display
+          transition={{ duration: 0.25, delay: 0.08 + 0.04 * index }}
           className="[&:nth-child(n+4)]:hidden sm:[&:nth-child(n+4)]:block"
         >
-          <ThreadPrimitive.Suggestion
-            prompt={suggestedAction.action}
-            method="replace"
-            autoSend
-            asChild
-          >
-            <Button
-              variant="ghost"
-              // aui-thread-welcome-suggestion
-              className="dark:hover:bg-accent/60 h-auto w-full flex-1 flex-col items-start justify-start gap-[0.1rem] rounded-lg border px-3 py-2 text-left text-sm"
-              aria-label={suggestedAction.action}
+          <ThreadPrimitive.Suggestion prompt={suggestion.action} method="replace" autoSend asChild>
+            <button
+              type="button"
+              aria-label={suggestion.action}
+              className="group/suggestion hover:bg-accent/60 focus-visible:ring-ring flex h-full w-full items-start gap-3 rounded-xl border px-3.5 py-3 text-left text-sm transition-colors outline-none focus-visible:ring-[3px]"
             >
-              {/* aui-thread-welcome-suggestion-text-1 */}
-              <span className="font-medium text-wrap">{suggestedAction.title}</span>
-              {/* aui-thread-welcome-suggestion-text-2 */}
-              <p className="text-muted-foreground text-wrap">{suggestedAction.label}</p>
-            </Button>
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{suggestion.title}</span>
+                <span className="text-muted-foreground mt-0.5 block text-[13px]">{suggestion.label}</span>
+              </span>
+              <ArrowUpRightIcon className="text-muted-foreground mt-0.5 size-4 shrink-0 opacity-0 transition-opacity group-hover/suggestion:opacity-100 group-focus-visible/suggestion:opacity-100" />
+            </button>
           </ThreadPrimitive.Suggestion>
         </motion.div>
       ))}
@@ -201,16 +194,10 @@ const ThreadWelcomeSuggestions: FC = () => {
   );
 };
 
-
 const LimitBanner: FC = () => {
   const { limitMessage } = useChat();
   if (!limitMessage) return null;
-  return (
-    <div role="alert" className="flex items-center gap-2 rounded-lg border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-      <AlertCircle className="size-4 shrink-0" />
-      <p>{limitMessage}</p>
-    </div>
-  );
+  return <Alert tone="error">{limitMessage}</Alert>;
 };
 
 /** Runs left in the tightest window, e.g. "2/3". */
@@ -225,10 +212,10 @@ const UsageCounter: FC = () => {
   const left = Math.max(0, tightest.limit - tightest.used);
   return (
     <span
-      className={cn("text-sm", left === 0 ? "text-destructive" : "text-muted-foreground")}
+      className={cn("text-xs tabular-nums", left === 0 ? "text-destructive" : "text-muted-foreground")}
       title={`${left} of ${tightest.limit} runs left this ${tightest.window}`}
     >
-      {left}/{tightest.limit}
+      {left}/{tightest.limit} runs
     </span>
   );
 };
@@ -241,7 +228,7 @@ const Composer: FC = () => {
   const isSendDisabled = Boolean(limitMessage) || isOverLimit || text.trim().length === 0;
 
   return (
-    <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-4 px-[var(--thread-padding-x)] pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-6">
+    <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-3 px-[var(--thread-padding-x)] pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
       {/* Messages fade out into the composer rather than cutting off at its edge. */}
       <div className="from-background pointer-events-none absolute inset-x-0 -top-6 h-6 bg-gradient-to-t to-transparent" />
       <ThreadScrollToBottom />
@@ -250,82 +237,68 @@ const Composer: FC = () => {
       </ThreadPrimitive.Empty>
       <InterruptBanner />
       <LimitBanner />
-      <ComposerPrimitive.Root className="focus-within::ring-offset-2 relative flex w-full flex-col rounded-2xl focus-within:ring-2 focus-within:ring-black dark:focus-within:ring-white">
+      <ComposerPrimitive.Root
+        className={cn(
+          "bg-background dark:bg-card relative flex w-full flex-col rounded-xl border shadow-sm transition-[border-color,box-shadow]",
+          "focus-within:border-ring focus-within:ring-ring/25 focus-within:ring-[3px]",
+          isOverLimit && "border-destructive focus-within:border-destructive focus-within:ring-destructive/20",
+        )}
+      >
         <ComposerPrimitive.Input
-          placeholder="Send a message..."
-          className={cn(
-            "bg-muted border-border dark:border-muted-foreground/15 focus:outline-primary placeholder:text-muted-foreground max-h-[calc(50dvh)] min-h-16 w-full resize-none rounded-t-2xl border-x border-t px-4 pt-2 pb-3 text-base outline-none",
-            isOverLimit && "border-destructive focus:ring-destructive",
-          )}
+          placeholder="Ask anything…"
+          className="placeholder:text-muted-foreground max-h-[40dvh] min-h-[3.25rem] w-full resize-none bg-transparent px-3.5 pt-3 pb-1 text-base outline-none md:text-[15px]"
           rows={1}
           autoFocus={!isTouch()}
           aria-label="Message input"
           submitMode={isSendDisabled ? "none" : "enter"}
         />
-        <div className="bg-muted/80 border-1 dark:border-muted-foreground/15 relative flex flex-wrap items-center justify-between gap-y-1 rounded-b-2xl border-x border-b p-2">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-2 px-2 pb-2">
+          <div className="flex min-w-0 items-center gap-0.5">
             <AgentSelect />
             <ModelSelect />
           </div>
-          <div className="flex items-center gap-2 pl-1">
-            {text.length > 0 && (
+          <div className="flex shrink-0 items-center gap-2">
+            {text.length > MAX_CHARACTERS - 120 && (
               <span
-                className={cn(
-                  "font-mono text-xs",
-                  isOverLimit ? "text-destructive" : remaining <= 50 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground",
-                )}
+                className={cn("text-xs tabular-nums", isOverLimit ? "text-destructive" : "text-muted-foreground")}
                 title={`${text.length}/${MAX_CHARACTERS} characters`}
               >
-                {isOverLimit ? `+${-remaining}` : remaining}
+                {isOverLimit ? `${-remaining} over` : `${remaining} left`}
               </span>
             )}
             <UsageCounter />
             <ThreadPrimitive.If running={false}>
               <ComposerPrimitive.Send asChild>
-                <Button
-                  type="submit"
-                  variant="ghost"
-                  className={cn(
-                    "h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30",
-                    isSendDisabled && "cursor-not-allowed opacity-50",
-                  )}
-                  aria-label="Send message"
-                  disabled={isSendDisabled}
-                >
-                  <SendHorizontalIcon className="size-4" />
+                <Button type="submit" size="icon-sm" className="rounded-lg" aria-label="Send message" disabled={isSendDisabled}>
+                  <ArrowUpIcon />
                 </Button>
               </ComposerPrimitive.Send>
             </ThreadPrimitive.If>
             <ThreadPrimitive.If running>
               <ComposerPrimitive.Cancel asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="h-6.5 px-2 sm:px-3 inline-flex items-center gap-1 rounded-md border border-muted-foreground/20 bg-background/40 dark:bg-background/30"
-                  aria-label="Stop generating"
-                >
-                  <Square className="size-3.5 fill-white dark:size-4 dark:fill-black" />
+                <Button type="button" size="icon-sm" className="rounded-lg" aria-label="Stop generating">
+                  <SquareIcon className="size-3 fill-current" />
                 </Button>
               </ComposerPrimitive.Cancel>
             </ThreadPrimitive.If>
           </div>
         </div>
       </ComposerPrimitive.Root>
+      <p className="text-muted-foreground hidden text-center text-[11px] md:block">
+        Answers can be wrong. Check anything important.
+      </p>
     </div>
   );
 };
 
-const MessageError: FC = () => {
-  return (
-    <MessagePrimitive.Error>
-      {/* aui-message-error-root */}
-      <ErrorPrimitive.Root className="border-destructive bg-destructive/10 dark:bg-destructive/5 text-destructive mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        {/* aui-message-error-message */}
-        <ErrorPrimitive.Message className="line-clamp-2" />
-      </ErrorPrimitive.Root>
-    </MessagePrimitive.Error>
-  );
-};
+const MessageError: FC = () => (
+  <MessagePrimitive.Error>
+    <ErrorPrimitive.Root className="border-destructive/30 bg-destructive/8 text-destructive mt-3 flex items-start gap-2 rounded-lg border px-3 py-2.5 text-sm">
+      <AlertTriangleIcon className="mt-0.5 size-4 shrink-0" />
+      <ErrorPrimitive.Message className="line-clamp-3" />
+    </ErrorPrimitive.Root>
+  </MessagePrimitive.Error>
+);
 
 const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (props) => (
   <div data-tool className={cn(toolSpacing, "mb-2")}>
@@ -399,15 +372,12 @@ const AssistantMessage: FC = () => {
   return (
     <MessagePrimitive.Root asChild>
       <motion.div
-        className="relative mx-auto mb-4 grid w-full max-w-[var(--thread-max-width)] grid-cols-[auto_auto_1fr] grid-rows-[auto_1fr] px-[var(--thread-padding-x)] py-4"
-        initial={{ y: 5, opacity: 0 }}
+        className="group/assistant relative mx-auto w-full max-w-[var(--thread-max-width)] px-[var(--thread-padding-x)] py-3"
+        initial={{ y: 4, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         data-role="assistant"
       >
-        <div className="ring-border bg-background col-start-1 row-start-1 flex size-8 shrink-0 items-center justify-center rounded-full ring-1">
-          <StarIcon size={14} />
-        </div>
-        <div className="text-foreground col-span-2 col-start-2 row-start-1 ml-4 leading-5 break-words">
+        <div className="text-foreground min-w-0 text-[15px] leading-7 break-words">
           <MessagePrimitive.Content
             components={{
               Text: MarkdownText,
@@ -490,7 +460,7 @@ const AssistantActionBar: FC = () => {
       autohide="not-last"
       autohideFloat="single-branch"
       // aui-assistant-action-bar-root
-      className="text-muted-foreground data-floating:bg-background col-start-3 row-start-2 mt-2 ml-3 flex gap-1 data-floating:absolute data-floating:mt-1 data-floating:rounded-md data-floating:border data-floating:p-1 data-floating:shadow-sm"
+      className="text-muted-foreground data-floating:bg-background -ml-1.5 mt-1 flex gap-0.5 data-floating:absolute data-floating:rounded-md data-floating:border data-floating:p-0.5 data-floating:shadow-sm"
     >
       <CopyAction />
       {isLast && <RegenerateAction />}
@@ -542,10 +512,10 @@ const UndoAction: FC = () => {
 const UserActionBar: FC = () => (
   <ActionBarPrimitive.Root
     autohide="never"
-    // aui-user-action-bar-root: always shown, small until the message is hovered or focused
+    // Always shown, small until the message is hovered or focused.
     className={cn(
-      "text-muted-foreground col-start-2 row-start-2 mt-0.5 flex origin-top-right justify-end gap-1",
-      "scale-75 opacity-60 transition-[scale,opacity] duration-200 ease-out motion-reduce:transition-none",
+      "text-muted-foreground mt-1 flex origin-top-right justify-end gap-0.5",
+      "scale-90 opacity-50 transition-[scale,opacity] duration-200 ease-out motion-reduce:transition-none",
       "group-hover/user:scale-100 group-hover/user:opacity-100 focus-within:scale-100 focus-within:opacity-100",
     )}
   >
@@ -554,37 +524,18 @@ const UserActionBar: FC = () => (
   </ActionBarPrimitive.Root>
 );
 
-const UserMessage: FC = () => {
-  return (
-    <MessagePrimitive.Root asChild>
-      <motion.div
-        // aui-user-message-root
-        className="group/user mx-auto grid w-full max-w-[var(--thread-max-width)] auto-rows-auto grid-cols-[minmax(72px,1fr)_auto] gap-y-1 px-[var(--thread-padding-x)] py-4 [&:where(>*)]:col-start-2"
-        initial={{ y: 5, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        data-role="user"
-      >
-        {/* aui-user-message-content */}
-        <div className="bg-muted text-foreground col-start-2 rounded-3xl px-5 py-2.5 break-words">
-          <MessagePrimitive.Content components={{ Text: MarkdownText }} />
-        </div>
-        <UserActionBar />
-      </motion.div>
-    </MessagePrimitive.Root>
-  );
-};
-
-const StarIcon = ({ size = 14 }: { size?: number }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 16 16"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path
-      d="M8 0L9.79611 6.20389L16 8L9.79611 9.79611L8 16L6.20389 9.79611L0 8L6.20389 6.20389L8 0Z"
-      fill="currentColor"
-    />
-  </svg>
+const UserMessage: FC = () => (
+  <MessagePrimitive.Root asChild>
+    <motion.div
+      className="group/user mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col items-end px-[var(--thread-padding-x)] py-3"
+      initial={{ y: 4, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      data-role="user"
+    >
+      <div className="bg-muted text-foreground max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-[15px] leading-relaxed break-words">
+        <MessagePrimitive.Content components={{ Text: MarkdownText }} />
+      </div>
+      <UserActionBar />
+    </motion.div>
+  </MessagePrimitive.Root>
 );

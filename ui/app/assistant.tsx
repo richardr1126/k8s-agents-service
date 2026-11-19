@@ -5,8 +5,9 @@ import { useEffect } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppSkeleton } from "@/components/assistant-ui/loading-skeletons";
 import { Thread } from "@/components/assistant-ui/thread";
+import { ChatHeader } from "@/components/chat-header";
 import { CustomRuntimeProvider } from "@/components/custom-runtime-provider";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useSession } from "@/lib/auth-client";
 
 export const Assistant = ({ hadThreads }: { hadThreads: boolean }) => {
@@ -25,15 +26,11 @@ export const Assistant = ({ hadThreads }: { hadThreads: boolean }) => {
     // Remount per user so a sign-in or guest upgrade starts from that user's threads.
     <CustomRuntimeProvider key={session.user.id} fallback={skeleton}>
       <SidebarProvider>
-        <div className="flex h-dvh w-full pr-0.5">
+        <div className="flex h-dvh w-full">
           <AppSidebar />
-          <SidebarInset>
-            <div className="min-h-0 relative flex-1">
-              {/* On a phone the conversation scrolls under the sidebar button; fade it out there. */}
-              <div className="from-background via-background/80 pointer-events-none absolute inset-x-0 top-0 z-10 h-[calc(3.5rem+env(safe-area-inset-top))] bg-gradient-to-b to-transparent md:hidden" />
-              <div className="absolute top-[max(0.5rem,env(safe-area-inset-top))] left-[max(0.5rem,env(safe-area-inset-left))] z-20">
-                <SidebarTrigger className="rounded-full border size-11 bg-background/80 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-background/60" />
-              </div>
+          <SidebarInset className="min-w-0">
+            <ChatHeader />
+            <div className="relative min-h-0 flex-1">
               <Thread />
             </div>
           </SidebarInset>

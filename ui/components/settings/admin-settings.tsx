@@ -57,7 +57,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error) return <p className="text-sm text-destructive">{error}</p>;
   if (!snapshot) return <Loader2 className="size-5 animate-spin text-muted-foreground" />;
   return <SettingsContext.Provider value={{ ...snapshot, save, reset }}>{children}</SettingsContext.Provider>;
 }
@@ -208,7 +208,7 @@ export function ModelSettings() {
     <div className="grid gap-6">
       <Section title="Chat models" description="Models come from the agent service; choose which ones people can pick.">
         <SettingRow k="enabledModels">
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           {!backend && !error && <Loader2 className="size-4 animate-spin" />}
           {backend && (
             <div className="grid w-full gap-1 sm:max-w-sm">

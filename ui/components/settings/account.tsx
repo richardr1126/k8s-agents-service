@@ -85,7 +85,7 @@ function NameRow({ name, onSaved }: { name: string; onSaved: () => void }) {
     onSaved();
   }
   return (
-    <Row label="Name">
+    <Row label="Display name">
       <form
         className="flex w-full gap-2 sm:max-w-sm"
         onSubmit={(e) => {
@@ -93,7 +93,7 @@ function NameRow({ name, onSaved }: { name: string; onSaved: () => void }) {
           if (dirty) save();
         }}
       >
-        <Input value={value} onChange={(e) => setValue(e.target.value)} maxLength={100} aria-label="Name" />
+        <Input value={value} onChange={(e) => setValue(e.target.value)} maxLength={100} aria-label="Display name" />
         <Button type="submit" variant="outline" disabled={!dirty || saving}>
           {saving ? <Spinner /> : "Save"}
         </Button>
@@ -184,7 +184,7 @@ function PasswordSection({ onChanged }: { onChanged: () => void }) {
         <Input type="password" autoComplete="current-password" placeholder="Current password" value={current} onChange={(e) => setCurrent(e.target.value)} aria-label="Current password" required />
         <Input type="password" autoComplete="new-password" placeholder="New password (8+ characters)" minLength={8} value={next} onChange={(e) => setNext(e.target.value)} aria-label="New password" required />
         <Input type="password" autoComplete="new-password" placeholder="Confirm new password" value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-label="Confirm new password" aria-invalid={mismatch} required />
-        {mismatch && <p className="text-xs text-red-600 dark:text-red-400">The passwords don&apos;t match.</p>}
+        {mismatch && <p className="text-xs text-destructive">The passwords don&apos;t match.</p>}
         <div>
           <Button type="submit" disabled={saving || !current || next.length < 8 || next !== confirm}>
             {saving ? <Spinner /> : "Change password"}

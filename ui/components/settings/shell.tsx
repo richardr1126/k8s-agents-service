@@ -1,6 +1,8 @@
 "use client";
 
 import { ArrowLeft, Gauge, Mail, Shield, Sparkles, User, Users } from "lucide-react";
+import { BrandMark } from "@/components/ui/brand-mark";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AccountSettings } from "@/components/settings/account";
@@ -50,11 +52,13 @@ export function SettingsShell({ isAdmin, emailEnabled }: { isAdmin: boolean; ema
           onClick={() => select(t.id)}
           aria-current={tab === t.id ? "page" : undefined}
           className={cn(
-            "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors",
-            tab === t.id ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            "focus-visible:ring-ring flex h-8 shrink-0 items-center gap-2 rounded-md px-2.5 text-[13px] transition-colors outline-none focus-visible:ring-2",
+            tab === t.id
+              ? "bg-accent text-foreground font-medium"
+              : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
           )}
         >
-          <t.icon className="size-4" />
+          <t.icon className="size-3.5" />
           {t.label}
         </button>
       ));
@@ -70,27 +74,44 @@ export function SettingsShell({ isAdmin, emailEnabled }: { isAdmin: boolean; ema
     </>
   );
 
+  const current = tabs.find((t) => t.id === tab);
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-4 py-6 md:py-10">
-      <div className="mb-6 flex items-center gap-3">
-        <Link href="/" className="inline-flex size-9 items-center justify-center rounded-full border hover:bg-muted" aria-label="Back to chat">
-          <ArrowLeft className="size-4" />
-        </Link>
-        <h1 className="text-xl font-semibold">Settings</h1>
-      </div>
-      <div className="flex flex-col gap-6 md:flex-row">
-        <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:w-48 md:shrink-0 md:flex-col md:overflow-visible md:px-0">
+    <div className="flex min-h-dvh w-full flex-col">
+      <header className="bg-background/85 supports-[backdrop-filter]:bg-background/70 sticky top-0 z-20 border-b backdrop-blur">
+        <div className="mx-auto flex h-[calc(3.5rem+env(safe-area-inset-top))] w-full max-w-5xl items-center gap-3 px-4 pt-[env(safe-area-inset-top)]">
+          <Link href="/" className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+            <BrandMark compact className="sm:hidden" />
+            <BrandMark className="hidden sm:inline-flex" />
+          </Link>
+          <span className="text-muted-foreground/50 text-lg font-light" aria-hidden>/</span>
+          <span className="text-sm font-medium">Settings</span>
+          <Button asChild variant="outline" size="sm" className="ml-auto">
+            <Link href="/">
+              <ArrowLeft />
+              Back to chat
+            </Link>
+          </Button>
+        </div>
+      </header>
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-6 px-4 pb-10 md:flex-row md:gap-10 md:py-10">
+        <nav
+          aria-label="Settings"
+          className="bg-background sticky top-[calc(3.5rem+env(safe-area-inset-top))] z-10 -mx-4 flex gap-1 overflow-x-auto border-b px-4 py-2 [scrollbar-width:none] md:static md:mx-0 md:w-48 md:shrink-0 md:flex-col md:self-start md:overflow-visible md:border-0 md:p-0"
+        >
           {nav("you")}
           {isAdmin && (
             <>
-              <div className="hidden px-3 pb-1 pt-4 text-[11px] font-medium uppercase tracking-wide text-muted-foreground md:block">Admin</div>
-              <div className="mx-1 w-px shrink-0 bg-border md:hidden" />
+              <div className="text-muted-foreground hidden px-2.5 pt-5 pb-1.5 text-xs font-medium md:block">Admin</div>
+              <div className="bg-border mx-1 my-1.5 w-px shrink-0 md:hidden" />
               {nav("admin")}
             </>
           )}
         </nav>
         <main className="min-w-0 flex-1">
-          {isAdmin ? <SettingsProvider>{content}</SettingsProvider> : content}
+          {current && (
+            <h1 className="mb-5 text-xl font-semibold tracking-tight">{current.label}</h1>
+          )}
+          <div className="grid gap-5">{isAdmin ? <SettingsProvider>{content}</SettingsProvider> : content}</div>
         </main>
       </div>
     </div>

@@ -1,12 +1,11 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import Link from "next/link";
 import { useState } from "react";
-import { AuthCard, Notice } from "@/components/auth-card";
+import { AuthCard, AuthLink, Notice } from "@/components/auth-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field } from "@/components/ui/field";
 import { authClient } from "@/lib/auth-client";
 
 export function ForgotPasswordForm() {
@@ -28,9 +27,9 @@ export function ForgotPasswordForm() {
 
   return (
     <AuthCard
-      title="Reset your password"
+      title="Forgot your password?"
       description="Enter your account's email and we'll send you a link to choose a new password."
-      footer={<Link href="/signin" className="underline">Back to sign in</Link>}
+      footer={<AuthLink href="/signin">Back to sign in</AuthLink>}
     >
       {sentTo ? (
         <Notice kind="success">
@@ -39,12 +38,14 @@ export function ForgotPasswordForm() {
       ) : (
         <form onSubmit={submit} className="grid gap-4">
           {error && <Notice kind="error">{error}</Notice>}
-          <div className="grid gap-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" type="email" autoComplete="email" required disabled={loading} value={email} onChange={(e) => setEmail(e.target.value)} />
-          </div>
+          <Field label="Email">
+            {(control) => (
+              <Input {...control} type="email" autoComplete="email" placeholder="you@example.com" required disabled={loading} value={email} onChange={(e) => setEmail(e.target.value)} />
+            )}
+          </Field>
           <Button type="submit" disabled={loading || !email.trim()}>
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send reset link"}
+            {loading && <Loader2 className="animate-spin" />}
+            Send reset link
           </Button>
         </form>
       )}
