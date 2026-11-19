@@ -54,7 +54,8 @@ export function Avatar({ name, image, className = "size-7" }: { name: string; im
   return (
     <span className={`bg-muted text-muted-foreground flex shrink-0 items-center justify-center overflow-hidden rounded-full border ${className}`}>
       {image ? (
-        <Image src={image} alt="" width={32} height={32} className="size-full object-cover" />
+        // Unoptimized: avatars are tiny and can come from any provider's host, or be a data URL.
+        <Image src={image} alt="" width={32} height={32} unoptimized className="size-full object-cover" />
       ) : name ? (
         <span className="text-[11px] font-semibold uppercase">{name.slice(0, 1)}</span>
       ) : (

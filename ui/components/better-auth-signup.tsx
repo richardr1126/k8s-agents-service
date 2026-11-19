@@ -84,6 +84,10 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
   const [image, setImage] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  /** Bumped on every pick or removal, so a read that finishes late is dropped. */
+  const pickRef = useRef(0);
+  /** The address the account was created with, for the confirmation screen. */
+  const [submittedEmail, setSubmittedEmail] = useState("");
   const router = useRouter();
   const { refetch } = useSession();
   const [loading, setLoading] = useState(false);
@@ -119,9 +123,10 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
     setError(null);
     if (!validate()) return;
     setLoading(true);
+    const address = email.trim();
     try {
       const result = await signUp.email({
-        email: email.trim(),
+        email: address,
         password,
         name: name.trim(),
         image: image ? await convertImageToBase64(image) : "",
@@ -129,6 +134,7 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
 
       if (result.error && config.signupPolicy === "approval" && result.error.status === 403) {
         // The account exists; signing in is refused until an admin approves it.
+        setSubmittedEmail(address);
         setDone("pending");
       } else if (result.error) {
         const message = result.error.message || "Something went wrong.";
@@ -143,10 +149,11 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
           setError(message);
         }
       } else if (config.email) {
+        setSubmittedEmail(address);
         setDone("verify");
       } else {
         // No email confirmation: sign straight in.
-        const signInResult = await signIn.email({ email: email.trim(), password });
+        const signInResult = await signIn.email({ email: address, password });
         if (signInResult.error) {
           toast.success("Account created. Sign in to continue.");
           router.push("/signin");
@@ -167,13 +174,17 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const pick = ++pickRef.current;
     setImage(file);
     const reader = new FileReader();
-    reader.onloadend = () => setImagePreview(reader.result as string);
+    reader.onloadend = () => {
+      if (pick === pickRef.current) setImagePreview(reader.result as string);
+    };
     reader.readAsDataURL(file);
   };
 
   const clearImage = () => {
+    pickRef.current++;
     setImage(null);
     setImagePreview(null);
     if (fileRef.current) fileRef.current.value = "";
@@ -195,7 +206,7 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
         <Notice kind="success">
           {done === "verify" ? (
             <>
-              We sent a confirmation link to <strong>{email.trim()}</strong>. It works for one hour.
+              We sent a confirmation link to <strong>{submittedEmail}</strong>. It works for one hour.
               {config.signupPolicy === "approval" && " After you confirm, an admin still needs to approve the account."}
             </>
           ) : (

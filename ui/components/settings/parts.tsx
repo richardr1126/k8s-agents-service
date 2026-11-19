@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /** A titled group of settings rows. */
 export function Section({ title, description, children, actions }: { title: string; description?: ReactNode; children: ReactNode; actions?: ReactNode }) {
   return (
-    <section className="bg-card overflow-hidden rounded-xl border shadow-xs">
+    <section className="bg-card rounded-xl border shadow-xs">
       <header className="flex items-start justify-between gap-3 border-b px-4 py-3.5 sm:px-5">
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">{title}</h2>

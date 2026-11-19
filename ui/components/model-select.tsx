@@ -10,9 +10,9 @@ export function ModelSelect() {
     <Select value={modelId} onValueChange={setModelId}>
       <SelectTrigger
         aria-label="Model"
-        className="text-muted-foreground hover:text-foreground hover:bg-accent data-[state=open]:bg-accent data-[state=open]:text-foreground h-7 max-w-36 sm:max-w-52 w-auto gap-1.5 rounded-md border-0 bg-transparent px-2 text-xs font-medium shadow-none dark:bg-transparent dark:hover:bg-accent focus-visible:ring-[3px] [&>svg:last-child]:opacity-60"
+        className="text-muted-foreground hover:text-foreground hover:bg-accent data-[state=open]:bg-accent data-[state=open]:text-foreground h-7 min-w-0 max-w-36 sm:max-w-52 w-auto gap-1.5 rounded-md border-0 bg-transparent px-2 text-xs font-medium shadow-none dark:bg-transparent dark:hover:bg-accent focus-visible:ring-[3px] [&>svg:last-child]:opacity-60"
       >
-        <Brain className="size-3.5" />
+        <Brain className="size-3.5 shrink-0" />
         <SelectValue placeholder="Model" className="truncate text-clip" />
       </SelectTrigger>
       <SelectContent className="text-sm">

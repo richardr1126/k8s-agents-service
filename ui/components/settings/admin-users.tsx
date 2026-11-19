@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { useDialogs } from "@/components/dialogs";
 import { api, Badge, Section } from "@/components/settings/parts";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -152,36 +159,6 @@ export function UserAdmin() {
 }
 
 function UserRow({ user, self, onPatch, onDelete }: { user: AdminUser; self: boolean; onPatch: (change: Patch, done: string) => void; onDelete: () => void }) {
-  const [open, setOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const close = (e: MouseEvent | KeyboardEvent) => {
-      if (e instanceof KeyboardEvent ? e.key === "Escape" : !menuRef.current?.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    document.addEventListener("keydown", close);
-    return () => {
-      document.removeEventListener("mousedown", close);
-      document.removeEventListener("keydown", close);
-    };
-  }, [open]);
-
-  const item = (label: string, action: () => void, danger = false) => (
-    <button
-      type="button"
-      role="menuitem"
-      className={cn("w-full rounded px-2.5 py-1.5 text-left text-sm hover:bg-muted", danger && "text-destructive")}
-      onClick={() => {
-        setOpen(false);
-        action();
-      }}
-    >
-      {label}
-    </button>
-  );
-
   return (
     <div className="flex items-start gap-3 px-5 py-3">
       <div className="min-w-0 flex-1">
@@ -203,25 +180,32 @@ function UserRow({ user, self, onPatch, onDelete }: { user: AdminUser; self: boo
         <Button size="sm" onClick={() => onPatch({ accessStatus: "active" }, `Approved ${user.email}`)}>Approve</Button>
       )}
       {!self && (
-        <div ref={menuRef} className="relative">
-          <Button size="icon" variant="ghost" className="size-8" aria-label={`Actions for ${user.email}`} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-            <MoreHorizontal className="size-4" />
-          </Button>
-          {open && (
-            <div role="menu" className="absolute right-0 top-9 z-20 w-52 rounded-lg border bg-popover p-1 shadow-lg">
-              {user.isAdmin
-                ? item("Remove admin", () => onPatch({ isAdmin: false }, `${user.email} is no longer an admin`))
-                : item("Make admin", () => onPatch({ isAdmin: true }, `${user.email} is now an admin`))}
-              {user.runLimitExempt
-                ? item("Apply run limits", () => onPatch({ runLimitExempt: false }, `Run limits apply to ${user.email}`))
-                : item("Allow unlimited runs", () => onPatch({ runLimitExempt: true }, `${user.email} has unlimited runs`))}
-              {user.accessStatus === "suspended"
-                ? item("Restore access", () => onPatch({ accessStatus: "active" }, `Restored ${user.email}`))
-                : item("Suspend", () => onPatch({ accessStatus: "suspended" }, `Suspended ${user.email}`), true)}
-              {item("Delete account", onDelete, true)}
-            </div>
-          )}
-        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="icon-sm" variant="ghost" aria-label={`Actions for ${user.email}`}>
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            {user.isAdmin ? (
+              <DropdownMenuItem onSelect={() => onPatch({ isAdmin: false }, `${user.email} is no longer an admin`)}>Remove admin</DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={() => onPatch({ isAdmin: true }, `${user.email} is now an admin`)}>Make admin</DropdownMenuItem>
+            )}
+            {user.runLimitExempt ? (
+              <DropdownMenuItem onSelect={() => onPatch({ runLimitExempt: false }, `Run limits apply to ${user.email}`)}>Apply run limits</DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem onSelect={() => onPatch({ runLimitExempt: true }, `${user.email} has unlimited runs`)}>Allow unlimited runs</DropdownMenuItem>
+            )}
+            <DropdownMenuSeparator />
+            {user.accessStatus === "suspended" ? (
+              <DropdownMenuItem onSelect={() => onPatch({ accessStatus: "active" }, `Restored ${user.email}`)}>Restore access</DropdownMenuItem>
+            ) : (
+              <DropdownMenuItem variant="destructive" onSelect={() => onPatch({ accessStatus: "suspended" }, `Suspended ${user.email}`)}>Suspend</DropdownMenuItem>
+            )}
+            <DropdownMenuItem variant="destructive" onSelect={onDelete}>Delete account</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
     </div>
   );

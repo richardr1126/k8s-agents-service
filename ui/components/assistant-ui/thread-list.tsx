@@ -141,7 +141,7 @@ const ThreadListItems: FC = () => {
     <div className="flex flex-col gap-px px-1 pb-2">
       <ThreadListPrimitive.Items>
         {({ threadListItem }) =>
-          shown.has(threadListItem.id) || (!filter && threads === null) ? (
+          !filter || shown.has(threadListItem.id) ? (
             <>
               {headers.has(threadListItem.id) && (
                 <p className="text-muted-foreground px-2.5 pt-4 pb-1 text-xs font-medium first:pt-1">
