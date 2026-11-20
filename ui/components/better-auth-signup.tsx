@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { AuthCard, AuthLink, Notice } from "@/components/auth-card";
-import { showPrivacyPopup } from "@/components/privacy-popup";
 import { Button } from "@/components/ui/button";
 import { Field, PasswordInput } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -233,9 +232,7 @@ export default function SignUp({ config }: { config: PublicAuthConfig }) {
           </p>
           <p>
             By creating an account you agree to the{" "}
-            <button type="button" onClick={() => showPrivacyPopup()} className="text-foreground underline-offset-4 hover:underline">
-              privacy policy
-            </button>
+            <a href="/privacy" target="_blank" rel="noreferrer" className="text-foreground underline-offset-4 hover:underline">privacy policy</a>
             .
           </p>
         </>

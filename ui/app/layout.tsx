@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { PrivacyPopup } from "@/components/privacy-popup";
 import { DialogsProvider } from "@/components/dialogs";
 import { Toaster } from "@/components/toaster";
 import { Analytics } from "@vercel/analytics/next"
@@ -51,7 +50,6 @@ export default function RootLayout({
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <DialogsProvider>{children}</DialogsProvider>
-        <PrivacyPopup />
         <Toaster />
         <Analytics />
       </body>

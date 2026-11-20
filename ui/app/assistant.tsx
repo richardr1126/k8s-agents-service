@@ -7,6 +7,7 @@ import { AppSkeleton } from "@/components/assistant-ui/loading-skeletons";
 import { Thread } from "@/components/assistant-ui/thread";
 import { ChatHeader } from "@/components/chat-header";
 import { CustomRuntimeProvider } from "@/components/custom-runtime-provider";
+import { PrivacyGate } from "@/components/privacy-gate";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useSession } from "@/lib/auth-client";
 
@@ -35,6 +36,7 @@ export const Assistant = ({ hadThreads }: { hadThreads: boolean }) => {
             </div>
           </SidebarInset>
         </div>
+        <PrivacyGate />
       </SidebarProvider>
     </CustomRuntimeProvider>
   );

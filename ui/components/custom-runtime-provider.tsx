@@ -3,9 +3,12 @@
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { ServerCrashIcon } from "lucide-react";
 import { toast } from "sonner";
 import { RunLimitError, useAgentRuntime } from "@/components/runtime/use-agent-runtime";
-import { createQueryClient, historyQuery, serviceInfoQuery, threadsQuery, usageQuery } from "@/lib/queries";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Button } from "@/components/ui/button";
+import { createQueryClient, historyQuery, onboardingQuery, serviceInfoQuery, threadsQuery, usageQuery } from "@/lib/queries";
 import type { WindowUsage } from "@/lib/run-limits";
 import type { ServiceInfo, ThreadRow } from "@/lib/types";
 
@@ -100,6 +103,7 @@ function ServiceLoader({ children, fallback }: { children: ReactNode; fallback: 
   const serviceInfo = useQuery(serviceInfoQuery);
   const { data: threads } = useQuery(threadsQuery);
   useQuery(usageQuery);
+  useQuery(onboardingQuery);
 
   // The newest conversation opens first; fetch it now rather than after the runtime mounts.
   const newest = threads?.[0]?.id;
@@ -107,10 +111,22 @@ function ServiceLoader({ children, fallback }: { children: ReactNode; fallback: 
     if (newest) void queryClient.prefetchQuery(historyQuery(newest));
   }, [newest, queryClient]);
 
-  useEffect(() => {
-    if (serviceInfo.isError) toast.error("Could not reach the agent service.");
-  }, [serviceInfo.isError]);
-
-  if (!serviceInfo.data) return fallback;
+  if (!serviceInfo.data) {
+    if (!serviceInfo.isError) return fallback;
+    return (
+      <div className="grid min-h-dvh place-items-center px-4">
+        <EmptyState
+          icon={ServerCrashIcon}
+          title="Can't reach the agent service"
+          description={serviceInfo.error.message}
+          action={
+            <Button size="sm" variant="outline" disabled={serviceInfo.isFetching} onClick={() => void serviceInfo.refetch()}>
+              {serviceInfo.isFetching ? "Trying…" : "Try again"}
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
   return <RuntimeProvider serviceInfo={serviceInfo.data}>{children}</RuntimeProvider>;
 }

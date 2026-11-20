@@ -12,28 +12,39 @@ export function createQueryClient() {
   });
 }
 
-async function getJson<T>(url: string, what: string): Promise<T> {
-  const res = await fetch(url);
+/** Long enough for a cold backend; past it a request fails (and can be retried) rather than hanging. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
+async function getJson<T>(url: string, what: string, signal?: AbortSignal): Promise<T> {
+  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
+  } catch (error) {
+    if (timeout.aborted) throw new Error(`Loading ${what} timed out`);
+    throw error;
+  }
   if (!res.ok) throw new Error(`Could not load ${what} (HTTP ${res.status})`);
   return res.json() as Promise<T>;
 }
 
 export const serviceInfoQuery = queryOptions({
   queryKey: ["service-info"],
-  queryFn: () => getJson<ServiceInfo>("/api/service-info", "the agent service"),
+  queryFn: ({ signal }) => getJson<ServiceInfo>("/api/service-info", "the agent service", signal),
+  retry: 2,
   staleTime: 5 * 60_000,
 });
 
 /** The user's conversations, newest first. */
 export const threadsQuery = queryOptions({
   queryKey: ["threads"],
-  queryFn: () => getJson<ThreadRow[]>("/api/threads", "your conversations"),
+  queryFn: ({ signal }) => getJson<ThreadRow[]>("/api/threads", "your conversations", signal),
 });
 
 /** Run-limit windows; empty when none apply. */
 export const usageQuery = queryOptions({
   queryKey: ["usage"],
-  queryFn: () => getJson<WindowUsage[]>("/api/limits", "your usage"),
+  queryFn: ({ signal }) => getJson<WindowUsage[]>("/api/limits", "your usage", signal),
 });
 
 /**
@@ -43,8 +54,20 @@ export const usageQuery = queryOptions({
 export const historyQuery = (threadId: string) =>
   queryOptions({
     queryKey: ["history", threadId],
-    queryFn: async () =>
+    queryFn: async ({ signal }) =>
       historyToThreadMessages(
-        await getJson<History>(`/api/threads/${encodeURIComponent(threadId)}`, "the conversation"),
+        await getJson<History>(`/api/threads/${encodeURIComponent(threadId)}`, "the conversation", signal),
       ),
   });
+
+export type Onboarding = {
+  /** When the user agreed to the privacy policy (epoch ms), or null. */
+  privacyAcceptedAt: number | null;
+};
+
+/** What the user has acknowledged; the privacy gate reads it. */
+export const onboardingQuery = queryOptions({
+  queryKey: ["onboarding"],
+  queryFn: ({ signal }) => getJson<Onboarding>("/api/onboarding", "your privacy settings", signal),
+  staleTime: Infinity,
+});

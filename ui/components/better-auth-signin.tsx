@@ -4,7 +4,6 @@ import { Loader2, UserIcon } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthCard, AuthDivider, AuthLink, Notice } from "@/components/auth-card";
-import { showPrivacyPopup } from "@/components/privacy-popup";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, PasswordInput } from "@/components/ui/field";
@@ -103,9 +102,7 @@ export default function SignIn({ config }: { config: PublicAuthConfig }) {
           )}
           <p>
             By continuing you agree to the{" "}
-            <button type="button" onClick={() => showPrivacyPopup()} className="text-foreground underline-offset-4 hover:underline">
-              privacy policy
-            </button>
+            <a href="/privacy" target="_blank" rel="noreferrer" className="text-foreground underline-offset-4 hover:underline">privacy policy</a>
             .
           </p>
         </>

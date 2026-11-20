@@ -44,3 +44,13 @@ export const adminSettings = pgTable("admin_settings", {
   source: text("source").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/** Per-user acknowledgements. A guest's carry over when it signs up or signs in (lib/auth.ts). */
+export const userOnboarding = pgTable("user_onboarding", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** When the user last agreed to the privacy policy; null if never. */
+  privacyAcceptedAt: timestamp("privacy_accepted_at"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

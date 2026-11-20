@@ -17,7 +17,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ComponentProps } from "react";
 import { ThreadList } from "@/components/assistant-ui/thread-list";
-import { showPrivacyPopup } from "@/components/privacy-popup";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { Button } from "@/components/ui/button";
 import {
@@ -129,9 +128,11 @@ function AccountMenu() {
             Source code
           </a>
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => showPrivacyPopup()}>
-          <ShieldIcon />
-          Privacy policy
+        <DropdownMenuItem asChild>
+          <a href="/privacy" target="_blank" rel="noreferrer">
+            <ShieldIcon />
+            Privacy policy
+          </a>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         {guest ? (

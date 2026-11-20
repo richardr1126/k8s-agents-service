@@ -4,7 +4,7 @@ import { APIError } from "better-auth/api";
 import { verifyPassword } from "better-auth/crypto";
 import { nextCookies } from "better-auth/next-js";
 import { anonymous } from "better-auth/plugins";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import * as schema from "@/db/schema";
 import { baseUrl } from "@/lib/base-url";
@@ -159,6 +159,23 @@ function buildAuth({ email }: AuthConfig) {
             .update(schema.threads)
             .set({ userId: newUser.user.id })
             .where(eq(schema.threads.userId, anonymousUser.user.id));
+          // Keep the guest's privacy agreement unless the account has a newer one.
+          const [guest] = await db
+            .select()
+            .from(schema.userOnboarding)
+            .where(eq(schema.userOnboarding.userId, anonymousUser.user.id));
+          if (guest?.privacyAcceptedAt) {
+            await db
+              .insert(schema.userOnboarding)
+              .values({ userId: newUser.user.id, privacyAcceptedAt: guest.privacyAcceptedAt })
+              .onConflictDoUpdate({
+                target: schema.userOnboarding.userId,
+                set: {
+                  privacyAcceptedAt: sql`greatest(${schema.userOnboarding.privacyAcceptedAt}, excluded.privacy_accepted_at)`,
+                  updatedAt: new Date(),
+                },
+              });
+          }
         },
       }),
       nextCookies(),
