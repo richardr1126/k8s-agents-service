@@ -63,7 +63,11 @@ export function PrivacyGate() {
 
         <ul className="text-muted-foreground grid list-disc gap-1.5 pl-5 text-sm leading-relaxed">
           <li>Your chats, sign-in details and usage are stored to run and improve the service.</li>
-          <li>Only you can open your chats. Deleted chats may stay in our tracing service for up to 14 days.</li>
+          <li>
+            Other users can&apos;t open your chats, but they aren&apos;t encrypted: the operator can read them, and messages
+            go to AI model providers and our tracing service.
+          </li>
+          <li>Deleted chats may stay in our tracing service for up to 14 days.</li>
           <li>Don&apos;t share passwords, secrets or other sensitive information in chats.</li>
           <li>Guest chats are tied to this browser. Create an account to keep them.</li>
         </ul>
