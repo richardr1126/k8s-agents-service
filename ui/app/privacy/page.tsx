@@ -53,7 +53,12 @@ export default function PrivacyPage() {
         <Section title="Conversations">
           <p>
             We keep chat messages, tool use and metadata for features, debugging and product improvement. Every chat
-            belongs to your account or guest session, and only you can open it.
+            belongs to your account or guest session, and other users can&apos;t open it.
+          </p>
+          <p>
+            Chats aren&apos;t end-to-end encrypted. The operator of this service can read stored conversations. Your
+            messages are also sent to the AI model providers that generate replies and to LangSmith, our tracing
+            service, and each handles them under its own terms.
           </p>
         </Section>
 

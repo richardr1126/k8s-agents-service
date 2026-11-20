@@ -170,12 +170,13 @@ const ThreadListItem: FC = () => {
     >
       <ThreadListItemPrimitive.Trigger
         data-opens-thread
-        className="focus-visible:ring-ring flex h-full min-w-0 flex-grow items-center gap-2 rounded-md px-2.5 text-start outline-none focus-visible:ring-2"
+        className="focus-visible:ring-ring pointer-fine:group-focus-within/item:pr-16 pointer-fine:group-hover/item:pr-16 flex h-full min-w-0 flex-grow items-center gap-2 rounded-md pr-1 pl-2.5 text-start outline-none focus-visible:ring-2 pointer-fine:pr-2.5"
       >
         <ThreadListItemTitle />
         <ThreadListItemLoading />
       </ThreadListItemPrimitive.Trigger>
-      <div className="bg-sidebar-accent absolute right-0.5 flex shrink-0 items-center rounded-md opacity-100 transition-opacity md:opacity-0 md:group-focus-within/item:opacity-100 md:group-hover/item:opacity-100">
+      {/* Touch screens can't hover, so the buttons sit beside the title; with a mouse they appear over it on hover, and the title makes room. */}
+      <div className="pointer-fine:bg-sidebar-accent pointer-fine:absolute pointer-fine:right-0.5 pointer-fine:opacity-0 pointer-fine:group-focus-within/item:opacity-100 pointer-fine:group-hover/item:opacity-100 flex shrink-0 items-center rounded-md pr-0.5 transition-opacity pointer-fine:pr-0">
         <ThreadListItemRename />
         <ThreadListItemDelete />
       </div>
