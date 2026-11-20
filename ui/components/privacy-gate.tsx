@@ -61,9 +61,12 @@ export function PrivacyGate() {
           </div>
         </div>
 
-        <p className="text-muted-foreground text-sm leading-relaxed">
-          Your chats, sign-in details and usage are stored to run and improve the service.
-        </p>
+        <ul className="text-muted-foreground grid list-disc gap-1.5 pl-5 text-sm leading-relaxed">
+          <li>Your chats, sign-in details and usage are stored to run and improve the service.</li>
+          <li>Deleted chats may stay in our tracing service for up to 14 days.</li>
+          <li>Don&apos;t share passwords, secrets or other sensitive information in chats.</li>
+          <li>Guest chats are tied to this browser. Create an account to keep them.</li>
+        </ul>
 
         <label
           htmlFor={checkboxId}
