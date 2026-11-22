@@ -14,8 +14,12 @@ export function splitMode(key: string): { agentId: string; focus: string | null 
   return { agentId, focus: focus && FOCUS_NAME.test(focus) ? focus : null };
 }
 
-/** The assistant and its focuses first, then the other agents the service lists. */
-export function modesOf(info: ServiceInfo): Mode[] {
+/**
+ * The assistant and its focuses first, then the other agents the service lists.
+ * Deprecated agents are left out unless `current` is one, so an old chat still
+ * shows the mode it was started in.
+ */
+export function modesOf(info: ServiceInfo, current?: string): Mode[] {
   const assistant = info.agents.find((a) => a.key === "assistant");
   const modes: Mode[] = [];
   if (assistant) {
@@ -25,7 +29,8 @@ export function modesOf(info: ServiceInfo): Mode[] {
     }
   }
   for (const a of info.agents) {
-    if (a.key !== "assistant") modes.push({ key: a.key, agentId: a.key, focus: null, label: a.key, description: a.description });
+    if (a.key === "assistant" || (a.deprecated && a.key !== current)) continue;
+    modes.push({ key: a.key, agentId: a.key, focus: null, label: a.key, description: a.description });
   }
   return modes;
 }

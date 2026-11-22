@@ -4,7 +4,7 @@ doc_type: capability
 kind: workflow
 order: 1
 execution:
-  impl: workflows.impls.calculator
+  impl: agents.deprecated.workflows.impls.calculator
   arg_schema:
     expression:
       type: string

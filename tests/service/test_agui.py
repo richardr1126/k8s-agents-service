@@ -21,7 +21,7 @@ import pytest_asyncio
 from agui_fakes import WEB_ANSWER, build_internal_call_graph, build_router
 from langgraph.checkpoint.memory import InMemorySaver
 
-import agents.main_agent as main_agent
+import agents.deprecated.main_agent as main_agent
 from agents.agents import DEFAULT_AGENT, Agent
 from core import settings
 from service import app

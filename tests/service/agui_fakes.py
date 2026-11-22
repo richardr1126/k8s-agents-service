@@ -20,8 +20,8 @@ from langgraph.graph import END, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 from langgraph.types import interrupt
 
-import agents.main_agent as main_agent
-import agents.web_rag_agent as web_rag_agent
+import agents.deprecated.main_agent as main_agent
+import agents.deprecated.web_rag_agent as web_rag_agent
 from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.utils import internal_llm_config
 

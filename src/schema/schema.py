@@ -11,11 +11,15 @@ class AgentInfo(BaseModel):
 
     key: str = Field(
         description="Agent key.",
-        examples=["auto-router"],
+        examples=["assistant"],
     )
     description: str = Field(
         description="Description of the agent.",
         examples=["A research assistant for generating research papers."],
+    )
+    deprecated: bool = Field(
+        default=False,
+        description="Kept for old conversations; not offered for new ones.",
     )
 
 
@@ -46,7 +50,7 @@ class ServiceMetadata(BaseModel):
     )
     default_agent: str = Field(
         description="Default agent used when none is specified.",
-        examples=["auto-router"],
+        examples=["assistant"],
     )
     default_model: AllModelEnum = Field(
         description="Default model used when none is specified.",
@@ -184,7 +188,7 @@ class ChatHistoryInput(BaseModel):
 
 class DeleteThreadInput(BaseModel):
     """Input for deleting a thread."""
-    
+
     thread_id: str = Field(
         description="Thread ID to delete.",
         examples=["847c6285-8fc9-4560-a83f-4e6285809254"],
@@ -193,7 +197,7 @@ class DeleteThreadInput(BaseModel):
 
 class DeleteThreadResponse(BaseModel):
     """Response for thread deletion."""
-    
+
     status: Literal["success"] = "success"
     message: str = "Thread deleted successfully"
 
@@ -202,8 +206,12 @@ class RevertThreadInput(BaseModel):
     """Input for reverting a thread to just before one of its user messages."""
 
     thread_id: str = Field(description="Thread ID to revert.")
-    message_id: str = Field(description="ID of the user message to revert; it and everything after it are removed.")
-    agent_id: str | None = Field(default=None, description="Agent the thread runs on. Defaults to the default agent.")
+    message_id: str = Field(
+        description="ID of the user message to revert; it and everything after it are removed."
+    )
+    agent_id: str | None = Field(
+        default=None, description="Agent the thread runs on. Defaults to the default agent."
+    )
 
 
 class RevertThreadResponse(BaseModel):

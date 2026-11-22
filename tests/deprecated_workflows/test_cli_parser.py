@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.cli_parser import parse_workflow_cli_command
-from workflows.registry import SkillRegistry
+from agents.deprecated.workflows.cli_parser import parse_workflow_cli_command
+from agents.deprecated.workflows.registry import SkillRegistry
 
 
 @pytest.fixture

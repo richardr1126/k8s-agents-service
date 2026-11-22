@@ -5,16 +5,16 @@ from pathlib import Path
 
 from langchain_core.tools import tool
 
-from workflows.dispatcher import (
+from agents.deprecated.workflows.dispatcher import (
     render_capability_doc,
     render_list_capabilities,
     run_workflow,
 )
-from workflows.registry import SkillRegistry
+from agents.deprecated.workflows.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
 
-_SKILLS_ROOT = Path(__file__).resolve().parent.parent / "workflows" / "skills"
+_SKILLS_ROOT = Path(__file__).resolve().parent / "workflows" / "skills"
 _REGISTRY = SkillRegistry(_SKILLS_ROOT)
 
 

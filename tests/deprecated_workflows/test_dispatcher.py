@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from workflows.dispatcher import (
+from agents.deprecated.workflows.dispatcher import (
     render_capability_doc,
     render_list_capabilities,
     run_workflow,
 )
-from workflows.registry import SkillRegistry
+from agents.deprecated.workflows.registry import SkillRegistry
 
 
 @pytest.fixture

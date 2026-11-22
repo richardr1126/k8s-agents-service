@@ -18,7 +18,7 @@ import { modesOf } from "@/lib/modes";
 /** Picks the chat's mode: the assistant on its own (Auto), one of its focuses, or another agent. */
 export function AgentSelect() {
   const { serviceInfo, agentId, setAgentId } = useChat();
-  const modes = useMemo(() => modesOf(serviceInfo), [serviceInfo]);
+  const modes = useMemo(() => modesOf(serviceInfo, agentId), [serviceInfo, agentId]);
   const assistantModes = modes.filter((m) => m.agentId === "assistant");
   const others = modes.filter((m) => m.agentId !== "assistant");
   const item = (m: (typeof modes)[number]) => (

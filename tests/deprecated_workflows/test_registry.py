@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from workflows.registry import SkillRegistry, SkillRegistryError
+from agents.deprecated.workflows.registry import SkillRegistry, SkillRegistryError
 
 
 def test_loads_capability_and_tools(make_skills, reset_modules):

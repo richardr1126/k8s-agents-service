@@ -8,13 +8,15 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agents.compaction import CompactionManager
+from agents.deprecated.workflow_tools import workflow_tools
 from agents.tool_loop import (
     ToolLoopState,
-    pending_tool_calls as pending_tool_calls_helper,
     run_tool_loop_turn,
     wrap_tool_loop_model,
 )
-from agents.workflow_tools import workflow_tools
+from agents.tool_loop import (
+    pending_tool_calls as pending_tool_calls_helper,
+)
 from core import get_model, settings
 
 

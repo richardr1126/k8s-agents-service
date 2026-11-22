@@ -132,7 +132,7 @@ function greeting(now = new Date()) {
 const ThreadWelcome: FC = () => {
   const { serviceInfo, agentId } = useChat();
   const { data: session } = useSession();
-  const agent = modesOf(serviceInfo).find((m) => m.key === agentId);
+  const agent = modesOf(serviceInfo, agentId).find((m) => m.key === agentId);
   const firstName = session?.user.isAnonymous ? null : session?.user.name?.split(" ")[0];
   const reduceMotion = useReducedMotion();
 

@@ -36,14 +36,14 @@ from agents.delegation import (
     task_result,
     thread_transcript,
 )
-from agents.rag_assistant import rag_assistant
+from agents.deprecated.rag_assistant import rag_assistant
+from agents.deprecated.web_rag_agent import web_rag_agent
 from agents.tool_loop import (
     ToolLoopState,
     run_tool_loop_turn,
     send_pending_tool_calls,
     wrap_tool_loop_model,
 )
-from agents.web_rag_agent import web_rag_agent
 from core import get_model
 from schema.models import AllModelEnum
 

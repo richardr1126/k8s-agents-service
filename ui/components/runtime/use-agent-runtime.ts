@@ -5,6 +5,7 @@ import { useAgUiRuntime, type AgUiAssistantRuntime, type UseAgUiThreadListAdapte
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { splitMode } from "@/lib/modes";
 import { historyQuery, threadsQuery } from "@/lib/queries";
 import type { ThreadRow } from "@/lib/types";
 import { HAD_THREADS_COOKIE } from "@/lib/utils";
@@ -41,12 +42,14 @@ type Options = {
   defaultModelId: string;
   /** Models the backend serves now; a thread saved with a retired model falls back to the default. */
   models: string[];
+  /** Agents kept only for old chats; a new chat started from one goes back to the default. */
+  deprecatedAgents: string[];
   onError: (error: Error) => void;
   onRunFinalized: () => void;
 };
 
 /** One AG-UI runtime for the app: the current thread's agent, plus the user's thread list. */
-export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onError, onRunFinalized }: Options) {
+export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprecatedAgents, onError, onRunFinalized }: Options) {
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const [agentId, setAgentId] = useState(defaultAgentId);
   const [modelId, setModelId] = useState(defaultModelId);
@@ -119,6 +122,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
       onSwitchToNewThread: () => {
         setOpening(null);
         setThreadId(crypto.randomUUID());
+        setAgentId((current) => (deprecatedAgents.includes(splitMode(current).agentId) ? defaultAgentId : current));
       },
       onSwitchToThread: async (id) => {
         const row = threads?.find((t) => t.id === id);
@@ -150,7 +154,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
         if (id === threadId) await runtimeRef.current?.threads.switchToNewThread();
       },
     }),
-    [threadId, threads, refreshThreads, models, defaultModelId, queryClient],
+    [threadId, threads, refreshThreads, models, defaultModelId, defaultAgentId, deprecatedAgents, queryClient],
   );
 
   const runtime = useAgUiRuntime({

@@ -11,13 +11,15 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from agents.compaction import CompactionManager
-from agents.tools import projects_search, resume_search
 from agents.tool_loop import (
     ToolLoopState,
-    pending_tool_calls as pending_tool_calls_helper,
     run_tool_loop_turn,
     wrap_tool_loop_model,
 )
+from agents.tool_loop import (
+    pending_tool_calls as pending_tool_calls_helper,
+)
+from agents.tools import projects_search, resume_search
 from core import get_model, settings
 
 

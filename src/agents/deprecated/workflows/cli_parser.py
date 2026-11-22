@@ -3,7 +3,7 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
-from workflows.registry import SkillRegistry
+from agents.deprecated.workflows.registry import SkillRegistry
 
 
 def parse_workflow_cli_command(
