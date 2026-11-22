@@ -1,13 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // ffmpeg-static ships a binary; keep it out of the bundle and trace it into
-  // the functions that synthesize speech.
-  serverExternalPackages: ["ffmpeg-static"],
-  outputFileTracingIncludes: {
-    "/api/admin/tts/**": ["./node_modules/ffmpeg-static/ffmpeg"],
-    "/api/internal/tts/**": ["./node_modules/ffmpeg-static/ffmpeg"],
-  },
   images: {
     remotePatterns: [
       {

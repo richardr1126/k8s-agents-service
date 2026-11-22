@@ -102,7 +102,7 @@ class Reader {
 const reader = new Reader();
 const getState = () => reader.state;
 
-/** Reads the reply aloud with the voice set in Settings → Speech; shown once a provider is set up. */
+/** Reads the reply aloud with Host 1's voice from Settings → Speech; shown once OpenReader is connected. */
 export const ReadAloudAction = () => {
   const { data } = useQuery(speechQuery);
   const messageId = useAuiState((s) => s.message.id);

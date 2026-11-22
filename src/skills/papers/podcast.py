@@ -1,7 +1,7 @@
 """A two-host podcast about a paper: a script from the paper's text, spoken line by line.
 
-Speech comes from the chat UI's configured TTS provider (Settings → Speech),
-one request per line, and the segments are joined into one MP3 kept with the job.
+Speech comes from the user's OpenReader, which they connect in the chat UI
+(Settings → Speech), one request per line, and the segments are joined into one MP3 kept with the job.
 """
 
 from __future__ import annotations
@@ -100,13 +100,16 @@ def _pieces(text: str) -> list[str]:
     return [*pieces, current] if current else pieces
 
 
-async def _speak(client: httpx.AsyncClient, text: str, host: int) -> bytes:
+async def _speak(client: httpx.AsyncClient, text: str, host: int, user_id: str) -> bytes:
+    """One piece spoken through the UI, which uses the user's connected OpenReader."""
     headers = {}
     if settings.AUTH_SECRET:
         headers["Authorization"] = f"Bearer {settings.AUTH_SECRET.get_secret_value()}"
     for attempt in range(3):
         res = await client.post(
-            "/api/internal/tts", json={"text": text, "speaker": host - 1}, headers=headers
+            "/api/internal/tts",
+            json={"text": text, "speaker": host - 1, "user_id": user_id},
+            headers=headers,
         )
         if res.status_code == 200:
             return res.content
@@ -123,6 +126,9 @@ async def _speak(client: httpx.AsyncClient, text: str, host: int) -> bytes:
 
 
 async def speak_script(script: Script, ctx: RunnableConfig | None) -> mp3.Frames:
+    user_id = str(((ctx or {}).get("configurable") or {}).get("user_id") or "")
+    if not user_id:
+        raise PaperError("Podcasts need a signed-in user.")
     jobs = [(piece, line.host) for line in script.lines for piece in _pieces(line.text)]
     segments: list[bytes | None] = [None] * len(jobs)
     done = 0
@@ -133,7 +139,7 @@ async def speak_script(script: Script, ctx: RunnableConfig | None) -> mp3.Frames
         async def one(i: int, text: str, host: int) -> None:
             nonlocal done
             async with limit:
-                segments[i] = await _speak(client, text, host)
+                segments[i] = await _speak(client, text, host, user_id)
             done += 1
             if done % 4 == 0 or done == len(jobs):
                 await report_progress(ctx, f"Recording the episode ({done} of {len(jobs)} lines)…")
@@ -157,7 +163,7 @@ async def make(
     )
     audio = await speak_script(script, ctx)
     if not audio.frames:
-        raise PaperError("The speech provider returned no audio.")
+        raise PaperError("OpenReader returned no audio.")
     job_id = await save_job_file(ctx, "episode.mp3", "audio/mpeg", audio.data)
     words = sum(len(line.text.split()) for line in script.lines)
     text = (

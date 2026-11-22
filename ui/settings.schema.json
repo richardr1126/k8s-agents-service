@@ -106,6 +106,18 @@
           "description": "Title model. Any OpenRouter model id that supports structured outputs. Pick a small, cheap one.",
           "type": "string",
           "minLength": 1
+        },
+        "openreaderUrl": {
+          "description": "OpenReader instance. The OpenReader people connect for read-aloud and podcasts, such as https://openreader.richardr.dev. Unset uses OPENREADER_URL. Changing it asks everyone to reconnect.",
+          "anyOf": [
+            {
+              "type": "string",
+              "format": "uri"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "additionalProperties": false

@@ -41,7 +41,7 @@ export const threadsQuery = queryOptions({
   queryFn: ({ signal }) => getJson<ThreadRow[]>("/api/threads", "your conversations", signal),
 });
 
-/** Whether a speech provider is set up, which shows the read-aloud button under replies. */
+/** Whether the user has OpenReader connected, which shows the read-aloud button under replies. */
 export const speechQuery = queryOptions({
   queryKey: ["speech-available"],
   queryFn: ({ signal }) => getJson<{ available: boolean }>("/api/tts", "speech", signal),

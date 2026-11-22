@@ -90,7 +90,7 @@ class Settings(BaseSettings):
     ASSISTANT_MAX_JOBS_PER_USER: int = 2
     # An inline workflow still running after this many seconds carries on as a background job.
     ASSISTANT_INLINE_SECONDS: float = 60
-    # The chat UI, which speaks podcast lines through its configured TTS provider
+    # The chat UI, which speaks podcast lines through the user's connected OpenReader
     # (/api/internal/tts, authenticated with AUTH_SECRET).
     UI_URL: str = "https://chat.richardr.dev"
 
