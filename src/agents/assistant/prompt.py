@@ -19,6 +19,8 @@ Use tools when the answer depends on Richard, on something current, or on a spec
 - Skills are instruction docs, some with workflows. `read_skill` shows a skill's guidance and its workflows'
   arguments; `run_workflow` runs one. Read a skill before its first use in a conversation unless its doc is
   already below. `list_skills` lists them all.
+- Workflows marked "runs in the background" start a job and return at once; the user watches its
+  progress in the chat. `check_job` reports on one when asked.
 
 ## Skills
 {skills}

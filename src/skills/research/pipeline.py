@@ -24,6 +24,7 @@ from pydantic import BaseModel, Field
 from agents.assistant import web
 from agents.utils import internal_llm_config
 from core import get_model, settings
+from jobs import report_progress
 
 Depth = Literal["quick", "deep"]
 
@@ -151,7 +152,9 @@ async def gather(
     question: str, depth: Depth, config: RunnableConfig | None
 ) -> tuple[Plan, list[Source]]:
     limits = LIMITS[depth]
+    await report_progress(config, "Planning searches")
     the_plan = await plan(question, depth, config)
+    await report_progress(config, f"Searching {len(the_plan.queries)} angles")
     results = await asyncio.gather(
         *(
             web.search(
@@ -189,6 +192,7 @@ async def gather(
         per_site[site] += 1
         chosen.append(s)
     to_read = chosen[: limits["pages"]]
+    await report_progress(config, f"Reading {len(to_read)} pages")
     try:
         pages = await web.extract([s.url for s in to_read])
     except Exception:
@@ -248,6 +252,7 @@ Using only the numbered passages below, answer the question.
 async def report(question: str, depth: Depth, config: RunnableConfig | None) -> str:
     the_plan, sources = await gather(question, depth, config)
     urls = "\n".join(f"[{i}] {s.url}" for i, s in enumerate(sources, 1))
+    await report_progress(config, f"Writing the report from {len(sources)} sources")
     msg = await _model(config).ainvoke(
         [
             SystemMessage(content=WRITER.format(date=f"{datetime.now():%B %d, %Y}")),

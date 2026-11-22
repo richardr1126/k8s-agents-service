@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     GITHUB_TOKEN: SecretStr | None = None
     # Sub-agents the assistant may start in one turn.
     ASSISTANT_MAX_SUBAGENTS_PER_TURN: int = 4
+    ASSISTANT_MAX_JOBS_PER_USER: int = 2
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"

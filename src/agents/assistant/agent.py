@@ -29,6 +29,7 @@ from langgraph.prebuilt import InjectedState, ToolNode
 from agents.assistant.focus import get_focuses
 from agents.assistant.prompt import build_prompt
 from agents.assistant.tools import (
+    check_job,
     fetch_page,
     list_skills,
     read_skill,
@@ -170,7 +171,7 @@ BASE_TOOLS: list[BaseTool] = [
     read_skill,
     run_workflow,
 ]
-MAIN_TOOLS: list[BaseTool] = [*BASE_TOOLS, task]
+MAIN_TOOLS: list[BaseTool] = [*BASE_TOOLS, task, check_job]
 
 _COMPACTION_MANAGER = CompactionManager()
 

@@ -31,6 +31,7 @@ import { useDialogs } from "@/components/dialogs";
 import { InterruptBanner } from "@/components/interrupt-banner";
 import { ModelSelect } from "@/components/model-select";
 import { SubagentToolCard } from "@/components/subagent-tool-ui";
+import { WorkflowTool } from "@/components/job-card";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -385,7 +386,7 @@ const AssistantMessage: FC = () => {
             components={{
               Text: MarkdownText,
               Reasoning: ReasoningPart,
-              tools: { by_name: { task: SubagentWrapper }, Fallback: ToolRow },
+              tools: { by_name: { task: SubagentWrapper, run_workflow: WorkflowTool }, Fallback: ToolRow },
               ToolGroup: ParallelToolGroup,
             }}
           />

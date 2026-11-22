@@ -18,6 +18,8 @@ from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
 from agents.assistant.focus import get_focuses
 from agents.tools import delete_web_collection
 from core import settings
+from jobs import setup_jobs
+from jobs import store as jobs_store
 from memory import initialize_database, initialize_store
 from schema import (
     ChatHistoryInput,
@@ -87,6 +89,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             # Only setup store for Postgres as InMemoryStore doesn't need setup
             if hasattr(store, "setup"):  # ignore: union-attr
                 await store.setup()
+
+            await setup_jobs(saver)
 
             # Configure agents with both memory components
             for a in get_all_agent_info():
@@ -238,7 +242,9 @@ async def feedback(feedback: Feedback) -> FeedbackResponse:
 async def history(input: ChatHistoryInput) -> HistoryResponse:
     """Get a thread's AG-UI messages, with each sub-agent run's messages and status."""
     agent: AgentGraph = get_agent(DEFAULT_AGENT)
-    state = await agent.aget_state(config=RunnableConfig(configurable={"thread_id": input.thread_id}))
+    state = await agent.aget_state(
+        config=RunnableConfig(configurable={"thread_id": input.thread_id})
+    )
     return build_history(_extract_messages_from_state(state.values))
 
 
@@ -274,29 +280,31 @@ async def title(input: TitleInput) -> TitleResponse:
 async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
     """
     Delete a thread and all its associated data.
-    
+
     This deletes the thread from the checkpointer (conversation memory)
     and store (long-term memory). Frontend should handle UI state cleanup.
     """
     try:
         # Get the default agent to access checkpointer and store
         agent: AgentGraph = get_agent(DEFAULT_AGENT)
-        
+
         checkpointer = agent.checkpointer
         if not checkpointer or checkpointer is True:
             raise HTTPException(status_code=500, detail="Checkpointer not available")
-        
+
         # Delete from checkpointer (conversation memory) using built-in method
         try:
-            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver) 
+            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver)
             # support the adelete_thread method for proper thread deletion
             await checkpointer.adelete_thread(input.thread_id)
             logger.info(f"Successfully deleted thread {input.thread_id} from checkpointer")
         except Exception as e:
             logger.error(f"Error deleting thread {input.thread_id} from checkpointer: {e}")
             # Fail the operation if checkpointer deletion fails since this is the primary data
-            raise HTTPException(status_code=500, detail=f"Failed to delete thread from checkpointer: {str(e)}")
-        
+            raise HTTPException(
+                status_code=500, detail=f"Failed to delete thread from checkpointer: {str(e)}"
+            )
+
         # Delete from store (long-term memory)
         try:
             if agent.store and hasattr(agent.store, "adelete"):
@@ -314,9 +322,9 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
             await delete_web_collection(input.thread_id)
         except Exception as e:
             logger.warning(f"Error deleting web search vectors for thread {input.thread_id}: {e}")
-        
+
         return DeleteThreadResponse()
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -339,6 +347,15 @@ async def health_check():
             health_status["langfuse"] = "disconnected"
 
     return health_status
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(job_id: str, user_id: str) -> dict[str, Any]:
+    """A background job, if it belongs to the user."""
+    job = await jobs_store().get(job_id)
+    if job is None or job.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.public()
 
 
 router.include_router(agui_router)

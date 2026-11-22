@@ -89,6 +89,17 @@ async def search_richard(
 
 
 @tool
+async def check_job(
+    job_id: Annotated[str, "The job id from `run_workflow`, e.g. 'job-1a2b3c4d5e6f'."],
+    config: RunnableConfig,
+) -> str:
+    """Check a background job: its progress, or its result once it's done."""
+    from agents.assistant.jobs import describe_job
+
+    return await describe_job(job_id, config)
+
+
+@tool
 def list_skills() -> str:
     """List every skill with its description and workflows."""
     return get_registry().index()
