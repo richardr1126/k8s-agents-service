@@ -15,6 +15,7 @@ from langgraph.types import Command
 from langsmith import Client as LangsmithClient
 
 from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
+from agents.assistant.focus import get_focuses
 from agents.tools import delete_web_collection
 from core import settings
 from memory import initialize_database, initialize_store
@@ -32,6 +33,7 @@ from schema import (
     TitleResponse,
     UserInput,
 )
+from schema.schema import FocusInfo, SkillInfo
 from schema.subagent import HistoryResponse
 from service.agui import langfuse_callbacks
 from service.agui import router as agui_router
@@ -39,6 +41,7 @@ from service.history import build_history
 from service.revert import RevertError, revert_thread
 from service.title import generate_title
 from service.utils import langchain_to_chat_message
+from skills import get_registry
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -111,6 +114,14 @@ async def info() -> ServiceMetadata:
         models=models,
         default_agent=DEFAULT_AGENT,
         default_model=settings.DEFAULT_MODEL,
+        focuses=[
+            FocusInfo(name=f.name, label=f.label, description=f.description)
+            for f in get_focuses().values()
+        ],
+        skills=[
+            SkillInfo(name=s.name, description=s.description, workflows=list(s.workflows))
+            for s in get_registry().skills.values()
+        ],
     )
 
 

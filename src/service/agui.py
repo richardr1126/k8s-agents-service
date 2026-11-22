@@ -224,7 +224,12 @@ async def ag_ui(agent_id: str, input: RunAgentInput) -> StreamingResponse:
     agent.config = {
         "recursion_limit": settings.AGENT_RECURSION_LIMIT,
         "callbacks": langfuse_callbacks(),
-        "configurable": {"model": model, "user_id": forwarded.get("user_id")},
+        "configurable": {
+            "model": model,
+            "user_id": forwarded.get("user_id"),
+            # The assistant's preset for this run; other agents ignore it.
+            "focus": forwarded.get("focus") or None,
+        },
     }
     state = await agent.graph.aget_state({"configurable": {"thread_id": input.thread_id}})
     held = _held_tool_calls(input.messages)

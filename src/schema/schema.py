@@ -19,6 +19,22 @@ class AgentInfo(BaseModel):
     )
 
 
+class FocusInfo(BaseModel):
+    """A preset of the assistant agent, offered in the mode picker."""
+
+    name: str = Field(description="Focus key, sent back as forwardedProps.focus.")
+    label: str = Field(description="Short name for the picker.")
+    description: str = Field(description="One line on what the focus is for.")
+
+
+class SkillInfo(BaseModel):
+    """A skill the assistant can use."""
+
+    name: str
+    description: str
+    workflows: list[str]
+
+
 class ServiceMetadata(BaseModel):
     """Metadata about the service including available agents and models."""
 
@@ -35,6 +51,8 @@ class ServiceMetadata(BaseModel):
     default_model: AllModelEnum = Field(
         description="Default model used when none is specified.",
     )
+    focuses: list[FocusInfo] = Field(default_factory=list, description="The assistant's focuses.")
+    skills: list[SkillInfo] = Field(default_factory=list, description="The assistant's skills.")
 
 
 class UserInput(BaseModel):

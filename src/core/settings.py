@@ -81,6 +81,12 @@ class Settings(BaseSettings):
 
     OPENWEATHERMAP_API_KEY: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
+    # The github skill reads this account's public repositories only. A token
+    # raises GitHub's rate limit and enables code search; it needs no scopes.
+    GITHUB_OWNER: str = "richardr1126"
+    GITHUB_TOKEN: SecretStr | None = None
+    # Sub-agents the assistant may start in one turn.
+    ASSISTANT_MAX_SUBAGENTS_PER_TURN: int = 4
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.pregel import Pregel
 
+from agents.assistant import assistant
 from agents.chatbot import chatbot
 from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.main_agent import main_agent
@@ -26,6 +27,10 @@ class Agent:
 
 
 agents: dict[str, Agent] = {
+    "assistant": Agent(
+        description="Hi! I can answer questions, research the web, read Richard's GitHub and tell you about his work. Pick a focus or just ask.",
+        graph=assistant,
+    ),
     "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
     "auto-router": Agent(
         description="Hello! I'm an agent that routes between a resume assistant and a web research assistant. Ask follow-ups any time; they pick up where they left off.",
