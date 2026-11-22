@@ -21,6 +21,13 @@ describe("activityOf", () => {
   });
 });
 
+describe("activityOf for assistant sub-agents", () => {
+  it("names the focus", () => {
+    const task = { type: "tool-call", toolName: "task", args: { focus: "github", description: "x" } };
+    expect(activityOf([task])).toBe("Asking the github agent");
+  });
+});
+
 describe("activityOf before the arguments arrive", () => {
   it("doesn't name an unknown sub-agent", () => {
     expect(activityOf([{ type: "tool-call", toolName: "task", args: {} }])).toBe("Starting a sub-agent");

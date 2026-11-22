@@ -6,7 +6,7 @@ import {
   type ThreadMessage,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { ChevronDownIcon, GlobeIcon, PauseIcon, UserIcon, WorkflowIcon } from "lucide-react";
+import { ChevronDownIcon, GitBranchIcon, GlobeIcon, PauseIcon, SearchIcon, SparklesIcon, UserIcon, WorkflowIcon } from "lucide-react";
 import { useState, type FC } from "react";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
@@ -19,6 +19,10 @@ import { cn } from "@/lib/utils";
 const AGENTS: Record<string, { label: string; icon: FC<{ className?: string }> }> = {
   web: { label: "Web research", icon: GlobeIcon },
   resume: { label: "Resume", icon: UserIcon },
+  general: { label: "Sub-agent", icon: SparklesIcon },
+  richard: { label: "About Richard", icon: UserIcon },
+  research: { label: "Research", icon: SearchIcon },
+  github: { label: "GitHub", icon: GitBranchIcon },
 };
 
 type AgUiRunMetadata = { name?: string; description?: string; result?: string };
@@ -45,7 +49,12 @@ const SubagentMessage: FC = () => (
  * The `task` tool call: one sub-agent run. Its own messages arrive nested on the
  * part (live from SUBAGENT_* events, on reload from /history) and render inside.
  */
-export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: string; subagent_type?: string; thread_id?: string }> = ({
+export const SubagentToolCard: ToolCallMessagePartComponent<{
+  description?: string;
+  subagent_type?: string;
+  focus?: string;
+  thread_id?: string;
+}> = ({
   args,
   result,
   isError,
@@ -53,7 +62,7 @@ export const SubagentToolCard: ToolCallMessagePartComponent<{ description?: stri
 }) => {
   const run = messages?.[0];
   const meta = (run?.metadata.custom?.agui ?? {}) as AgUiRunMetadata;
-  const type = meta.name ?? args.subagent_type ?? "agent";
+  const type = meta.name ?? args.subagent_type ?? args.focus ?? (args.description ? "general" : "agent");
   const agent = AGENTS[type] ?? { label: type, icon: WorkflowIcon };
   const phase = phaseOf(run, result !== undefined, Boolean(isError));
   const answer = meta.result ?? (typeof result === "string" ? result : undefined);

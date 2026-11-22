@@ -37,6 +37,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { useSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
 import agentSuggestions from "./agent-suggestions.json";
+import { modesOf, splitMode } from "@/lib/modes";
 import { ConversationSkeleton } from "./loading-skeletons";
 import { MarkdownText } from "./markdown-text";
 import { ReasoningPart } from "./reasoning";
@@ -130,7 +131,7 @@ function greeting(now = new Date()) {
 const ThreadWelcome: FC = () => {
   const { serviceInfo, agentId } = useChat();
   const { data: session } = useSession();
-  const agent = serviceInfo.agents.find((a) => a.key === agentId);
+  const agent = modesOf(serviceInfo).find((m) => m.key === agentId);
   const firstName = session?.user.isAnonymous ? null : session?.user.name?.split(" ")[0];
   const reduceMotion = useReducedMotion();
 
@@ -162,7 +163,9 @@ const ThreadWelcomeSuggestions: FC = () => {
   const { agentId, loadingThread } = useChat();
   const reduceMotion = useReducedMotion();
   const suggestions =
-    agentSuggestions[agentId as keyof typeof agentSuggestions] ?? agentSuggestions["auto-router"];
+    agentSuggestions[agentId as keyof typeof agentSuggestions] ??
+    agentSuggestions[splitMode(agentId).agentId as keyof typeof agentSuggestions] ??
+    agentSuggestions.assistant;
   if (loadingThread) return null;
 
   return (

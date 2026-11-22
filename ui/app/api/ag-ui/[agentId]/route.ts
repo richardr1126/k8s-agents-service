@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { threads } from "@/db/schema";
 import { admitRun } from "@/lib/run-limits";
 import { backendFetch, getSession } from "@/lib/server";
+import { splitMode } from "@/lib/modes";
 import { getSettings } from "@/lib/settings/store";
 
 type RunInput = {
@@ -82,11 +83,15 @@ export async function POST(req: NextRequest, context: { params: Promise<{ agentI
     if (text && settings.autoTitle) after(autoTitle(threadId, text, placeholder, settings.titleModel));
   }
 
-  const upstream = await backendFetch(`/${encodeURIComponent(agentId)}/ag-ui`, {
+  const { agentId: backendAgent, focus } = splitMode(agentId);
+  const upstream = await backendFetch(`/${encodeURIComponent(backendAgent)}/ag-ui`, {
     method: "POST",
     headers: { Accept: "text/event-stream" },
-    // Identity and model are set here, never taken from the browser.
-    body: JSON.stringify({ ...input, forwardedProps: { user_id: userId, ...(model ? { model } : {}) } }),
+    // Identity, model and focus are set here, never taken from the browser's body.
+    body: JSON.stringify({
+      ...input,
+      forwardedProps: { user_id: userId, ...(model ? { model } : {}), ...(focus ? { focus } : {}) },
+    }),
     signal: req.signal,
   });
 

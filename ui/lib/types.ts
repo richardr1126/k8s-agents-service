@@ -5,6 +5,8 @@ export type ServiceInfo = {
   models: string[];
   default_agent: string;
   default_model: string;
+  focuses?: { name: string; label: string; description: string }[];
+  skills?: { name: string; description: string; workflows: string[] }[];
 };
 
 export type ThreadRow = { id: string; title: string; agentId: string; modelId: string | null; updatedAt: string };

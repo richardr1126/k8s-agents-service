@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { threads } from "@/db/schema";
+import { splitMode } from "@/lib/modes";
 import { backendFetch, getSession } from "@/lib/server";
 
 /** Reverts the thread to just before a user message; returns that message's text. */
@@ -23,7 +24,7 @@ export async function POST(req: Request, context: { params: Promise<{ threadId: 
 
   const upstream = await backendFetch("/thread/revert", {
     method: "POST",
-    body: JSON.stringify({ thread_id: threadId, message_id: messageId, agent_id: row.agentId }),
+    body: JSON.stringify({ thread_id: threadId, message_id: messageId, agent_id: splitMode(row.agentId).agentId }),
   });
   if (upstream.status === 404) return NextResponse.json({ error: "Message not found" }, { status: 404 });
   if (!upstream.ok) return NextResponse.json({ error: "Failed to revert" }, { status: 502 });
