@@ -17,7 +17,7 @@ workflows:
   podcast:
     description: "Writes and records a podcast episode in which two hosts discuss the paper. Takes a few minutes; the episode plays in the chat."
     impl: skills.papers.workflows:podcast
-    background: true
+    background: always
     args:
       paper: {type: string, required: true, max_length: 500, description: "An arXiv id or link, or a link to a paper's PDF or page."}
       length: {type: string, default: standard, enum: [short, standard, long], description: "About 5, 10 or 17 minutes."}

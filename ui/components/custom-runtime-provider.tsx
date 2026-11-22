@@ -28,6 +28,8 @@ type ChatContextValue = {
   booting: boolean;
   undo: (messageId: string) => Promise<void>;
   regenerate: (messageId: string) => Promise<void>;
+  /** Starts a run that answers an ended background job; false when that thread isn't open and idle. */
+  followUp: (threadId: string) => boolean;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);

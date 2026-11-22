@@ -10,7 +10,6 @@ workflows:
   deep:
     description: "A thorough report: more angles and pages, written up with citations. Takes a few minutes."
     impl: skills.research.workflows:deep
-    background: true
     args:
       question: {type: string, required: true, max_length: 500, description: "The question, phrased fully, with any context it needs."}
 ---
@@ -27,4 +26,5 @@ of", recent developments, anything where one `web_search` would be thin. For a s
 - End with a short "Sources" list of the sources you cited, then two or three follow-up questions
   the user might ask next, as a list.
 
-`research.deep` returns a finished report; pass it on as written.
+`research.deep` returns a finished report; pass it on as written. It takes minutes, so run it with
+`background=true` unless the user wants to wait for it.

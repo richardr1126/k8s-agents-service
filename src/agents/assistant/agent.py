@@ -26,6 +26,8 @@ from langgraph.errors import GraphBubbleUp
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import InjectedState, ToolNode
 
+import jobs
+from agents.assistant import background as bg
 from agents.assistant.focus import get_focuses
 from agents.assistant.prompt import build_prompt
 from agents.assistant.tools import (
@@ -98,6 +100,9 @@ async def task(
         str | None,
         "To continue an earlier sub-agent, the thread_id from the end of its result. Omit to start fresh.",
     ] = None,
+    background: Annotated[
+        bool, "Run the sub-agent as a background job and return at once, for long work."
+    ] = False,
 ) -> ToolMessage:
     """Start a copy of yourself with a fresh context, and return its final answer."""
     focus = (focus or "").strip() or None
@@ -210,25 +215,35 @@ def _build(model_name: AllModelEnum, *, subagent: bool):
     without_tools = _model_runnable(model, tools, subagent=subagent, bind_tools=False)
 
     async def acall_model(state: AssistantState, config: RunnableConfig) -> dict:
-        return await run_tool_loop_turn(
-            state=state,
+        messages = list(state["messages"])
+        ended = [] if subagent else await bg.pending_events(messages, config)
+        if not ended and not subagent and bg.awaiting_input(messages):
+            return {}  # a follow-up run whose events another run already handled
+        events = [bg.event_message(job) for job in ended]
+        update = await run_tool_loop_turn(
+            state=cast(AssistantState, {**state, "messages": [*messages, *events]}),
             config=config,
             summary_model=model,
             model_runnable_with_tools=with_tools,
             model_runnable_without_tools=without_tools,
             compaction_manager=_COMPACTION_MANAGER,
         )
+        if ended:
+            await jobs.store().mark_notified([job.id for job in ended])
+            update = {**update, "messages": [*events, *update.get("messages", [])]}
+        return update
 
     graph = StateGraph(AssistantState)
     graph.add_node("model", acall_model)
     # Node name "tools" and one Send per tool call are what ag-ui-langgraph
     # relies on to attribute sub-agent events to their `task` call.
-    graph.add_node(
-        "tools",
-        ToolNode(
-            tools, awrap_tool_call=errors_as_results(lambda args: args.get("focus") or GENERAL)
-        ),
-    )
+    errors = errors_as_results(lambda args: args.get("focus") or GENERAL)
+    run_in_background = bg.background_jobs()
+
+    async def wrap_tool_call(request: Any, execute: Any) -> Any:
+        return await errors(request, lambda r: run_in_background(r, execute))
+
+    graph.add_node("tools", ToolNode(tools, awrap_tool_call=wrap_tool_call))
     graph.set_entry_point("model")
     graph.add_edge("tools", "model")
     graph.add_conditional_edges("model", send_pending_tool_calls, ["tools", END])

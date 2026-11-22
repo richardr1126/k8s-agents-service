@@ -3,7 +3,9 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon, CheckCircle2Icon, ChevronDownIcon, HourglassIcon } from "lucide-react";
-import { useState } from "react";
+import { useAuiState } from "@assistant-ui/react";
+import { useEffect, useState } from "react";
+import { useChat } from "@/components/custom-runtime-provider";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { isPodcast, PodcastView } from "@/components/podcast-view";
 import { ToolRow, toolSpacing } from "@/components/assistant-ui/tool-fallback";
@@ -14,18 +16,35 @@ import { cn } from "@/lib/utils";
 export type Job = {
   id: string;
   workflow: string;
+  thread_id: string | null;
   status: "running" | "done" | "error";
   progress: string;
   result: string | null;
   error: string | null;
   data: Record<string, unknown>;
+  /** The agent has been told how the job ended. */
+  notified: boolean;
   created_at: string;
   updated_at: string;
 };
 
 const JOB_ID = /Started background job `(job-[a-f0-9]{12})`/;
 
-/** The job id a `run_workflow` result started, if it started one. */
+/** Jobs this page has already asked the agent to answer, so a remounted card doesn't ask twice. */
+const answered = new Set<string>();
+
+/** When the job ends and the agent hasn't heard, start a run on its open, idle conversation. */
+function useFollowUp(job: Job | undefined) {
+  const { followUp } = useChat();
+  const running = useAuiState((s) => s.thread.isRunning);
+  useEffect(() => {
+    if (!job || job.status === "running" || job.notified || !job.thread_id || running) return;
+    if (answered.has(job.id)) return;
+    if (followUp(job.thread_id)) answered.add(job.id);
+  }, [job, running, followUp]);
+}
+
+/** The job id a tool result started, if it started one. */
 export function jobIdOf(result: unknown): string | null {
   return typeof result === "string" ? (result.match(JOB_ID)?.[1] ?? null) : null;
 }
@@ -44,6 +63,7 @@ export function JobCard({ id, title }: { id: string; title: string }) {
     refetchInterval: (q) => (q.state.data?.status === "running" || !q.state.data ? 2500 : false),
     retry: 1,
   });
+  useFollowUp(job);
   const [open, setOpen] = useState<boolean | null>(null);
   const status = error ? "error" : (job?.status ?? "running");
   const expanded = open ?? status === "done";

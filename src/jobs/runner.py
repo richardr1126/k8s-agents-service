@@ -1,22 +1,26 @@
-"""Runs workflows as background jobs in this process and records their progress."""
+"""Runs tool calls as background jobs in this process and records their progress and outcome."""
 
 from __future__ import annotations
 
 import asyncio
+import contextvars
+import json
 import logging
+from collections.abc import Callable, Coroutine
 from typing import Any
 from uuid import uuid4
 
+from langchain_core.messages import BaseMessage
 from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.config import var_child_runnable_config
 
 from core import settings
 from jobs.store import Job, JobStore, MemoryJobStore, PostgresJobStore
-from skills import Workflow, call_workflow
 
 logger = logging.getLogger(__name__)
 
 _store: JobStore = MemoryJobStore()
-_tasks: set[asyncio.Task[None]] = set()
+_tasks: set[asyncio.Task[Any]] = set()
 
 
 class JobError(RuntimeError):
@@ -39,21 +43,110 @@ def store() -> JobStore:
     return _store
 
 
-async def start(workflow: Workflow, args: dict[str, Any], config: RunnableConfig) -> Job:
+Run = Callable[[RunnableConfig], Coroutine[Any, Any, Any]]
+
+
+def _new_id() -> str:
+    return f"job-{uuid4().hex[:12]}"
+
+
+def _user_id(config: RunnableConfig) -> str:
+    return str((config.get("configurable") or {}).get("user_id") or "")
+
+
+def _job_config(config: RunnableConfig, job_id: str, progress: Any) -> RunnableConfig:
+    """A fresh config: the job outlives the chat run, its callbacks and its stream."""
     configurable = config.get("configurable") or {}
-    user_id = str(configurable.get("user_id") or "")
+    return {
+        "configurable": {
+            "model": configurable.get("model"),
+            "user_id": configurable.get("user_id"),
+            "thread_id": configurable.get("thread_id"),
+            "focus": configurable.get("focus"),
+            "checkpoint_ns": f"job:{job_id}",
+            "job_id": job_id,
+            "job_progress": progress,
+        },
+        "metadata": {"job_id": job_id},
+    }
+
+
+def _detached(coro: Coroutine[Any, Any, Any], name: str) -> asyncio.Task[Any]:
+    """A task outside the chat run's context. LangChain merges the context's config,
+    callbacks included, into every config it's given, so a job started in it would
+    stream into the chat."""
+    context = contextvars.copy_context()
+    context.run(var_child_runnable_config.set, None)
+    return asyncio.create_task(coro, name=name, context=context)
+
+
+def as_text(result: Any) -> str:
+    if isinstance(result, BaseMessage):
+        content = result.content
+        return content if isinstance(content, str) else json.dumps(content, default=str)
+    if isinstance(result, str):
+        return result
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _outcome(result: Any) -> dict[str, Any]:
+    """A workflow may return {"text": ..., "data": {...}}; anything else is the text."""
+    if isinstance(result, dict) and set(result) <= {"text", "data"} and result:
+        fields: dict[str, Any] = {"result": str(result.get("text") or "")}
+        if result.get("data") is not None:
+            fields["data"] = result["data"]
+        return fields
+    return {"result": as_text(result)}
+
+
+async def _admit(config: RunnableConfig) -> str:
+    user_id = _user_id(config)
     if not user_id:
         raise JobError("Background jobs need a signed-in user.")
     limit = settings.ASSISTANT_MAX_JOBS_PER_USER
     if await _store.running_for(user_id) >= limit:
         raise JobError(f"You already have {limit} background jobs running; wait for one to finish.")
-    job = Job(
-        id=f"job-{uuid4().hex[:12]}",
+    return user_id
+
+
+def _job(
+    job_id: str, user_id: str, label: str, args: dict[str, Any], config: RunnableConfig
+) -> Job:
+    return Job(
+        id=job_id,
         user_id=user_id,
-        thread_id=configurable.get("thread_id"),
-        workflow=workflow.id,
+        thread_id=(config.get("configurable") or {}).get("thread_id"),
+        workflow=label,
         args=args,
     )
+
+
+def _finish(job_id: str, label: str, task: asyncio.Future[Any]) -> None:
+    """Records the job's outcome when its task ends."""
+
+    async def record() -> None:
+        try:
+            result = await task
+        except asyncio.CancelledError:
+            await _store.update(job_id, status="error", error="Cancelled.")
+        except Exception as e:
+            logger.exception("Job %s (%s) failed", job_id, label)
+            await _store.update(job_id, status="error", error=str(e)[:1000] or type(e).__name__)
+        else:
+            await _store.update(job_id, status="done", progress="Done", **_outcome(result))
+
+    _keep(asyncio.create_task(record(), name=f"{job_id}:record"))
+
+
+def _keep(task: asyncio.Task[Any]) -> None:
+    _tasks.add(task)
+    task.add_done_callback(_tasks.discard)
+
+
+async def start(label: str, args: dict[str, Any], config: RunnableConfig, run: Run) -> Job:
+    """Starts `run` as a background job and returns at once."""
+    user_id = await _admit(config)
+    job = _job(_new_id(), user_id, label, args, config)
     await _store.create(job)
 
     async def progress(message: str, **data: Any) -> None:
@@ -62,38 +155,50 @@ async def start(workflow: Workflow, args: dict[str, Any], config: RunnableConfig
             fields["data"] = data
         await _store.update(job.id, **fields)
 
-    # A fresh config: the job outlives the chat run, its callbacks and its stream.
-    job_config: RunnableConfig = {
-        "configurable": {
-            "model": configurable.get("model"),
-            "user_id": user_id,
-            "job_id": job.id,
-            "job_progress": progress,
-        },
-        "metadata": {"job_id": job.id, "workflow": workflow.id},
-        "run_name": f"job:{workflow.id}",
-    }
-
-    async def run() -> None:
-        try:
-            result = await call_workflow(workflow.resolve(), args, job_config)
-            text, data = (
-                (result.get("text", ""), result.get("data", {}))
-                if isinstance(result, dict)
-                else (str(result), None)
-            )
-            fields: dict[str, Any] = {"status": "done", "progress": "Done", "result": text}
-            if data is not None:
-                fields["data"] = data
-            await _store.update(job.id, **fields)
-        except Exception as e:
-            logger.exception("Job %s (%s) failed", job.id, workflow.id)
-            await _store.update(job.id, status="error", error=str(e)[:1000] or type(e).__name__)
-
-    task = asyncio.create_task(run(), name=job.id)
-    _tasks.add(task)
-    task.add_done_callback(_tasks.discard)
+    task = _detached(run(_job_config(config, job.id, progress)), job.id)
+    _keep(task)
+    _finish(job.id, label, task)
     return job
+
+
+async def run_or_promote(
+    label: str, args: dict[str, Any], config: RunnableConfig, run: Run, *, after: float
+) -> tuple[Any, Job | None]:
+    """Runs `run` inline; if it's still going after `after` seconds, it carries on as a job.
+
+    Returns (result, None) when it finished in time, else (None, job). It stays
+    inline when it can't become a job (no signed-in user, or too many jobs).
+    """
+    job_id = _new_id()
+    latest: dict[str, Any] = {"progress": "Starting", "job": False}
+
+    async def progress(message: str, **data: Any) -> None:
+        latest["progress"] = message[:300]
+        if data:
+            latest["data"] = data
+        if latest["job"]:
+            await _store.update(job_id, **{k: v for k, v in latest.items() if k != "job"})
+
+    task = _detached(run(_job_config(config, job_id, progress)), job_id)
+    try:
+        done, _ = await asyncio.wait({task}, timeout=after)
+        if task in done:
+            return task.result(), None
+        try:
+            user_id = await _admit(config)
+        except JobError:
+            return await task, None
+    except asyncio.CancelledError:
+        task.cancel()
+        raise
+    job = _job(job_id, user_id, label, args, config)
+    job.progress = latest["progress"]
+    job.data = latest.get("data") or {}
+    await _store.create(job)
+    latest["job"] = True
+    _keep(task)
+    _finish(job_id, label, task)
+    return None, job
 
 
 def job_id_of(ctx: RunnableConfig | None) -> str | None:
@@ -106,7 +211,7 @@ async def save_job_file(
 ) -> str:
     """For workflows: keeps a file the job produced; returns the job id it belongs to."""
     job_id = job_id_of(ctx)
-    if not job_id:
+    if not job_id or await _store.get(job_id) is None:
         raise JobError("Files can only be saved from a background job.")
     await _store.save_file(job_id, name, content_type, data)
     return job_id

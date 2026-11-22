@@ -9,7 +9,7 @@ A skill is a folder `src/skills/<name>/` with a `SKILL.md`:
       commits:
         description: One line shown in the skill's doc.
         impl: skills.github.workflows:commits   # module:function
-        background: false                       # true runs it as a job
+        background: optional   # never | optional (the default) | always: whether it runs as a job
         args:
           repo: {type: string, required: true, description: ...}
           limit: {type: integer, default: 10}
@@ -44,6 +44,10 @@ _TYPES: dict[str, Any] = {
 }
 
 
+Background = Literal["never", "optional", "always"]
+BACKGROUND: tuple[Background, ...] = ("never", "optional", "always")
+
+
 class SkillError(ValueError):
     """A SKILL.md is invalid."""
 
@@ -53,7 +57,7 @@ class Workflow:
     id: str  # "<skill>.<name>"
     description: str
     impl: str
-    background: bool
+    background: Background
     args: dict[str, dict[str, Any]]
     model: type[BaseModel] = field(repr=False)
 
@@ -73,10 +77,12 @@ class Workflow:
             raise ValueError(f"Invalid arguments for `{self.id}`: {problems}") from e
 
     def usage(self) -> str:
-        lines = [
-            f"### `{self.id}`{' (runs in the background)' if self.background else ''}",
-            self.description,
-        ]
+        note = {
+            "always": " (always runs in the background)",
+            "optional": "",
+            "never": " (can't run in the background)",
+        }[self.background]
+        lines = [f"### `{self.id}`{note}", self.description]
         if not self.args:
             lines.append("- No arguments.")
         for name, spec in self.args.items():
@@ -102,12 +108,15 @@ class Skill:
 
     def doc(self, *, include_background: bool = True) -> str:
         parts = [f"# Skill: {self.name}", self.description, "", self.body.strip()]
-        shown = [w for w in self.workflows.values() if include_background or not w.background]
+        shown = [
+            w for w in self.workflows.values() if include_background or w.background != "always"
+        ]
         if shown:
             parts += [
                 "",
                 "## Workflows",
-                "Run one with `run_workflow(workflow=..., arguments={...})`.",
+                "Run one with `run_workflow(workflow=..., arguments={...})`."
+                + (" Add `background=true` to run it as a job." if include_background else ""),
                 "",
             ]
             parts += [w.usage() + "\n" for w in shown]
@@ -173,11 +182,17 @@ def load_skill(path: Path) -> Skill:
                 f"{path}: workflow `{wf_name}` has unknown keys: {', '.join(sorted(unknown))}"
             )
         args = spec.get("args") or {}
+        background = spec.get("background", "optional")
+        if background not in BACKGROUND:
+            raise SkillError(
+                f"{path}: workflow `{wf_name}` has background `{background}`; "
+                f"use one of {', '.join(BACKGROUND)}"
+            )
         workflows[wf_id] = Workflow(
             id=wf_id,
             description=" ".join(str(spec["description"]).split()),
             impl=str(spec["impl"]),
-            background=bool(spec.get("background", False)),
+            background=background,
             args=args,
             model=_arg_model(wf_id, args, path),
         )

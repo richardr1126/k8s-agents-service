@@ -13,6 +13,7 @@ import {
   ArrowDownIcon,
   ArrowUpIcon,
   ArrowUpRightIcon,
+  CheckCircle2Icon,
   CheckIcon,
   ChevronDownIcon,
   CopyIcon,
@@ -32,7 +33,7 @@ import { useDialogs } from "@/components/dialogs";
 import { InterruptBanner } from "@/components/interrupt-banner";
 import { ModelSelect } from "@/components/model-select";
 import { SubagentToolCard } from "@/components/subagent-tool-ui";
-import { WorkflowTool } from "@/components/job-card";
+import { JobCard, jobIdOf, WorkflowTool } from "@/components/job-card";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -305,11 +306,30 @@ const MessageError: FC = () => (
   </MessagePrimitive.Error>
 );
 
-const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (props) => (
-  <div data-tool className={cn(toolSpacing, "mb-2")}>
-    <SubagentToolCard {...props} />
-  </div>
-);
+/** `task`: the sub-agent's card, or a job card when it was sent to run in the background. */
+const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (props) => {
+  const jobId = jobIdOf(props.result);
+  const focus = (props.args as { focus?: string }).focus;
+  return (
+    <div data-tool className={cn(toolSpacing, "mb-2")}>
+      {jobId ? (
+        <JobCard id={jobId} title={focus && focus !== "general" ? `${focus[0]?.toUpperCase()}${focus.slice(1)} agent` : "Background agent"} />
+      ) : (
+        <SubagentToolCard {...props} />
+      )}
+    </div>
+  );
+};
+
+/** A background job's notice to the agent, stored as a user turn: `<job-event job=… tool=… status=…>`. */
+function jobEventOf(text: string): { tool: string; failed: boolean } | null {
+  const match = text.match(/^<job-event\b[^>]*\btool="([^"]*)"[^>]*\bstatus="([^"]*)"/);
+  return match ? { tool: match[1] ?? "", failed: match[2] !== "done" } : null;
+}
+
+function messageText(content: readonly { type: string; text?: string }[]): string {
+  return content.map((part) => (part.type === "text" ? (part.text ?? "") : "")).join("");
+}
 
 const ParallelToolGroup: FC<
   React.PropsWithChildren<{ startIndex: number; endIndex: number }>
@@ -423,11 +443,13 @@ const RegenerateAction: FC = () => {
   const busy = useBusy();
   const [pending, setPending] = useState(false);
   // The user message this answer replies to.
-  const userMessageId = useAuiState((s) => {
+  const userMessage = useAuiState((s) => {
     const index = s.thread.messages.findIndex((m) => m.id === s.message.id);
-    return s.thread.messages.slice(0, index).findLast((m) => m.role === "user")?.id;
+    return s.thread.messages.slice(0, index).findLast((m) => m.role === "user");
   });
-  if (!userMessageId) return null;
+  const userMessageId = userMessage?.id;
+  // A reply to a job's notice has no user message of its own to send again.
+  if (!userMessageId || jobEventOf(messageText(userMessage.content))) return null;
 
   const onClick = async () => {
     setPending(true);
@@ -530,7 +552,28 @@ const UserActionBar: FC = () => (
   </ActionBarPrimitive.Root>
 );
 
-const UserMessage: FC = () => (
+/** A job's notice: a quiet line, not a bubble, with nothing to copy or revert. */
+const JobEventNotice: FC<{ tool: string; failed: boolean }> = ({ tool, failed }) => (
+  <div
+    data-role="job-event"
+    className="mx-auto flex w-full max-w-[var(--thread-max-width)] items-center justify-center gap-1.5 px-[var(--thread-padding-x)] py-2 text-xs text-muted-foreground"
+  >
+    {failed ? <AlertTriangleIcon className="text-destructive size-3.5" /> : <CheckCircle2Icon className="size-3.5" />}
+    <span>
+      Background job {failed ? "failed" : "finished"}: <code className="font-mono">{tool}</code>
+    </span>
+  </div>
+);
+
+const UserMessage: FC = () => {
+  // Select the text, not a parsed object: a selector must return a stable value.
+  const text = useAuiState((s) => (s.message.role === "user" ? messageText(s.message.content) : ""));
+  const event = jobEventOf(text);
+  if (event) return <JobEventNotice tool={event.tool} failed={event.failed} />;
+  return <UserBubble />;
+};
+
+const UserBubble: FC = () => (
   <MessagePrimitive.Root asChild>
     <motion.div
       className="group/user mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col items-end px-[var(--thread-padding-x)] py-3"

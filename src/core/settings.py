@@ -88,6 +88,8 @@ class Settings(BaseSettings):
     # Sub-agents the assistant may start in one turn.
     ASSISTANT_MAX_SUBAGENTS_PER_TURN: int = 4
     ASSISTANT_MAX_JOBS_PER_USER: int = 2
+    # An inline workflow still running after this many seconds carries on as a background job.
+    ASSISTANT_INLINE_SECONDS: float = 60
     # The chat UI, which speaks podcast lines through its configured TTS provider
     # (/api/internal/tts, authenticated with AUTH_SECRET).
     UI_URL: str = "https://chat.richardr.dev"

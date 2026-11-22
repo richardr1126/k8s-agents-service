@@ -15,6 +15,7 @@ class Job:
     id: str
     user_id: str
     thread_id: str | None
+    # What runs: a workflow id such as "papers.podcast", or a tool's name.
     workflow: str
     args: dict[str, Any]
     status: Status = "running"
@@ -23,6 +24,8 @@ class Job:
     error: str | None = None
     # Structured output for the UI, e.g. {"audio": {...}} for a podcast.
     data: dict[str, Any] = field(default_factory=dict)
+    # Set once the job's end has been told to the agent in its thread.
+    notified: bool = False
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -41,6 +44,8 @@ class JobStore(Protocol):
     async def running_for(self, user_id: str) -> int: ...
     async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None: ...
     async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None: ...
+    async def unnotified(self, user_id: str, thread_id: str) -> list[Job]: ...
+    async def mark_notified(self, job_ids: list[str]) -> None: ...
 
 
 class MemoryJobStore:
@@ -72,10 +77,28 @@ class MemoryJobStore:
     async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None:
         return self.files.get((job_id, name))
 
+    async def unnotified(self, user_id: str, thread_id: str) -> list[Job]:
+        return sorted(
+            (
+                j
+                for j in self.jobs.values()
+                if j.user_id == user_id
+                and j.thread_id == thread_id
+                and j.status != "running"
+                and not j.notified
+            ),
+            key=lambda j: j.updated_at,
+        )
+
+    async def mark_notified(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            if job := self.jobs.get(job_id):
+                job.notified = True
+
 
 _COLUMNS = (
     "id, user_id, thread_id, workflow, args, status, progress, result, error, data, "
-    "created_at, updated_at"
+    "notified, created_at, updated_at"
 )
 _JSON = {"args", "data"}
 
@@ -101,13 +124,24 @@ class PostgresJobStore:
                     result text,
                     error text,
                     data jsonb NOT NULL DEFAULT '{}',
+                    notified boolean NOT NULL DEFAULT false,
                     created_at timestamptz NOT NULL DEFAULT now(),
                     updated_at timestamptz NOT NULL DEFAULT now()
                 )
                 """
             )
+            # Jobs from before job events count as told, so old threads get no late notices.
+            await conn.execute(
+                "ALTER TABLE assistant_jobs ADD COLUMN IF NOT EXISTS "
+                "notified boolean NOT NULL DEFAULT true"
+            )
+            await conn.execute("ALTER TABLE assistant_jobs ALTER COLUMN notified SET DEFAULT false")
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS assistant_jobs_user ON assistant_jobs (user_id, status)"
+            )
+            await conn.execute(
+                "CREATE INDEX IF NOT EXISTS assistant_jobs_unnotified ON assistant_jobs "
+                "(thread_id) WHERE NOT notified AND status <> 'running'"
             )
             # What a job produced that doesn't fit in `data`, such as a podcast's audio.
             await conn.execute(
@@ -123,6 +157,7 @@ class PostgresJobStore:
                 """
             )
             # Jobs run in this process; any still marked running died with the last one.
+            # They stay unnotified, so their threads hear that they stopped.
             await conn.execute(
                 "UPDATE assistant_jobs SET status = 'error', error = 'Stopped by a server restart.', "
                 "updated_at = now() WHERE status = 'running'"
@@ -133,7 +168,7 @@ class PostgresJobStore:
         async with self.pool.connection() as conn:
             await conn.execute(
                 f"INSERT INTO assistant_jobs ({_COLUMNS}) VALUES "
-                "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 [json.dumps(values[c]) if c in _JSON else values[c] for c in _COLUMNS.split(", ")],
             )
 
@@ -182,3 +217,21 @@ class PostgresJobStore:
             )
             row = await cur.fetchone()
         return (row["content_type"], bytes(row["data"])) if row else None
+
+    async def unnotified(self, user_id: str, thread_id: str) -> list[Job]:
+        async with self.pool.connection() as conn:
+            cur = await conn.execute(
+                f"SELECT {_COLUMNS} FROM assistant_jobs WHERE thread_id = %s AND user_id = %s "
+                "AND NOT notified AND status <> 'running' ORDER BY updated_at",
+                [thread_id, user_id],
+            )
+            rows = await cur.fetchall()
+        return [Job(**row) for row in rows]
+
+    async def mark_notified(self, job_ids: list[str]) -> None:
+        if not job_ids:
+            return
+        async with self.pool.connection() as conn:
+            await conn.execute(
+                "UPDATE assistant_jobs SET notified = true WHERE id = ANY(%s)", [job_ids]
+            )

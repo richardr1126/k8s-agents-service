@@ -10,12 +10,9 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from agents.assistant import web
+from agents.assistant.background import describe_job, is_subagent
 from agents.tools import _filtered_search, build_keyword_filter
 from skills import call_workflow, get_registry
-
-
-def is_subagent(config: RunnableConfig | None) -> bool:
-    return bool(((config or {}).get("configurable") or {}).get("assistant_subagent"))
 
 
 @tool(response_format="content_and_artifact")
@@ -94,8 +91,6 @@ async def check_job(
     config: RunnableConfig,
 ) -> str:
     """Check a background job: its progress, or its result once it's done."""
-    from agents.assistant.jobs import describe_job
-
     return await describe_job(job_id, config)
 
 
@@ -124,10 +119,18 @@ async def run_workflow(
     arguments: Annotated[
         dict[str, Any] | None, "The workflow's arguments, as named in its skill doc."
     ] = None,
+    background: Annotated[
+        bool,
+        "Run it as a background job and return at once. Workflows marked 'always' run in "
+        "the background anyway.",
+    ] = False,
 ) -> str:
-    """Run a skill's workflow. Read the skill first to learn its workflows' arguments."""
-    from agents.assistant.jobs import start_job  # jobs import the agent's tools
+    """Run a skill's workflow. Read the skill first to learn its workflows' arguments.
 
+    Inline runs that take longer than a minute carry on as background jobs.
+    """
+    # Background runs and long inline runs are handled by the ToolNode's job wrapper;
+    # this body runs a workflow inline (always so for sub-agents) and explains bad calls.
     registry = get_registry()
     wf = registry.workflows.get(workflow.strip())
     if wf is None:
@@ -143,10 +146,8 @@ async def run_workflow(
         validated = wf.validate(arguments or {})
     except ValueError as e:
         return str(e)
-    if wf.background:
-        if is_subagent(config):
-            return f"`{wf.id}` runs in the background; only the main assistant can start it."
-        return await start_job(wf, validated, config)
+    if wf.background == "always" and is_subagent(config):
+        return f"`{wf.id}` runs in the background; only the main assistant can start it."
     try:
         result = await call_workflow(wf.resolve(), validated, config)
     except Exception as e:

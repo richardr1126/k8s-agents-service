@@ -63,6 +63,8 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
   const [boot, setBoot] = useState<"waiting" | "opening" | "done">("waiting");
   if (boot === "waiting" && threads !== null) setBoot(threads.length > 0 ? "opening" : "done");
   const runtimeRef = useRef<AgUiAssistantRuntime | null>(null);
+  /** A follow-up run is streaming: reload the thread when it ends so its job notice shows. */
+  const followingUpRef = useRef(false);
 
   const refreshThreads = useCallback(
     () => queryClient.invalidateQueries({ queryKey: threadsQuery.queryKey }),
@@ -104,7 +106,9 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
         // Without a MESSAGES_SNAPSHOT (the backend sends none), the runtime streams
         // a resumed run into a new assistant message, away from the interrupted
         // sub-agent card. Reload the thread from /history to put the result back.
-        if (input.resume?.length) {
+        const followedUp = followingUpRef.current;
+        followingUpRef.current = false;
+        if (input.resume?.length || followedUp) {
           void loadHistory(input.threadId)
             .then((messages) => runtimeRef.current?.thread.reset(messages))
             .catch(onError);
@@ -237,7 +241,22 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
     [revert],
   );
 
+  /**
+   * Lets the agent answer a background job that just ended, when its conversation is
+   * open and idle. The backend hands the run the job's notice. False when it can't now.
+   */
+  const followUp = useCallback((jobThreadId: string) => {
+    const thread = runtimeRef.current?.thread;
+    if (!thread || threadIdRef.current !== jobThreadId) return false;
+    const state = thread.getState();
+    const last = state.messages.at(-1);
+    if (state.isRunning || state.isLoading || last?.role !== "assistant") return false;
+    followingUpRef.current = true;
+    thread.startRun({ parentId: last.id });
+    return true;
+  }, []);
+
   const booting = boot !== "done";
   const loadingThread = booting || opening !== null;
-  return { runtime, agentId, setAgentId, modelId, setModelId, threads, loadingThread, booting, undo, regenerate };
+  return { runtime, agentId, setAgentId, modelId, setModelId, threads, loadingThread, booting, undo, regenerate, followUp };
 }
