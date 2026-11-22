@@ -14,6 +14,7 @@ import { useMessagePartText } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { linkCitations } from "@/lib/citations";
 import { cn } from "@/lib/utils";
 import { useRecentChange } from "@/lib/use-recent-change";
 
@@ -35,6 +36,7 @@ const MarkdownTextImpl = () => {
       // dot.css draws the trailing dot for data-status="running"; show it only while writing.
       containerProps={{ "data-status": writing ? "running" : "complete" } as object}
       components={defaultComponents}
+      preprocess={linkCitations}
     />
   );
 };
@@ -100,9 +102,26 @@ const defaultComponents = memoizeMarkdownComponents({
   p: ({ className, ...props }) => (
     <p className={cn("mb-5 mt-5 leading-7 first:mt-0 last:mb-0", className)} {...props} />
   ),
-  a: ({ className, ...props }) => (
-    <a className={cn("text-primary font-medium underline underline-offset-4", className)} {...props} />
-  ),
+  a: ({ className, children, ...props }) =>
+    // A link whose text is just a number is a citation: show it as a small chip.
+    typeof children === "string" && /^\d{1,3}$/.test(children.trim()) ? (
+      <a
+        className={cn(
+          "bg-muted text-muted-foreground hover:bg-brand-soft hover:text-brand mx-0.5 inline-flex h-4 min-w-4 -translate-y-px items-center justify-center rounded px-1 align-middle text-[10px] font-semibold no-underline transition-colors",
+          className,
+        )}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={props.href}
+        {...props}
+      >
+        {children.trim()}
+      </a>
+    ) : (
+      <a className={cn("text-primary font-medium underline underline-offset-4", className)} {...props}>
+        {children}
+      </a>
+    ),
   blockquote: ({ className, ...props }) => (
     <blockquote className={cn("border-l-2 pl-6 italic", className)} {...props} />
   ),
