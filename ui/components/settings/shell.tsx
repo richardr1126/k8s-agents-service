@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Gauge, Mail, Shield, Sparkles, User, Users } from "lucide-react";
+import { ArrowLeft, AudioLines, Gauge, Mail, Shield, Sparkles, User, Users } from "lucide-react";
 import { BrandMark } from "@/components/ui/brand-mark";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { AccountSettings } from "@/components/settings/account";
 import { AccessSettings, LimitSettings, ModelSettings, SettingsProvider } from "@/components/settings/admin-settings";
 import { EmailSettings } from "@/components/settings/admin-email";
+import { SpeechSettings } from "@/components/settings/admin-speech";
 import { UserAdmin } from "@/components/settings/admin-users";
 import { cn } from "@/lib/utils";
 
@@ -16,6 +17,7 @@ const TABS = [
   { id: "access", label: "Access", icon: Shield, admin: true },
   { id: "limits", label: "Run limits", icon: Gauge, admin: true },
   { id: "models", label: "Models", icon: Sparkles, admin: true },
+  { id: "speech", label: "Speech", icon: AudioLines, admin: true },
   { id: "email", label: "Email", icon: Mail, admin: true },
   { id: "users", label: "Users", icon: Users, admin: true },
 ] as const;
@@ -69,6 +71,7 @@ export function SettingsShell({ isAdmin, emailEnabled }: { isAdmin: boolean; ema
       {tab === "access" && <AccessSettings />}
       {tab === "limits" && <LimitSettings />}
       {tab === "models" && <ModelSettings />}
+      {tab === "speech" && <SpeechSettings />}
       {tab === "email" && <EmailSettings />}
       {tab === "users" && <UserAdmin />}
     </>
