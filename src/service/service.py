@@ -1,11 +1,12 @@
 import logging
+import re
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core._api import LangChainBetaWarning
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage
@@ -356,6 +357,33 @@ async def get_job(job_id: str, user_id: str) -> dict[str, Any]:
     if job is None or job.user_id != user_id:
         raise HTTPException(status_code=404, detail="Job not found")
     return job.public()
+
+
+_RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+
+@router.get("/jobs/{job_id}/files/{name}")
+async def get_job_file(job_id: str, name: str, user_id: str, request: Request) -> Response:
+    """A file a background job produced, such as a podcast's audio, with Range support."""
+    job = await jobs_store().get(job_id)
+    found = await jobs_store().get_file(job_id, name) if job and job.user_id == user_id else None
+    if found is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    content_type, data = found
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"}
+    match = _RANGE.match(request.headers.get("range", ""))
+    if match and (match[1] or match[2]):
+        size = len(data)
+        if match[1]:
+            start, end = int(match[1]), int(match[2]) if match[2] else size - 1
+        else:  # the last N bytes
+            start, end = max(0, size - int(match[2])), size - 1
+        end = min(end, size - 1)
+        if start > end:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        return Response(data[start : end + 1], 206, headers, media_type=content_type)
+    return Response(data, headers=headers, media_type=content_type)
 
 
 router.include_router(agui_router)

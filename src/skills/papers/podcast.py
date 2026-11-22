@@ -1,0 +1,181 @@
+"""A two-host podcast about a paper: a script from the paper's text, spoken line by line.
+
+Speech comes from the chat UI's configured TTS provider (Settings → Speech),
+one request per line, and the segments are joined into one MP3 kept with the job.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import re
+from typing import Any, Literal
+
+import httpx
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableConfig
+from pydantic import BaseModel, Field
+
+from agents.utils import internal_llm_config
+from core import get_model, settings
+from jobs import report_progress, save_job_file
+from skills.papers import mp3
+from skills.papers.sources import Paper, PaperError
+
+Length = Literal["short", "standard", "long"]
+WORDS: dict[str, int] = {"short": 700, "standard": 1500, "long": 2600}
+MAX_LINE_CHARS = 1200
+TTS_CONCURRENCY = 4
+
+
+class Line(BaseModel):
+    host: Literal[1, 2] = Field(
+        description="1 = the host who read the paper closely, 2 = the curious co-host"
+    )
+    text: str = Field(description="What the host says, as natural speech")
+
+
+class Script(BaseModel):
+    title: str = Field(description="A short, specific episode title")
+    summary: str = Field(description="Two sentences on what the episode covers")
+    lines: list[Line]
+
+
+WRITER = """\
+You write the script of a two-host podcast episode about one research paper, to be read aloud by
+text-to-speech voices.
+
+Host 1 has read the paper closely and explains it. Host 2 is sharp and curious: asks the questions a
+listener would, pushes on weak spots, and connects ideas to things people know. Neither has a name.
+
+- Open with a hook: the problem and why it matters, then name the paper and its authors once.
+- Cover the motivation, the core idea in plain words, how it works, the key results with real numbers
+  from the paper, the limitations, and why it matters. End with two or three takeaways.
+- Use only what the paper says. Don't invent results, numbers or quotes.
+- Write for the ear: short sentences, everyday words, analogies. No markdown, lists, headings, emoji,
+  URLs, citations, stage directions or sound effects.
+- Spell out symbols, equations and abbreviations the way a person would say them ("O of n squared",
+  "the BLEU score").
+- Keep turns short (one to four sentences) and alternate often: about {turns} turns and {words} words in
+  total. Don't stop early; a script much shorter than that is a failure.
+{focus}"""
+
+
+def _model(ctx: RunnableConfig | None) -> Any:
+    name = ((ctx or {}).get("configurable") or {}).get("model") or settings.DEFAULT_MODEL
+    return get_model(name)
+
+
+async def write_script(
+    paper: Paper, length: Length, focus: str | None, ctx: RunnableConfig | None
+) -> Script:
+    system = WRITER.format(
+        words=WORDS[length],
+        turns=WORDS[length] // 35,
+        focus=f"\nThe listener asked for this emphasis: {focus}\n" if focus else "",
+    )
+    head = f"Title: {paper.title}\nAuthors: {', '.join(paper.authors) or 'unknown'}\n"
+    if paper.abstract:
+        head += f"Abstract: {paper.abstract}\n"
+    writer = _model(ctx).with_structured_output(Script)
+    script = await writer.ainvoke(
+        [SystemMessage(content=system), HumanMessage(content=f"{head}\nFull text:\n{paper.text}")],
+        internal_llm_config(ctx or {}),
+    )
+    if not isinstance(script, Script) or len(script.lines) < 4:
+        raise PaperError("Writing the script failed; try again.")
+    return script
+
+
+def _pieces(text: str) -> list[str]:
+    """A line's text in pieces short enough for one TTS request, split at sentences."""
+    text = " ".join(text.split())
+    if len(text) <= MAX_LINE_CHARS:
+        return [text] if text else []
+    pieces, current = [], ""
+    for sentence in re.split(r"(?<=[.!?])\s+", text):
+        if current and len(current) + len(sentence) + 1 > MAX_LINE_CHARS:
+            pieces.append(current)
+            current = ""
+        current = f"{current} {sentence}".strip()
+    return [*pieces, current] if current else pieces
+
+
+async def _speak(client: httpx.AsyncClient, text: str, host: int) -> bytes:
+    headers = {}
+    if settings.AUTH_SECRET:
+        headers["Authorization"] = f"Bearer {settings.AUTH_SECRET.get_secret_value()}"
+    for attempt in range(3):
+        res = await client.post(
+            "/api/internal/tts", json={"text": text, "speaker": host - 1}, headers=headers
+        )
+        if res.status_code == 200:
+            return res.content
+        if res.status_code not in (429, 500, 502, 503, 504) or attempt == 2:
+            try:
+                detail = res.json().get("error") or ""
+            except ValueError:
+                detail = ""
+            raise PaperError(
+                f"Speech failed (HTTP {res.status_code}){': ' + detail if detail else ''}"
+            )
+        await asyncio.sleep(2 * (attempt + 1))
+    raise AssertionError("unreachable")
+
+
+async def speak_script(script: Script, ctx: RunnableConfig | None) -> mp3.Frames:
+    jobs = [(piece, line.host) for line in script.lines for piece in _pieces(line.text)]
+    segments: list[bytes | None] = [None] * len(jobs)
+    done = 0
+    limit = asyncio.Semaphore(TTS_CONCURRENCY)
+
+    async with httpx.AsyncClient(base_url=settings.UI_URL, timeout=120) as client:
+
+        async def one(i: int, text: str, host: int) -> None:
+            nonlocal done
+            async with limit:
+                segments[i] = await _speak(client, text, host)
+            done += 1
+            if done % 4 == 0 or done == len(jobs):
+                await report_progress(ctx, f"Recording the episode ({done} of {len(jobs)} lines)…")
+
+        await asyncio.gather(*(one(i, text, host) for i, (text, host) in enumerate(jobs)))
+    return mp3.join([s for s in segments if s])
+
+
+def _minutes(seconds: float) -> str:
+    m, s = divmod(round(seconds), 60)
+    return f"{m}:{s:02d}"
+
+
+async def make(
+    paper: Paper, length: Length, focus: str | None, ctx: RunnableConfig | None
+) -> dict[str, Any]:
+    await report_progress(ctx, f"Writing a script about “{paper.title}”…", paper=paper.card())
+    script = await write_script(paper, length, focus, ctx)
+    await report_progress(
+        ctx, f"Recording the episode (0 of {len(script.lines)} lines)…", paper=paper.card()
+    )
+    audio = await speak_script(script, ctx)
+    if not audio.frames:
+        raise PaperError("The speech provider returned no audio.")
+    job_id = await save_job_file(ctx, "episode.mp3", "audio/mpeg", audio.data)
+    words = sum(len(line.text.split()) for line in script.lines)
+    text = (
+        f"**{script.title}**\n\n{script.summary}\n\n"
+        f"About [{paper.title}]({paper.url}){' by ' + paper.byline() if paper.authors else ''}. "
+        f"{_minutes(audio.seconds)} long."
+    )
+    return {
+        "text": text,
+        "data": {
+            "paper": paper.card(),
+            "podcast": {
+                "title": script.title,
+                "audio": f"/api/jobs/{job_id}/files/episode.mp3",
+                "seconds": round(audio.seconds, 1),
+                "bytes": len(audio.data),
+                "words": words,
+                "script": [line.model_dump() for line in script.lines],
+            },
+        },
+    }

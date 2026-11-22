@@ -3,8 +3,9 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon, CheckCircle2Icon, ChevronDownIcon, HourglassIcon } from "lucide-react";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
+import { isPodcast, PodcastView } from "@/components/podcast-view";
 import { ToolRow, toolSpacing } from "@/components/assistant-ui/tool-fallback";
 import { Fold } from "@/components/ui/fold";
 import { Spinner } from "@/components/ui/spinner";
@@ -33,12 +34,6 @@ async function fetchJob(id: string): Promise<Job> {
   const res = await fetch(`/api/jobs/${encodeURIComponent(id)}`, { cache: "no-store" });
   if (!res.ok) throw new Error(res.status === 404 ? "This job is gone." : `Couldn't load the job (HTTP ${res.status}).`);
   return (await res.json()) as Job;
-}
-
-/** Extra views for a finished job's data, by kind. Podcasts add an audio player here. */
-const renderers: ((job: Job) => ReactNode)[] = [];
-export function registerJobRenderer(render: (job: Job) => ReactNode) {
-  renderers.push(render);
 }
 
 /** A background job: live progress while it runs, then its result. */
@@ -74,7 +69,7 @@ export function JobCard({ id, title }: { id: string; title: string }) {
           {error
             ? error.message
             : status === "running"
-              ? `${job?.progress ?? "Starting"}…`
+              ? `${(job?.progress ?? "Starting").replace(/…$/, "")}…`
               : status === "error"
                 ? (job?.error ?? "Failed")
                 : `Done in ${elapsed < 90 ? `${elapsed}s` : `${Math.round(elapsed / 60)} min`}`}
@@ -90,9 +85,7 @@ export function JobCard({ id, title }: { id: string; title: string }) {
       {job?.status === "done" && (
         <Fold open={expanded}>
           <div className="space-y-3 border-t border-dashed border-border/70 px-3 py-3">
-            {renderers.map((render, i) => (
-              <div key={i}>{render(job)}</div>
-            ))}
+            {isPodcast(job.data.podcast) && <PodcastView podcast={job.data.podcast} />}
             {job.result && (
               <div className="max-h-[32rem] overflow-y-auto text-[15px] leading-7 [&_h1]:mb-3 [&_h1]:text-xl [&_h2]:mb-2 [&_h2]:mt-5 [&_h2]:text-lg [&_h3]:mt-4 [&_h3]:text-base">
                 <MarkdownString>{job.result}</MarkdownString>

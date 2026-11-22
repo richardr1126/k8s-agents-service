@@ -11,8 +11,22 @@ export type Part = {
   messages?: readonly { content: readonly Part[] }[];
 };
 
-function toolLabel(name: string): string {
+const WORKFLOWS: Record<string, string> = {
+  "research.quick": "Researching",
+  "research.deep": "Starting a research report",
+  "papers.search": "Searching arXiv",
+  "papers.read": "Reading the paper",
+  "papers.podcast": "Starting a podcast episode",
+  "github.repos": "Listing repositories",
+  "github.readme": "Reading a README",
+  "github.commits": "Reading commits",
+  "github.file": "Reading a file",
+  "github.search_code": "Searching code",
+};
+
+function toolLabel(name: string, args: Record<string, unknown> = {}): string {
   const n = name.toLowerCase();
+  if (n === "run_workflow" && typeof args.workflow === "string" && WORKFLOWS[args.workflow]) return WORKFLOWS[args.workflow];
   if (n === "web_search" || n === "web_vector_search") return "Searching the web";
   if (n === "fetch_page") return "Reading a page";
   if (n === "search_richard") return "Searching Richard's documents";
@@ -40,7 +54,7 @@ export function activityOf(content: readonly Part[]): string | null {
       if (!type) return typeof args.description === "string" ? "Asking a sub-agent" : "Starting a sub-agent";
       return `Asking the ${AGENT_NAMES[type] ?? type} agent`;
     }
-    return toolLabel(part.toolName);
+    return toolLabel(part.toolName, part.args);
   }
   return null;
 }

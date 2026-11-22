@@ -107,29 +107,48 @@ def _public_host(host: str) -> bool:
     return True
 
 
-async def _direct_fetch(url: str) -> str:
+@dataclass(frozen=True)
+class Fetched:
+    url: str  # after redirects
+    content_type: str
+    content: bytes
+
+    @property
+    def text(self) -> str:
+        return self.content.decode("utf-8", errors="replace")
+
+
+async def public_get(url: str, *, timeout: float = 20, max_bytes: int = 5_000_000) -> Fetched:
+    """GET a public http(s) URL, following up to 5 redirects and refusing private addresses."""
     current = url
-    async with httpx.AsyncClient(timeout=20, follow_redirects=False) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         for _ in range(5):
             parsed = urlparse(current)
             if parsed.scheme not in ("http", "https") or not parsed.hostname:
                 raise WebError("Only http and https links can be read.")
             if not await asyncio.to_thread(_public_host, parsed.hostname):
                 raise WebError("That address isn't on the public internet.")
-            res = await client.get(
-                current, headers={"User-Agent": "Mozilla/5.0 (compatible; chat-assistant)"}
-            )
-            if res.is_redirect and res.headers.get("location"):
-                current = urljoin(current, res.headers["location"])
-                continue
-            res.raise_for_status()
-            soup = BeautifulSoup(res.text, "html.parser")
-            for tag in soup(["script", "style", "nav", "footer", "header", "noscript", "svg"]):
-                tag.decompose()
-            return "\n".join(
-                line.strip() for line in soup.get_text("\n").splitlines() if line.strip()
-            )
+            headers = {"User-Agent": "Mozilla/5.0 (compatible; chat-assistant)"}
+            async with client.stream("GET", current, headers=headers) as res:
+                if res.is_redirect and res.headers.get("location"):
+                    current = urljoin(current, res.headers["location"])
+                    continue
+                res.raise_for_status()
+                body = bytearray()
+                async for chunk in res.aiter_bytes():
+                    body += chunk
+                    if len(body) > max_bytes:
+                        raise WebError(f"That file is over {max_bytes // 1_000_000} MB.")
+                return Fetched(current, res.headers.get("content-type", ""), bytes(body))
     raise WebError("Too many redirects.")
+
+
+async def _direct_fetch(url: str) -> str:
+    res = await public_get(url)
+    soup = BeautifulSoup(res.text, "html.parser")
+    for tag in soup(["script", "style", "nav", "footer", "header", "noscript", "svg"]):
+        tag.decompose()
+    return "\n".join(line.strip() for line in soup.get_text("\n").splitlines() if line.strip())
 
 
 def clip(text: str, limit: int = MAX_PAGE_CHARS) -> str:

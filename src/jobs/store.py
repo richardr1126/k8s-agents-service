@@ -39,11 +39,14 @@ class JobStore(Protocol):
     async def update(self, job_id: str, **fields: Any) -> None: ...
     async def get(self, job_id: str) -> Job | None: ...
     async def running_for(self, user_id: str) -> int: ...
+    async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None: ...
+    async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None: ...
 
 
 class MemoryJobStore:
     def __init__(self) -> None:
         self.jobs: dict[str, Job] = {}
+        self.files: dict[tuple[str, str], tuple[str, bytes]] = {}
 
     async def setup(self) -> None:
         pass
@@ -62,6 +65,12 @@ class MemoryJobStore:
 
     async def running_for(self, user_id: str) -> int:
         return sum(1 for j in self.jobs.values() if j.user_id == user_id and j.status == "running")
+
+    async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None:
+        self.files[(job_id, name)] = (content_type, data)
+
+    async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None:
+        return self.files.get((job_id, name))
 
 
 _COLUMNS = (
@@ -99,6 +108,19 @@ class PostgresJobStore:
             )
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS assistant_jobs_user ON assistant_jobs (user_id, status)"
+            )
+            # What a job produced that doesn't fit in `data`, such as a podcast's audio.
+            await conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS assistant_job_files (
+                    job_id text NOT NULL REFERENCES assistant_jobs (id) ON DELETE CASCADE,
+                    name text NOT NULL,
+                    content_type text NOT NULL,
+                    data bytea NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT now(),
+                    PRIMARY KEY (job_id, name)
+                )
+                """
             )
             # Jobs run in this process; any still marked running died with the last one.
             await conn.execute(
@@ -142,3 +164,21 @@ class PostgresJobStore:
             )
             row = await cur.fetchone()
         return int(row["n"]) if row else 0
+
+    async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None:
+        async with self.pool.connection() as conn:
+            await conn.execute(
+                "INSERT INTO assistant_job_files (job_id, name, content_type, data) "
+                "VALUES (%s, %s, %s, %s) ON CONFLICT (job_id, name) DO UPDATE "
+                "SET content_type = EXCLUDED.content_type, data = EXCLUDED.data",
+                [job_id, name, content_type, data],
+            )
+
+    async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None:
+        async with self.pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT content_type, data FROM assistant_job_files WHERE job_id = %s AND name = %s",
+                [job_id, name],
+            )
+            row = await cur.fetchone()
+        return (row["content_type"], bytes(row["data"])) if row else None

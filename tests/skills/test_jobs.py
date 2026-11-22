@@ -2,12 +2,12 @@ import asyncio
 
 import pytest
 
-pytestmark = pytest.mark.asyncio
-
 import jobs
 from jobs import runner
 from jobs.store import MemoryJobStore
 from skills.registry import Workflow, _arg_model
+
+pytestmark = pytest.mark.asyncio
 
 
 async def ok(n: int, ctx=None) -> dict:

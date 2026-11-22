@@ -152,5 +152,27 @@
       "label": "Chat",
       "action": "What's interesting about artificial intelligence?"
     }
+  ],
+  "assistant:papers": [
+    {
+      "title": "Podcast a classic",
+      "label": "Podcast",
+      "action": "Make a short podcast episode about \"Attention Is All You Need\"."
+    },
+    {
+      "title": "New this week",
+      "label": "Search",
+      "action": "Find the newest arXiv papers on speculative decoding and summarize what each one adds."
+    },
+    {
+      "title": "Explain a paper",
+      "label": "Explain",
+      "action": "Explain the main idea of the LoRA paper and its key results."
+    },
+    {
+      "title": "Compare approaches",
+      "label": "Compare",
+      "action": "Compare FlashAttention and FlashAttention-2: what changed and how much faster is it?"
+    }
   ]
 }

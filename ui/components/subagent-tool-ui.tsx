@@ -6,7 +6,7 @@ import {
   type ThreadMessage,
   type ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { ChevronDownIcon, GitBranchIcon, GlobeIcon, PauseIcon, SearchIcon, SparklesIcon, UserIcon, WorkflowIcon } from "lucide-react";
+import { BookOpenIcon, ChevronDownIcon, GitBranchIcon, GlobeIcon, PauseIcon, SearchIcon, SparklesIcon, UserIcon, WorkflowIcon } from "lucide-react";
 import { useState, type FC } from "react";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
@@ -23,6 +23,7 @@ const AGENTS: Record<string, { label: string; icon: FC<{ className?: string }> }
   richard: { label: "About Richard", icon: UserIcon },
   research: { label: "Research", icon: SearchIcon },
   github: { label: "GitHub", icon: GitBranchIcon },
+  papers: { label: "Papers", icon: BookOpenIcon },
 };
 
 type AgUiRunMetadata = { name?: string; description?: string; result?: string };

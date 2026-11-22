@@ -96,6 +96,22 @@ async def start(workflow: Workflow, args: dict[str, Any], config: RunnableConfig
     return job
 
 
+def job_id_of(ctx: RunnableConfig | None) -> str | None:
+    """The running job's id; None outside a job."""
+    return ((ctx or {}).get("configurable") or {}).get("job_id")
+
+
+async def save_job_file(
+    ctx: RunnableConfig | None, name: str, content_type: str, data: bytes
+) -> str:
+    """For workflows: keeps a file the job produced; returns the job id it belongs to."""
+    job_id = job_id_of(ctx)
+    if not job_id:
+        raise JobError("Files can only be saved from a background job.")
+    await _store.save_file(job_id, name, content_type, data)
+    return job_id
+
+
 async def report_progress(ctx: RunnableConfig | None, message: str, **data: Any) -> None:
     """For workflows: updates the job's progress line (and data); a no-op outside a job."""
     callback = ((ctx or {}).get("configurable") or {}).get("job_progress")

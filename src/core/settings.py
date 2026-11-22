@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     # Sub-agents the assistant may start in one turn.
     ASSISTANT_MAX_SUBAGENTS_PER_TURN: int = 4
     ASSISTANT_MAX_JOBS_PER_USER: int = 2
+    # The chat UI, which speaks podcast lines through its configured TTS provider
+    # (/api/internal/tts, authenticated with AUTH_SECRET).
+    UI_URL: str = "https://chat.richardr.dev"
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"
