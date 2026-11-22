@@ -26,6 +26,7 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { AgentSelect } from "@/components/agent-select";
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { ReadAloudAction } from "@/components/read-aloud";
 import { useChat } from "@/components/custom-runtime-provider";
 import { useDialogs } from "@/components/dialogs";
 import { InterruptBanner } from "@/components/interrupt-banner";
@@ -467,6 +468,7 @@ const AssistantActionBar: FC = () => {
       className="text-muted-foreground data-floating:bg-background -ml-1.5 mt-1 flex gap-0.5 data-floating:absolute data-floating:rounded-md data-floating:border data-floating:p-0.5 data-floating:shadow-sm"
     >
       <CopyAction />
+      <ReadAloudAction />
       {isLast && <RegenerateAction />}
     </ActionBarPrimitive.Root>
   );

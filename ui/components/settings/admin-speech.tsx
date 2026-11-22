@@ -607,7 +607,7 @@ function PodcastVoices({ providers }: { providers: MaskedProvider[] }) {
       const r = await api<{ speech: Speech }>("/api/admin/tts/speech", { method: "PUT", body: JSON.stringify(speech) });
       setSpeech(r.speech);
       setSaved(JSON.stringify(r.speech));
-      toast.success("Podcast voices saved");
+      toast.success("Voices saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Couldn't save");
     } finally {
@@ -640,7 +640,7 @@ function PodcastVoices({ providers }: { providers: MaskedProvider[] }) {
     setSpeech((s) => s && { ...s, hostVoices: (host === 0 ? [value, s.hostVoices[1]] : [s.hostVoices[0], value]) as [string, string] });
 
   return (
-    <Section title="Paper podcasts" description="The provider and the two host voices the assistant's paper podcasts are spoken with.">
+    <Section title="Voices" description="The provider and voices the assistant speaks with: two hosts for paper podcasts, and Host 1 reads replies aloud in the chat.">
       <Row label="Provider" description="Leave on the first one to use whichever provider is listed first and on.">
         <Select
           value={speech.provider ?? FIRST_ENABLED}
@@ -662,7 +662,7 @@ function PodcastVoices({ providers }: { providers: MaskedProvider[] }) {
         </Select>
       </Row>
       {[0, 1].map((hostIndex) => (
-        <Row key={hostIndex} label={`Host ${hostIndex + 1} voice`} description={hostIndex === 0 ? "Leads the conversation." : "Asks questions and reacts."}>
+        <Row key={hostIndex} label={`Host ${hostIndex + 1} voice`} description={hostIndex === 0 ? "Leads podcasts and reads replies aloud." : "Asks questions and reacts."}>
           <div className="flex w-full gap-2 sm:w-72">
             <Suggest
               options={voices}

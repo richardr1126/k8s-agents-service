@@ -41,6 +41,14 @@ export const threadsQuery = queryOptions({
   queryFn: ({ signal }) => getJson<ThreadRow[]>("/api/threads", "your conversations", signal),
 });
 
+/** Whether a speech provider is set up, which shows the read-aloud button under replies. */
+export const speechQuery = queryOptions({
+  queryKey: ["speech-available"],
+  queryFn: ({ signal }) => getJson<{ available: boolean }>("/api/tts", "speech", signal),
+  staleTime: 5 * 60_000,
+  retry: false,
+});
+
 /** Run-limit windows; empty when none apply. */
 export const usageQuery = queryOptions({
   queryKey: ["usage"],

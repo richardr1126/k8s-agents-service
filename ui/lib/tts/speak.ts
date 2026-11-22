@@ -1,6 +1,6 @@
 import { generateTTSBuffer } from "./generate";
 import { defaultModelForProviderType, defaultVoiceForProviderType } from "./provider-policy";
-import { defaultProvider, getSpeechSettings, ProviderError, resolveProvider } from "./providers";
+import { defaultProvider, getSpeechSettings, listProviders, ProviderError, resolveProvider } from "./providers";
 
 export type SpeakInput = {
   text: string;
@@ -11,6 +11,14 @@ export type SpeakInput = {
   /** A provider slug, overriding the speech settings. */
   provider?: string;
 };
+
+/** Whether `speak` has a provider to use: the one the speech settings name, else the first enabled one. */
+export async function speechAvailable(): Promise<boolean> {
+  const speech = await getSpeechSettings();
+  const all = await listProviders();
+  const chosen = speech.provider ? all.find((p) => p.slug === speech.provider) : all.find((p) => p.enabled);
+  return Boolean(chosen?.enabled);
+}
 
 /** MP3 audio for `text`, spoken by the configured provider and voice. */
 export async function speak(input: SpeakInput, signal?: AbortSignal): Promise<Buffer> {
