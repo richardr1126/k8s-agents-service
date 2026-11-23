@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
 import io
 import re
 import xml.etree.ElementTree as ET
@@ -93,9 +94,17 @@ def _entries(xml: str) -> list[Paper]:
     return papers
 
 
+# arXiv asks API clients to go gently; a topic podcast makes about ten requests at once.
+_ARXIV_SLOTS = asyncio.Semaphore(3)
+
+
 async def _arxiv(params: dict[str, str | int]) -> list[Paper]:
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        res = await client.get(ARXIV_API, params=params)
+    async with _ARXIV_SLOTS, httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        for attempt in range(3):
+            res = await client.get(ARXIV_API, params=params)
+            if res.status_code not in (429, 500, 502, 503) or attempt == 2:
+                break
+            await asyncio.sleep(2 * (attempt + 1))
     if res.status_code >= 400:
         raise PaperError(f"arXiv search failed (HTTP {res.status_code}).")
     return _entries(res.text)
@@ -111,6 +120,41 @@ async def search(query: str, limit: int = 8, sort: str = "relevance") -> list[Pa
             "max_results": min(limit, 25),
             "sortBy": "submittedDate" if sort == "newest" else "relevance",
         }
+    )
+
+
+def _title_key(title: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", title.lower()))
+
+
+async def find_title(title: str) -> Paper | None:
+    """The arXiv paper with this exact (or nearly exact) title, if there is one."""
+    words = re.findall(r"[\w-]+", title)[:16]
+    if not words:
+        return None
+    want = _title_key(title)
+
+    def best(hits: list[Paper]) -> Paper | None:
+        scored = [
+            (difflib.SequenceMatcher(None, want, _title_key(p.title)).ratio(), p) for p in hits
+        ]
+        top = max(scored, key=lambda x: x[0], default=None)
+        return top[1] if top and top[0] >= 0.85 else None
+
+    # A quoted phrase finds the title most reliably; every word is the fallback, since
+    # arXiv drops stop words like "with" from a word-by-word search.
+    phrase = await _arxiv({"search_query": f'ti:"{" ".join(words)}"', "max_results": 5})
+    if found := best(phrase):
+        return found
+    long_words = [w for w in words if len(w) > 3]
+    return (
+        best(
+            await _arxiv(
+                {"search_query": " AND ".join(f"ti:{w}" for w in long_words), "max_results": 5}
+            )
+        )
+        if long_words
+        else None
     )
 
 

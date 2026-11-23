@@ -117,7 +117,7 @@ async def run_workflow(
     command: Annotated[
         str,
         "The workflow and its options as a command line, e.g. "
-        "'github.commits --repo openreader --limit 5'. Quote values with spaces.",
+        "'github.commits openreader -L 5'. Quote values with spaces.",
     ],
     config: RunnableConfig,
     background: Annotated[

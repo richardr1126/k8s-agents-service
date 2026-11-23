@@ -1,4 +1,7 @@
-"""A two-host podcast about a paper: a script from the paper's text, spoken line by line.
+"""A two-host podcast about a paper or a topic: a script from the sources, spoken line by line.
+
+`make` covers one paper from its full text; `skills.papers.topic` gathers several
+papers (and web pages) on a topic and hands their notes to `write_script` and `record`.
 
 Speech comes from the user's OpenReader, which they connect in the chat UI
 (Settings → Speech), one request per line, and the segments are joined into one MP3 kept with the job.
@@ -41,16 +44,13 @@ class Script(BaseModel):
 
 
 WRITER = """\
-You write the script of a two-host podcast episode about one research paper, to be read aloud by
-text-to-speech voices.
+You write the script of a two-host podcast episode {subject}, to be read aloud by text-to-speech voices.
 
-Host 1 has read the paper closely and explains it. Host 2 is sharp and curious: asks the questions a
+Host 1 has read {read} closely and explains. Host 2 is sharp and curious: asks the questions a
 listener would, pushes on weak spots, and connects ideas to things people know. Neither has a name.
 
-- Open with a hook: the problem and why it matters, then name the paper and its authors once.
-- Cover the motivation, the core idea in plain words, how it works, the key results with real numbers
-  from the paper, the limitations, and why it matters. End with two or three takeaways.
-- Use only what the paper says. Don't invent results, numbers or quotes.
+{outline}
+- Use only what the sources say. Don't invent results, numbers or quotes.
 - Write for the ear: short sentences, everyday words, analogies. No markdown, lists, headings, emoji,
   URLs, citations, stage directions or sound effects.
 - Spell out symbols, equations and abbreviations the way a person would say them ("O of n squared",
@@ -59,6 +59,11 @@ listener would, pushes on weak spots, and connects ideas to things people know. 
   total. Don't stop early; a script much shorter than that is a failure.
 {focus}"""
 
+PAPER_OUTLINE = """\
+- Open with a hook: the problem and why it matters, then name the paper and its authors once.
+- Cover the motivation, the core idea in plain words, how it works, the key results with real numbers
+  from the paper, the limitations, and why it matters. End with two or three takeaways."""
+
 
 def _model(ctx: RunnableConfig | None) -> Any:
     name = ((ctx or {}).get("configurable") or {}).get("model") or settings.DEFAULT_MODEL
@@ -66,24 +71,38 @@ def _model(ctx: RunnableConfig | None) -> Any:
 
 
 async def write_script(
-    paper: Paper, length: Length, focus: str | None, ctx: RunnableConfig | None
+    material: str,
+    length: Length,
+    focus: str | None,
+    ctx: RunnableConfig | None,
+    *,
+    subject: str = "about one research paper",
+    read: str = "the paper",
+    outline: str = PAPER_OUTLINE,
 ) -> Script:
     system = WRITER.format(
+        subject=subject,
+        read=read,
+        outline=outline,
         words=WORDS[length],
         turns=WORDS[length] // 35,
         focus=f"\nThe listener asked for this emphasis: {focus}\n" if focus else "",
     )
-    head = f"Title: {paper.title}\nAuthors: {', '.join(paper.authors) or 'unknown'}\n"
-    if paper.abstract:
-        head += f"Abstract: {paper.abstract}\n"
     writer = _model(ctx).with_structured_output(Script)
     script = await writer.ainvoke(
-        [SystemMessage(content=system), HumanMessage(content=f"{head}\nFull text:\n{paper.text}")],
+        [SystemMessage(content=system), HumanMessage(content=material)],
         internal_llm_config(ctx or {}),
     )
     if not isinstance(script, Script) or len(script.lines) < 4:
         raise PaperError("Writing the script failed; try again.")
     return script
+
+
+def paper_material(paper: Paper) -> str:
+    head = f"Title: {paper.title}\nAuthors: {', '.join(paper.authors) or 'unknown'}\n"
+    if paper.abstract:
+        head += f"Abstract: {paper.abstract}\n"
+    return f"{head}\nFull text:\n{paper.text}"
 
 
 def _pieces(text: str) -> list[str]:
@@ -153,28 +172,22 @@ def _minutes(seconds: float) -> str:
     return f"{m}:{s:02d}"
 
 
-async def make(
-    paper: Paper, length: Length, focus: str | None, ctx: RunnableConfig | None
+async def record(
+    script: Script, about: str, papers: list[Paper], ctx: RunnableConfig | None
 ) -> dict[str, Any]:
-    await report_progress(ctx, f"Writing a script about “{paper.title}”…", paper=paper.card())
-    script = await write_script(paper, length, focus, ctx)
-    await report_progress(
-        ctx, f"Recording the episode (0 of {len(script.lines)} lines)…", paper=paper.card()
-    )
+    """Speaks the script, keeps the MP3 with the job and returns the job's result."""
+    await report_progress(ctx, f"Recording the episode (0 of {len(script.lines)} lines)…")
     audio = await speak_script(script, ctx)
     if not audio.frames:
         raise PaperError("OpenReader returned no audio.")
     job_id = await save_job_file(ctx, "episode.mp3", "audio/mpeg", audio.data)
     words = sum(len(line.text.split()) for line in script.lines)
-    text = (
-        f"**{script.title}**\n\n{script.summary}\n\n"
-        f"About [{paper.title}]({paper.url}){' by ' + paper.byline() if paper.authors else ''}. "
-        f"{_minutes(audio.seconds)} long."
-    )
+    text = f"**{script.title}**\n\n{script.summary}\n\n{about.rstrip()}\n\n{_minutes(audio.seconds)} long."
     return {
         "text": text,
         "data": {
-            "paper": paper.card(),
+            "paper": papers[0].card() if len(papers) == 1 else None,
+            "papers": [p.card() for p in papers],
             "podcast": {
                 "title": script.title,
                 "audio": f"/api/jobs/{job_id}/files/episode.mp3",
@@ -185,3 +198,13 @@ async def make(
             },
         },
     }
+
+
+async def make(
+    paper: Paper, length: Length, focus: str | None, ctx: RunnableConfig | None
+) -> dict[str, Any]:
+    """An episode about one paper, from its full text."""
+    await report_progress(ctx, f"Writing a script about “{paper.title}”…", paper=paper.card())
+    script = await write_script(paper_material(paper), length, focus, ctx)
+    about = f"About [{paper.title}]({paper.url}){' by ' + paper.byline() if paper.authors else ''}."
+    return await record(script, about, [paper], ctx)

@@ -17,7 +17,7 @@ Use tools when the answer depends on Richard, on something current, or on a spec
 - `web_search`: search the web; `fetch_page`: read a page when a snippet isn't enough.
 - `search_richard`: Richard's resume and project write-ups.
 - Skills are instruction docs, some with workflows. `read_skill` shows a skill's guidance and its workflows'
-  options; `run_workflow` runs one as a command line, e.g. `github.commits --repo openreader --limit 5`.
+  options; `run_workflow` runs one as a command line, e.g. `github.commits openreader -L 5`.
   Read a skill before its first use in a conversation unless its doc is already below; `<workflow> --help`
   shows one workflow's options. `list_skills` lists them all.
 - Background jobs: `run_workflow` and `task` take `background=true` to run as a job and return at once.

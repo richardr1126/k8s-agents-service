@@ -8,7 +8,7 @@ from langchain_core.runnables import RunnableConfig
 
 from jobs import report_progress
 from skills.papers import podcast as podcast_module
-from skills.papers import sources
+from skills.papers import sources, topic
 
 READ_CHARS = 20_000
 
@@ -40,11 +40,17 @@ async def read(paper: str) -> str:
 
 
 async def podcast(
-    paper: str,
+    subject: str,
+    papers: int = 4,
     length: str = "standard",
     focus: str | None = None,
+    web: bool = True,
     ctx: RunnableConfig | None = None,
 ) -> dict[str, Any]:
-    await report_progress(ctx, "Reading the paper…")
-    p = await sources.fetch(paper)
-    return await podcast_module.make(p, length, focus, ctx)  # type: ignore[arg-type]
+    """One paper's episode for an arXiv id or a link; otherwise a topic episode from several."""
+    subject = subject.strip()
+    if sources.arxiv_id(subject) or subject.startswith(("http://", "https://")):
+        await report_progress(ctx, "Reading the paper…")
+        p = await sources.fetch(subject)
+        return await podcast_module.make(p, length, focus, ctx)  # type: ignore[arg-type]
+    return await topic.make(subject, papers, length, focus, web, ctx)  # type: ignore[arg-type]

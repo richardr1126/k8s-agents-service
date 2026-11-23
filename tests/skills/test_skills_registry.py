@@ -14,7 +14,7 @@ def test_repo_skills_load_and_import() -> None:
     registry = get_registry()
     registry.check_impls()
     assert "github" in registry.skills
-    assert "github.readme" in registry.workflows
+    assert "github.repo.view" in registry.workflows
 
 
 def test_focuses_reference_real_skills() -> None:
@@ -118,6 +118,97 @@ def test_help_shows_the_usage(demo: SkillRegistry) -> None:
         in text
     )
     assert "`--max-results`" in text
+
+
+GH = (
+    "name: gh\ndescription: A demo.\nworkflows:\n  file:\n    description: F.\n    impl: os:getcwd\n"
+    "    args:\n      repo: {type: string, required: true, positional: true}\n"
+    "      path: {type: string, default: '', positional: true}\n"
+    "      limit: {type: integer, default: 5, ge: 1, le: 10, short: L}\n"
+    "  ask:\n    description: A.\n    impl: os:getcwd\n"
+    "    args:\n      question: {type: string, required: true, positional: rest}\n"
+    "      deep: {type: boolean, default: false}"
+)
+
+
+@pytest.fixture
+def gh(tmp_path: Path) -> SkillRegistry:
+    write_skill(tmp_path, "gh", GH)
+    return SkillRegistry(tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("command", "expected"),
+    [
+        ("gh.file openreader", {"repo": "openreader", "path": "", "limit": 5}),
+        ("gh.file -L 3 openreader src/app", {"repo": "openreader", "path": "src/app", "limit": 3}),
+        ("gh.file openreader src -L 3", {"repo": "openreader", "path": "src", "limit": 3}),
+        ("gh.file --repo openreader", {"repo": "openreader", "path": "", "limit": 5}),
+        (
+            "gh.ask what is the state of rag --deep",
+            {"question": "what is the state of rag", "deep": True},
+        ),
+        ("gh.ask 'a quoted question'", {"question": "a quoted question", "deep": False}),
+    ],
+)
+def test_positional_and_short_options(gh: SkillRegistry, command: str, expected: dict) -> None:
+    assert gh.parse_command(command)[1] == expected
+
+
+@pytest.mark.parametrize(
+    ("command", "says"),
+    [
+        ("gh.file", "missing REPO (or --repo)"),
+        ("gh.file a --repo b", "REPO given twice"),
+        ("gh.file a b c", "unrecognized arguments: c"),
+        ("gh.file a -L 50", "less than or equal to 10"),
+    ],
+)
+def test_positional_mistakes_say_what_to_fix(gh: SkillRegistry, command: str, says: str) -> None:
+    with pytest.raises(CommandError) as e:
+        gh.parse_command(command)
+    assert says in str(e.value)
+    assert "usage: gh.file REPO [PATH] [-L N]" in str(e.value)
+
+
+def test_usage_shows_positionals_and_short_flags(gh: SkillRegistry) -> None:
+    usage = gh.workflows["gh.file"].usage()
+    assert "`gh.file REPO [PATH] [-L N]`" in usage
+    assert "- `REPO`, `--repo` (string, required)" in usage
+    assert "- `-L`, `--limit` (integer, default 5)" in usage
+    assert "`gh.ask QUESTION ... [--[no-]deep]`" in gh.workflows["gh.ask"].usage()
+
+
+@pytest.mark.parametrize(
+    "args",
+    [
+        "      a: {type: string, short: h}",
+        "      a: {type: string, short: xy}",
+        "      a: {type: string, short: L}\n      b: {type: string, short: L}",
+        "      a: {type: string, positional: rest}\n      b: {type: string, positional: true}",
+        "      a: {type: boolean, positional: true}",
+        "      a: {type: string, positional: maybe}",
+    ],
+)
+def test_bad_command_line_specs_are_refused(tmp_path: Path, args: str) -> None:
+    path = write_skill(
+        tmp_path,
+        "demo",
+        f"name: demo\ndescription: A demo.\nworkflows:\n  go:\n    description: Go.\n"
+        f"    impl: os:getcwd\n    args:\n{args}",
+    )
+    with pytest.raises(SkillError):
+        load_skill(path)
+
+
+def test_real_workflows_take_gh_style_commands() -> None:
+    registry = get_registry()
+    assert registry.parse_command("github.commits openreader -L 3")[1] == {
+        "repo": "openreader",
+        "limit": 3,
+    }
+    _, args = registry.parse_command("papers.podcast speculative decoding -n 5 --no-web")
+    assert args["subject"] == "speculative decoding" and args["papers"] == 5 and not args["web"]
 
 
 def test_skill_name_must_match_folder(tmp_path: Path) -> None:

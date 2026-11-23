@@ -6,12 +6,12 @@ workflows:
     description: "Searches a few angles in parallel, reads the top pages and returns numbered sources and passages to answer from. Takes 10-30 seconds."
     impl: skills.research.workflows:quick
     args:
-      question: {type: string, required: true, max_length: 500, description: "The question, phrased fully, with any context it needs."}
+      question: {type: string, required: true, positional: rest, max_length: 500, description: "The question, phrased fully, with any context it needs."}
   deep:
     description: "A thorough report: more angles and pages, written up with citations. Takes a few minutes."
     impl: skills.research.workflows:deep
     args:
-      question: {type: string, required: true, max_length: 500, description: "The question, phrased fully, with any context it needs."}
+      question: {type: string, required: true, positional: rest, max_length: 500, description: "The question, phrased fully, with any context it needs."}
 ---
 Use `research.quick` when a question needs several sources or angles: comparisons, "what's the state
 of", recent developments, anything where one `web_search` would be thin. For a single fact, use

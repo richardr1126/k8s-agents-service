@@ -17,10 +17,14 @@ const WORKFLOWS: Record<string, string> = {
   "papers.search": "Searching arXiv",
   "papers.read": "Reading the paper",
   "papers.podcast": "Starting a podcast episode",
-  "github.repos": "Listing repositories",
-  "github.readme": "Reading a README",
+  "github.repo.list": "Listing repositories",
+  "github.repo.view": "Reading a README",
   "github.commits": "Reading commits",
   "github.file": "Reading a file",
+  "github.search.code": "Searching code",
+  // Names used before the gh-style rename, for older chats.
+  "github.repos": "Listing repositories",
+  "github.readme": "Reading a README",
   "github.search_code": "Searching code",
 };
 

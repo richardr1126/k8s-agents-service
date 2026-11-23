@@ -155,9 +155,9 @@
   ],
   "assistant:papers": [
     {
-      "title": "Podcast a classic",
+      "title": "Podcast a topic",
       "label": "Podcast",
-      "action": "Make a short podcast episode about \"Attention Is All You Need\"."
+      "action": "Make a podcast episode on how speculative decoding speeds up LLM inference, from the key papers."
     },
     {
       "title": "New this week",

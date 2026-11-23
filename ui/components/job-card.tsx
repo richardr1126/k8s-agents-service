@@ -147,7 +147,7 @@ export function JobCard({ id, title }: { id: string; title: string }) {
 
 const TITLES: Record<string, string> = {
   "research.deep": "Research report",
-  "papers.podcast": "Paper podcast",
+  "papers.podcast": "Podcast episode",
 };
 
 /** `run_workflow`: a job card when the workflow started a background job, else a plain tool row. */

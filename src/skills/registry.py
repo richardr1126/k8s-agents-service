@@ -11,15 +11,19 @@ A skill is a folder `src/skills/<name>/` with a `SKILL.md`:
         impl: skills.github.workflows:commits   # module:function
         background: optional   # never | optional (the default) | always: whether it runs as a job
         args:
-          repo: {type: string, required: true, description: ...}
-          limit: {type: integer, default: 10}
+          repo: {type: string, required: true, positional: true, description: ...}
+          limit: {type: integer, default: 10, short: L}
     ---
     Markdown body: when and how to use the skill.
 
-Workflow ids are `<skill>.<workflow>`, and the agent runs one as a command line,
-`github.commits --repo openreader --limit 5`. The registry is read from disk at
-startup, so adding or editing a folder is all it takes to change what the
-agent sees.
+Workflow ids are `<skill>.<workflow>`, and the agent runs one as a command line in
+the style of familiar CLIs, `github.commits openreader -L 5`:
+- `positional: true` lets the argument be given by place as well as by `--name`;
+  `positional: rest` (last positional only) takes all remaining words, so an
+  unquoted question still arrives whole.
+- `short: L` adds a one-letter flag, `-L`.
+The registry is read from disk at startup, so adding or editing a folder is all
+it takes to change what the agent sees.
 """
 
 from __future__ import annotations
@@ -71,6 +75,10 @@ def _flag(name: str) -> str:
     return "--" + name.replace("_", "-")
 
 
+def _pos(name: str) -> str:
+    return f"_pos_{name}"
+
+
 def _metavar(name: str, spec: dict[str, Any]) -> str:
     if spec.get("enum"):
         return "{" + ",".join(str(v) for v in spec["enum"]) + "}"
@@ -91,11 +99,20 @@ class Workflow:
         return getattr(importlib.import_module(module_name), attr)
 
     def parser(self) -> argparse.ArgumentParser:
-        """The workflow's command-line options, one `--name` per argument."""
-        parser = _Parser(prog=self.id, add_help=False, allow_abbrev=False, exit_on_error=False)
+        """The workflow's command-line options: `--name` (and `-x`) per argument, plus
+        a positional word for arguments marked `positional`."""
+        parser = _Parser(
+            prog=self.id,
+            usage=self.command(),
+            add_help=False,
+            allow_abbrev=False,
+            exit_on_error=False,
+        )
         for name, spec in self.args.items():
             kind = spec.get("type", "string")
             flags = list(dict.fromkeys([_flag(name), f"--{name}"]))
+            if spec.get("short"):
+                flags.insert(0, f"-{spec['short']}")
             options: dict[str, Any] = {"dest": name, "help": spec.get("description")}
             if kind == "boolean":
                 options["action"] = argparse.BooleanOptionalAction
@@ -107,30 +124,58 @@ class Workflow:
             if spec.get("enum"):
                 options["choices"] = spec["enum"]
                 options.pop("metavar")
-            options["required"] = bool(spec.get("required"))
+            # Positional arguments are checked after parsing, as either form may give them.
+            options["required"] = bool(spec.get("required")) and not spec.get("positional")
             parser.add_argument(*flags, **options)
+            if spec.get("positional"):
+                many = kind == "array" or spec["positional"] == "rest"
+                pos: dict[str, Any] = {"nargs": "*" if many else "?", "metavar": name.upper()}
+                if kind != "array" and spec["positional"] != "rest":
+                    pos["type"] = options["type"]
+                    if spec.get("enum"):
+                        pos["choices"] = spec["enum"]
+                parser.add_argument(_pos(name), **pos)
         return parser
 
     def parse(self, argv: list[str]) -> dict[str, Any]:
         """Validated arguments from command-line words; raises CommandError."""
         parser = self.parser()
+        usage = parser.format_usage().strip()
         try:
-            parsed = vars(parser.parse_args(argv))
+            # Intermixed, so positionals may come before or after the options.
+            parsed = vars(parser.parse_intermixed_args(argv))
         except argparse.ArgumentError as e:  # raised as-is with exit_on_error=False
-            raise CommandError(f"{e}\n{parser.format_usage().strip()}") from e
+            raise CommandError(f"{e}\n{usage}") from e
+        for name, spec in self.args.items():
+            if not spec.get("positional"):
+                continue
+            given = parsed.pop(_pos(name), None)
+            if given in (None, []):
+                if spec.get("required") and parsed.get(name) is None:
+                    raise CommandError(f"missing {name.upper()} (or {_flag(name)})\n{usage}")
+                continue
+            if parsed.get(name) is not None:
+                raise CommandError(
+                    f"{name.upper()} given twice, by place and by {_flag(name)}\n{usage}"
+                )
+            if isinstance(given, list) and spec.get("type") != "array":
+                given = " ".join(given)
+            parsed[name] = given
         try:
             return self.validate({k: v for k, v in parsed.items() if v is not None})
         except ValueError as e:
-            raise CommandError(f"{e}\n{parser.format_usage().strip()}") from e
+            raise CommandError(f"{e}\n{usage}") from e
 
     def command(self) -> str:
-        """The command's usage line, e.g. `github.commits --repo REPO [--limit N]`."""
+        """The command's usage line, e.g. `github.commits REPO [-L N]`."""
         words = [self.id]
         for name, spec in self.args.items():
-            flag = _flag(name)
-            if spec.get("type") == "boolean":
+            if spec.get("positional"):
+                word = name.upper() + (" ..." if spec["positional"] == "rest" else "")
+            elif spec.get("type") == "boolean":
                 word = f"--[no-]{name.replace('_', '-')}"
             else:
+                flag = f"-{spec['short']}" if spec.get("short") else _flag(name)
                 word = f"{flag} {_metavar(name, spec)}"
                 if spec.get("type") == "array":
                     word += " ..."
@@ -164,7 +209,13 @@ class Workflow:
             if spec.get("enum"):
                 bits.append("one of " + ", ".join(repr(v) for v in spec["enum"]))
             desc = spec.get("description", "")
-            lines.append(f"- `{_flag(name)}` ({', '.join(bits)}){': ' + desc if desc else ''}")
+            names = [_flag(name)]
+            if spec.get("short"):
+                names.insert(0, f"-{spec['short']}")
+            if spec.get("positional"):
+                names.insert(0, name.upper())
+            label = ", ".join(f"`{n}`" for n in names)
+            lines.append(f"- {label} ({', '.join(bits)}){': ' + desc if desc else ''}")
         return "\n".join(lines)
 
 
@@ -185,8 +236,8 @@ class Skill:
             parts += [
                 "",
                 "## Workflows",
-                'Run one with `run_workflow(command="<workflow> --option value ...")`; quote values'
-                " with spaces."
+                'Run one with `run_workflow(command="<workflow> ARG --option value ...")`, as'
+                " in the usage lines; quote values with spaces."
                 + (" Add `background=true` to run it as a job." if include_background else ""),
                 "",
             ]
@@ -218,6 +269,39 @@ def _arg_model(workflow_id: str, args: dict[str, dict[str, Any]], path: Path) ->
         __config__=ConfigDict(extra="forbid"),
         **fields,
     )
+
+
+def _check_cli(path: Path, workflow_id: str, args: dict[str, Any]) -> None:
+    """`positional` and `short` must make an unambiguous command line."""
+    shorts: set[str] = set()
+    positional = [
+        n for n, spec in args.items() if isinstance(spec, dict) and spec.get("positional")
+    ]
+    for name, spec in args.items():
+        if not isinstance(spec, dict):
+            continue
+        short = spec.get("short")
+        if short is not None:
+            if not (
+                isinstance(short, str) and len(short) == 1 and short.isalpha() and short != "h"
+            ):
+                raise SkillError(
+                    f"{path}: `{workflow_id}` `{name}`: `short` must be one letter, not h"
+                )
+            if short in shorts:
+                raise SkillError(f"{path}: `{workflow_id}` uses `-{short}` twice")
+            shorts.add(short)
+        mode = spec.get("positional")
+        if mode not in (None, False, True, "rest"):
+            raise SkillError(f"{path}: `{workflow_id}` `{name}`: `positional` is true or rest")
+        if mode and spec.get("type") == "boolean":
+            raise SkillError(f"{path}: `{workflow_id}` `{name}`: a boolean can't be positional")
+        many = mode == "rest" or (mode and spec.get("type") == "array")
+        if many and name != positional[-1]:
+            raise SkillError(
+                f"{path}: `{workflow_id}` `{name}` takes the remaining words, so it must be the"
+                " last positional argument"
+            )
 
 
 def _parse(path: Path) -> tuple[dict[str, Any], str]:
@@ -253,6 +337,7 @@ def load_skill(path: Path) -> Skill:
                 f"{path}: workflow `{wf_name}` has unknown keys: {', '.join(sorted(unknown))}"
             )
         args = spec.get("args") or {}
+        _check_cli(path, wf_id, args)
         background = spec.get("background", "optional")
         if background not in BACKGROUND:
             raise SkillError(
@@ -302,7 +387,7 @@ class SkillRegistry:
             raise CommandError(f"Can't read the command ({e}); check its quotes.") from e
         if not words:
             raise CommandError(
-                "The command is empty. Start it with a workflow id, e.g. `github.repos`."
+                "The command is empty. Start it with a workflow id, e.g. `github.repo.list`."
             )
         name, argv = words[0], words[1:]
         wf = self.workflows.get(name)
