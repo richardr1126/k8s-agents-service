@@ -3,8 +3,7 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon, CheckCircle2Icon, ChevronDownIcon, HourglassIcon } from "lucide-react";
-import { useAuiState } from "@assistant-ui/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useChat } from "@/components/custom-runtime-provider";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { isPodcast, PodcastView } from "@/components/podcast-view";
@@ -24,25 +23,41 @@ export type Job = {
   data: Record<string, unknown>;
   /** The agent has been told how the job ended. */
   notified: boolean;
+  /** The backend is replying to this job on its thread, or about to. */
+  answering?: boolean;
   created_at: string;
   updated_at: string;
 };
 
 const JOB_ID = /Started background job `(job-[a-f0-9]{12})`/;
 
-/** Jobs this page has already asked the agent to answer, so a remounted card doesn't ask twice. */
-const answered = new Set<string>();
+/** Jobs whose reply this page has shown, so a card remounted by the reload doesn't reload again. */
+const shown = new Set<string>();
 
-/** When the job ends and the agent hasn't heard, start a run on its open, idle conversation. */
+/**
+ * When the job ends, the backend replies to it on its thread. While it does, the
+ * conversation takes no messages; once the reply is saved, the thread reloads to show it.
+ */
 function useFollowUp(job: Job | undefined) {
-  const { followUp } = useChat();
-  const running = useAuiState((s) => s.thread.isRunning);
+  const { setAnswering, reloadThread } = useChat();
+  // Saw the job before the agent heard about it, so its reply is news to this page.
+  const live = useRef(false);
   useEffect(() => {
-    if (!job || job.status === "running" || job.notified || !job.thread_id || running) return;
-    if (answered.has(job.id)) return;
-    if (followUp(job.thread_id)) answered.add(job.id);
-  }, [job, running, followUp]);
+    if (!job?.thread_id) return;
+    if (job.status === "running" || job.answering || !job.notified) live.current = true;
+    if (job.status === "running") return;
+    setAnswering(job.id, job.answering ? job.thread_id : null);
+    if (!job.answering && job.notified && live.current && !shown.has(job.id)) {
+      shown.add(job.id);
+      reloadThread(job.thread_id);
+    }
+  }, [job, setAnswering, reloadThread]);
+  const id = job?.id;
+  useEffect(() => () => void (id && setAnswering(id, null)), [id, setAnswering]);
 }
+
+/** Polls left after a job ends unanswered: the backend may be about to start its reply. */
+const SETTLE_POLLS = 3;
 
 /** The job id a tool result started, if it started one. */
 export function jobIdOf(result: unknown): string | null {
@@ -57,10 +72,21 @@ async function fetchJob(id: string): Promise<Job> {
 
 /** A background job: live progress while it runs, then its result. */
 export function JobCard({ id, title }: { id: string; title: string }) {
+  const settle = useRef(SETTLE_POLLS);
   const { data: job, error } = useQuery({
     queryKey: ["job", id],
     queryFn: () => fetchJob(id),
-    refetchInterval: (q) => (q.state.data?.status === "running" || !q.state.data ? 2500 : false),
+    refetchInterval: (q) => {
+      const data = q.state.data;
+      if (!data || data.status === "running") return 2500;
+      if (data.answering) return 2000;
+      // Unanswered: a reply may be starting, or it waits for the user's next message (over the hourly cap).
+      if (!data.notified && settle.current > 0) {
+        settle.current -= 1;
+        return 1500;
+      }
+      return false;
+    },
     retry: 1,
   });
   useFollowUp(job);

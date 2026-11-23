@@ -28,8 +28,12 @@ type ChatContextValue = {
   booting: boolean;
   undo: (messageId: string) => Promise<void>;
   regenerate: (messageId: string) => Promise<void>;
-  /** Starts a run that answers an ended background job; false when that thread isn't open and idle. */
-  followUp: (threadId: string) => boolean;
+  /** The backend is answering a background job in the open conversation; sending waits. */
+  answering: boolean;
+  /** Marks a job the backend is answering on its thread, or no longer with null. */
+  setAnswering: (jobId: string, threadId: string | null) => void;
+  /** Shows the backend's reply to an ended job in its conversation. */
+  reloadThread: (threadId: string) => void;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);

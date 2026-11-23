@@ -63,8 +63,10 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
   const [boot, setBoot] = useState<"waiting" | "opening" | "done">("waiting");
   if (boot === "waiting" && threads !== null) setBoot(threads.length > 0 ? "opening" : "done");
   const runtimeRef = useRef<AgUiAssistantRuntime | null>(null);
-  /** A follow-up run is streaming: reload the thread when it ends so its job notice shows. */
-  const followingUpRef = useRef(false);
+  /** The backend answered a job while a run streamed here: reload the thread when the run ends. */
+  const reloadPendingRef = useRef(false);
+  /** Background jobs the backend is answering, by job id, with their thread. */
+  const [answeringJobs, setAnsweringJobs] = useState<Record<string, string>>({});
 
   const refreshThreads = useCallback(
     () => queryClient.invalidateQueries({ queryKey: threadsQuery.queryKey }),
@@ -106,9 +108,9 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
         // Without a MESSAGES_SNAPSHOT (the backend sends none), the runtime streams
         // a resumed run into a new assistant message, away from the interrupted
         // sub-agent card. Reload the thread from /history to put the result back.
-        const followedUp = followingUpRef.current;
-        followingUpRef.current = false;
-        if (input.resume?.length || followedUp) {
+        const reload = reloadPendingRef.current;
+        reloadPendingRef.current = false;
+        if (input.resume?.length || reload) {
           void loadHistory(input.threadId)
             .then((messages) => runtimeRef.current?.thread.reset(messages))
             .catch(onError);
@@ -241,22 +243,55 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
     [revert],
   );
 
-  /**
-   * Lets the agent answer a background job that just ended, when its conversation is
-   * open and idle. The backend hands the run the job's notice. False when it can't now.
-   */
-  const followUp = useCallback((jobThreadId: string) => {
-    const thread = runtimeRef.current?.thread;
-    if (!thread || threadIdRef.current !== jobThreadId) return false;
-    const state = thread.getState();
-    const last = state.messages.at(-1);
-    if (state.isRunning || state.isLoading || last?.role !== "assistant") return false;
-    followingUpRef.current = true;
-    thread.startRun({ parentId: last.id });
-    return true;
+  /** Marks a job the backend is answering on its thread (or no longer, with null). */
+  const setAnswering = useCallback((jobId: string, jobThreadId: string | null) => {
+    setAnsweringJobs((current) => {
+      if ((current[jobId] ?? null) === jobThreadId) return current;
+      const next = { ...current };
+      if (jobThreadId) next[jobId] = jobThreadId;
+      else delete next[jobId];
+      return next;
+    });
   }, []);
+  /** The backend is answering a job in the open conversation, so it takes no messages. */
+  const answering = Object.values(answeringJobs).includes(threadId);
+
+  /** Shows the reply the backend wrote to an ended job: reloads the thread now, or after the run streaming here. */
+  const reloadThread = useCallback(
+    (jobThreadId: string) => {
+      void queryClient.invalidateQueries({ queryKey: historyQuery(jobThreadId).queryKey });
+      void refreshThreads();
+      const thread = runtimeRef.current?.thread;
+      if (!thread || threadIdRef.current !== jobThreadId) return;
+      const state = thread.getState();
+      if (state.isRunning || state.isLoading) {
+        reloadPendingRef.current = true;
+        return;
+      }
+      void loadHistory(jobThreadId)
+        .then((messages) => {
+          if (threadIdRef.current === jobThreadId) runtimeRef.current?.thread.reset(messages);
+        })
+        .catch(onError);
+    },
+    [queryClient, refreshThreads, loadHistory, onError],
+  );
 
   const booting = boot !== "done";
   const loadingThread = booting || opening !== null;
-  return { runtime, agentId, setAgentId, modelId, setModelId, threads, loadingThread, booting, undo, regenerate, followUp };
+  return {
+    runtime,
+    agentId,
+    setAgentId,
+    modelId,
+    setModelId,
+    threads,
+    loadingThread,
+    booting,
+    undo,
+    regenerate,
+    answering,
+    setAnswering,
+    reloadThread,
+  };
 }

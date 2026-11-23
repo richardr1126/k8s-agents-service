@@ -206,6 +206,18 @@ const LimitBanner: FC = () => {
   return <Alert tone="error">{limitMessage}</Alert>;
 };
 
+/** The backend is replying to a background job here; the reply shows when it's saved. */
+const AnsweringBanner: FC = () => {
+  const { answering } = useChat();
+  if (!answering) return null;
+  return (
+    <p className="text-muted-foreground flex items-center gap-2 px-1 text-xs" role="status">
+      <Spinner className="size-3" />
+      Replying to a background job. You can send a message when it&apos;s done.
+    </p>
+  );
+};
+
 /** Runs left in the tightest window, e.g. "2/3". */
 const UsageCounter: FC = () => {
   const { usage } = useChat();
@@ -228,10 +240,10 @@ const UsageCounter: FC = () => {
 
 const Composer: FC = () => {
   const text = useAuiState((s) => s.composer.text);
-  const { limitMessage } = useChat();
+  const { limitMessage, answering } = useChat();
   const remaining = MAX_CHARACTERS - text.length;
   const isOverLimit = remaining < 0;
-  const isSendDisabled = Boolean(limitMessage) || isOverLimit || text.trim().length === 0;
+  const isSendDisabled = Boolean(limitMessage) || answering || isOverLimit || text.trim().length === 0;
 
   return (
     <div className="bg-background relative mx-auto flex w-full max-w-[var(--thread-max-width)] flex-col gap-3 px-[var(--thread-padding-x)] pb-[max(0.75rem,env(safe-area-inset-bottom))] md:pb-4">
@@ -243,6 +255,7 @@ const Composer: FC = () => {
       </ThreadPrimitive.Empty>
       <InterruptBanner />
       <LimitBanner />
+      <AnsweringBanner />
       <ComposerPrimitive.Root
         className={cn(
           "bg-background dark:bg-card relative flex w-full flex-col rounded-xl border shadow-sm transition-[border-color,box-shadow]",
@@ -433,9 +446,10 @@ const CopyAction: FC = () => (
   </ActionBarPrimitive.Copy>
 );
 
-/** True while a run streams or a revert is in flight, when history must not change. */
+/** True while a run streams here or the backend answers a job, when history must not change. */
 function useBusy() {
-  return useAuiState((s) => s.thread.isRunning);
+  const { answering } = useChat();
+  return useAuiState((s) => s.thread.isRunning) || answering;
 }
 
 const RegenerateAction: FC = () => {
