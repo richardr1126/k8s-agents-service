@@ -3,7 +3,7 @@ import { describe, expect, test, vi } from "vitest";
 vi.mock("@/db", () => ({ db: {} }));
 vi.mock("@/lib/settings/store", () => ({ getSettings: async () => ({ values: { openreaderUrl: null } }) }));
 
-const { clientMetadata, metadataClientId, redirectUri, SCOPES } = await import("@/lib/openreader");
+const { clientMetadata, hostsOf, metadataClientId, redirectUri, SCOPES, speechBody } = await import("@/lib/openreader");
 
 const PROD = { BASE_URL: "https://chat.richardr.dev" };
 
@@ -31,5 +31,32 @@ describe("client metadata document", () => {
     expect(metadataClientId({ BASE_URL: "http://localhost:3000" })).toBeNull();
     expect(metadataClientId({ BASE_URL: "https://app.localhost" })).toBeNull();
     expect(metadataClientId({})).toBeNull();
+  });
+});
+
+describe("podcast hosts", () => {
+  test("reads bare voice IDs saved before providers could be picked", () => {
+    expect(hostsOf(["af_heart", ""])).toEqual([{ voice: "af_heart" }, {}]);
+  });
+
+  test("keeps a provider, model and voice, and drops anything else", () => {
+    expect(hostsOf([{ provider: "kokoro", model: " m1 ", voice: "v", extra: 1 }, { voice: 3 }])).toEqual([
+      { provider: "kokoro", model: "m1", voice: "v" },
+      {},
+    ]);
+  });
+
+  test("always has two hosts", () => {
+    expect(hostsOf(null)).toEqual([{}, {}]);
+  });
+
+  test("sends only what was picked, so the rest follows OpenReader", () => {
+    expect(speechBody("hi", {})).toEqual({ text: "hi" });
+    expect(speechBody("hi", { voice: "v" })).toEqual({ text: "hi", voice: "v" });
+    expect(speechBody("hi", { provider: "p", model: "m", voice: "v" })).toEqual({ text: "hi", provider: "p", model: "m", voice: "v" });
+  });
+
+  test("sends no model without its provider", () => {
+    expect(speechBody("hi", { model: "m" })).toEqual({ text: "hi" });
   });
 });

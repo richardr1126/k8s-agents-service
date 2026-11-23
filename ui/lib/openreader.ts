@@ -372,25 +372,52 @@ async function apiError(res: Response, fallback: string): Promise<OpenReaderErro
   return new OpenReaderError(body?.error?.message || fallback, status, code, res.headers.get("retry-after"));
 }
 
+/**
+ * A podcast host's speech: an OpenReader provider, model and voice. Each one left
+ * out follows OpenReader: the saved provider, then the provider's default model,
+ * then the saved voice (or the provider's first voice when a provider is named).
+ */
+export type HostVoice = { provider?: string; model?: string; voice?: string };
+
+const HOST_FIELDS = ["provider", "model", "voice"] as const;
+
+/** A stored host, including the bare voice IDs saved before providers could be picked. */
+export function toHost(value: unknown): HostVoice {
+  if (typeof value === "string") return value ? { voice: value } : {};
+  if (!value || typeof value !== "object") return {};
+  const rec = value as Record<string, unknown>;
+  const host: HostVoice = {};
+  for (const field of HOST_FIELDS) {
+    const v = rec[field];
+    if (typeof v === "string" && v.trim()) host[field] = v.trim();
+  }
+  return host;
+}
+
+export const hostsOf = (stored: unknown): HostVoice[] => {
+  const list = Array.isArray(stored) ? stored : [];
+  return [toHost(list[0]), toHost(list[1])];
+};
+
 export type ConnectionStatus = {
   configured: boolean;
   origin: string | null;
   connected: boolean;
-  hostVoices: string[];
+  hosts: HostVoice[];
 };
 
 export async function connectionStatus(userId: string): Promise<ConnectionStatus> {
   const origin = await openreaderOrigin();
   const [row] = await db.select().from(openreaderConnections).where(eq(openreaderConnections.userId, userId));
   const connected = Boolean(origin && row && row.origin === origin);
-  return { configured: Boolean(origin), origin, connected, hostVoices: connected ? row.hostVoices : [] };
+  return { configured: Boolean(origin), origin, connected, hosts: hostsOf(connected ? row.hostVoices : []) };
 }
 
-export async function saveHostVoices(userId: string, voices: string[]): Promise<void> {
+export async function saveHosts(userId: string, hosts: HostVoice[]): Promise<void> {
   const { row } = await current(userId);
   await db
     .update(openreaderConnections)
-    .set({ hostVoices: voices, updatedAt: new Date() })
+    .set({ hostVoices: hosts.slice(0, 2).map(toHost), updatedAt: new Date() })
     .where(eq(openreaderConnections.userId, row.userId));
 }
 
@@ -419,24 +446,55 @@ export async function disconnect(userId: string): Promise<void> {
   }
 }
 
+export type Provider = {
+  id: string;
+  name: string;
+  type: string;
+  defaultModel: string;
+  /** The user's saved provider on OpenReader. */
+  selected: boolean;
+  selectedModel: string | null;
+  models: { id: string; name: string }[];
+  acceptsCustomModel: boolean;
+};
+
+/** The speech providers OpenReader has enabled, with the models it allows. */
+export async function listProviders(userId: string): Promise<Provider[]> {
+  const res = await openreaderFetch(userId, "/providers", { signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw await apiError(res, "Couldn't list OpenReader's speech providers.");
+  const body = (await res.json()) as { data?: Provider[] };
+  return body.data ?? [];
+}
+
 export type Voices = { voices: { id: string; name: string }[]; provider: string | null; model: string | null };
 
-export async function listVoices(userId: string): Promise<Voices> {
-  const res = await openreaderFetch(userId, "/voices", { signal: AbortSignal.timeout(15_000) });
+/** Voices of a provider and model; left out, the user's saved provider (and model) on OpenReader. */
+export async function listVoices(userId: string, choice: Omit<HostVoice, "voice"> = {}): Promise<Voices> {
+  const query = new URLSearchParams();
+  if (choice.provider) query.set("provider", choice.provider);
+  if (choice.provider && choice.model) query.set("model", choice.model);
+  const path = query.size ? `/voices?${query}` : "/voices";
+  const res = await openreaderFetch(userId, path, { signal: AbortSignal.timeout(15_000) });
   if (!res.ok) throw await apiError(res, "Couldn't list OpenReader's voices.");
   const body = (await res.json()) as { data?: { id: string; name: string }[]; provider?: string; model?: string };
   return { voices: body.data ?? [], provider: body.provider ?? null, model: body.model ?? null };
 }
 
+/** The speech request body for a host: only what the user picked, so the rest follows OpenReader. */
+export function speechBody(text: string, host: HostVoice): Record<string, string> {
+  const { provider, model, voice } = toHost(host);
+  // A model or voice belongs to its provider; without one, they belong to the saved provider.
+  return { text, ...(provider ? { provider } : {}), ...(model && provider ? { model } : {}), ...(voice ? { voice } : {}) };
+}
+
 /** MP3 for `text`, in podcast host `speaker`'s voice (host 0 also reads replies aloud). */
 export async function speak(userId: string, text: string, speaker = 0, signal?: AbortSignal): Promise<ArrayBuffer> {
   const { row } = await current(userId);
-  // An unset voice uses the one saved on OpenReader.
-  const voice = row.hostVoices[speaker % 2] ?? "";
+  const host = hostsOf(row.hostVoices)[speaker % 2];
   const res = await openreaderFetch(userId, "/speech", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ text, ...(voice ? { voice } : {}) }),
+    body: JSON.stringify(speechBody(text, host)),
     signal,
   });
   if (!res.ok) throw await apiError(res, `OpenReader speech failed (${res.status}).`);

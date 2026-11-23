@@ -70,8 +70,11 @@ export const openreaderConnections = pgTable("openreader_connections", {
   accessExpiresAt: timestamp("access_expires_at").notNull(),
   refreshToken: text("refresh_token").notNull(),
   scope: text("scope").notNull(),
-  /** Voice IDs for podcast hosts 1 and 2; host 1 also reads replies aloud. Empty uses the saved voice. */
-  hostVoices: jsonb("host_voices").$type<string[]>().notNull().default([]),
+  /**
+   * Speech for podcast hosts 1 and 2 ({ provider, model, voice }, each optional); host 1
+   * also reads replies aloud. Rows saved earlier hold bare voice IDs; see hostsOf.
+   */
+  hostVoices: jsonb("host_voices").$type<unknown[]>().notNull().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
