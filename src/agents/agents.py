@@ -33,7 +33,8 @@ agents: dict[str, Agent] = {
         description="Hi! I can answer questions, research the web, read Richard's GitHub and tell you about his work. Pick a focus or just ask.",
         graph=assistant,
     ),
-    "chatbot": Agent(description="A simple chatbot.", graph=chatbot),
+    # The bare model, with no prompt or tools; the assistant covers plain chat.
+    "chatbot": Agent(description="A simple chatbot.", graph=chatbot, deprecated=True),
     "auto-router": Agent(
         description="Hello! I'm an agent that routes between a resume assistant and a web research assistant. Ask follow-ups any time; they pick up where they left off.",
         graph=main_agent,
