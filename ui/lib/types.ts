@@ -1,10 +1,12 @@
 import type { AgUiMessage } from "@assistant-ui/react-ag-ui";
 
 export type ServiceInfo = {
-  agents: { key: string; description: string }[];
+  agents: { key: string; description: string; deprecated?: boolean }[];
   models: string[];
   default_agent: string;
   default_model: string;
+  focuses?: { name: string; label: string; description: string }[];
+  skills?: { name: string; description: string; workflows: string[] }[];
 };
 
 export type ThreadRow = { id: string; title: string; agentId: string; modelId: string | null; updatedAt: string };

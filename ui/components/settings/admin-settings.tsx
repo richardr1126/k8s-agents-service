@@ -269,3 +269,40 @@ export function ModelSettings() {
     </div>
   );
 }
+
+export function OpenReaderSettings() {
+  const { values, save } = useAdminSettings();
+  const [url, setUrl] = useState(values.openreaderUrl ?? "");
+  const [synced, setSynced] = useState(values.openreaderUrl);
+  if (synced !== values.openreaderUrl) {
+    setSynced(values.openreaderUrl);
+    setUrl(values.openreaderUrl ?? "");
+  }
+  const trimmed = url.trim().replace(/\/+$/, "");
+  return (
+    <Section
+      title="OpenReader"
+      description="People connect their own OpenReader account in Settings → Speech; read-aloud and podcasts then speak with its providers and count against its limits."
+    >
+      <SettingRow k="openreaderUrl">
+        <form
+          className="flex w-full gap-2 sm:max-w-sm"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void save("openreaderUrl", trimmed || null);
+          }}
+        >
+          <Input
+            type="url"
+            className="font-mono text-xs"
+            placeholder="https://openreader.example"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            aria-label="OpenReader instance URL"
+          />
+          <Button type="submit" variant="outline" disabled={(trimmed || null) === values.openreaderUrl}>Save</Button>
+        </form>
+      </SettingRow>
+    </Section>
+  );
+}

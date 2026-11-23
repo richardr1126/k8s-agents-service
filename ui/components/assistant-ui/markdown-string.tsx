@@ -6,6 +6,8 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { memo } from "react";
 
+import { MarkdownLink } from "@/components/assistant-ui/markdown-link";
+import { linkCitations } from "@/lib/citations";
 import { cn } from "@/lib/utils";
 
 const components: Components = {
@@ -30,9 +32,7 @@ const components: Components = {
   p: ({ className, ...props }) => (
     <p className={cn("mb-5 mt-5 leading-7 first:mt-0 last:mb-0", className)} {...props} />
   ),
-  a: ({ className, ...props }) => (
-    <a className={cn("text-primary font-medium underline underline-offset-4", className)} {...props} />
-  ),
+  a: MarkdownLink,
   blockquote: ({ className, ...props }) => (
     <blockquote className={cn("border-l-2 pl-6 italic", className)} {...props} />
   ),
@@ -80,7 +80,7 @@ const components: Components = {
 const MarkdownStringImpl = ({ children }: { children: string }) => (
   <div className="aui-md">
     <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-      {children}
+      {linkCitations(children)}
     </ReactMarkdown>
   </div>
 );

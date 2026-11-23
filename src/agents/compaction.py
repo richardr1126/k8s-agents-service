@@ -1,8 +1,8 @@
 """Shared compaction and low-step tool-call policy helpers for agent tool loops."""
 
-from dataclasses import dataclass
 import hashlib
 import json
+from dataclasses import dataclass
 from typing import Any, cast
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage

@@ -81,6 +81,18 @@ class Settings(BaseSettings):
 
     OPENWEATHERMAP_API_KEY: SecretStr | None = None
     TAVILY_API_KEY: SecretStr | None = None
+    # The github skill reads this account's public repositories only. A token
+    # raises GitHub's rate limit and enables code search; it needs no scopes.
+    GITHUB_OWNER: str = "richardr1126"
+    GITHUB_TOKEN: SecretStr | None = None
+    # Sub-agents the assistant may start in one turn.
+    ASSISTANT_MAX_SUBAGENTS_PER_TURN: int = 4
+    ASSISTANT_MAX_JOBS_PER_USER: int = 2
+    # An inline workflow still running after this many seconds carries on as a background job.
+    ASSISTANT_INLINE_SECONDS: float = 60
+    # The chat UI, which speaks podcast lines through the user's connected OpenReader
+    # (/api/internal/tts, authenticated with AUTH_SECRET).
+    UI_URL: str = "https://chat.richardr.dev"
 
     LANGCHAIN_TRACING_V2: bool = False
     LANGCHAIN_PROJECT: str = "default"

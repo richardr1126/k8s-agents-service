@@ -14,6 +14,8 @@ import { useMessagePartText } from "@assistant-ui/react";
 import { CheckIcon, CopyIcon } from "lucide-react";
 
 import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button";
+import { MarkdownLink } from "@/components/assistant-ui/markdown-link";
+import { linkCitations } from "@/lib/citations";
 import { cn } from "@/lib/utils";
 import { useRecentChange } from "@/lib/use-recent-change";
 
@@ -35,6 +37,7 @@ const MarkdownTextImpl = () => {
       // dot.css draws the trailing dot for data-status="running"; show it only while writing.
       containerProps={{ "data-status": writing ? "running" : "complete" } as object}
       components={defaultComponents}
+      preprocess={linkCitations}
     />
   );
 };
@@ -100,9 +103,7 @@ const defaultComponents = memoizeMarkdownComponents({
   p: ({ className, ...props }) => (
     <p className={cn("mb-5 mt-5 leading-7 first:mt-0 last:mb-0", className)} {...props} />
   ),
-  a: ({ className, ...props }) => (
-    <a className={cn("text-primary font-medium underline underline-offset-4", className)} {...props} />
-  ),
+  a: MarkdownLink,
   blockquote: ({ className, ...props }) => (
     <blockquote className={cn("border-l-2 pl-6 italic", className)} {...props} />
   ),

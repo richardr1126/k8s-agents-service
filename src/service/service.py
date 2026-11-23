@@ -1,11 +1,12 @@
 import logging
+import re
 import warnings
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_core._api import LangChainBetaWarning
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage
@@ -15,8 +16,11 @@ from langgraph.types import Command
 from langsmith import Client as LangsmithClient
 
 from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
+from agents.assistant.focus import get_focuses
 from agents.tools import delete_web_collection
 from core import settings
+from jobs import setup_jobs
+from jobs import store as jobs_store
 from memory import initialize_database, initialize_store
 from schema import (
     ChatHistoryInput,
@@ -32,6 +36,7 @@ from schema import (
     TitleResponse,
     UserInput,
 )
+from schema.schema import FocusInfo, SkillInfo
 from schema.subagent import HistoryResponse
 from service.agui import langfuse_callbacks
 from service.agui import router as agui_router
@@ -39,6 +44,7 @@ from service.history import build_history
 from service.revert import RevertError, revert_thread
 from service.title import generate_title
 from service.utils import langchain_to_chat_message
+from skills import get_registry
 
 warnings.filterwarnings("ignore", category=LangChainBetaWarning)
 logger = logging.getLogger(__name__)
@@ -85,6 +91,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             if hasattr(store, "setup"):  # ignore: union-attr
                 await store.setup()
 
+            await setup_jobs(saver)
+
             # Configure agents with both memory components
             for a in get_all_agent_info():
                 agent = get_agent(a.key)
@@ -111,6 +119,14 @@ async def info() -> ServiceMetadata:
         models=models,
         default_agent=DEFAULT_AGENT,
         default_model=settings.DEFAULT_MODEL,
+        focuses=[
+            FocusInfo(name=f.name, label=f.label, description=f.description)
+            for f in get_focuses().values()
+        ],
+        skills=[
+            SkillInfo(name=s.name, description=s.description, workflows=list(s.workflows))
+            for s in get_registry().skills.values()
+        ],
     )
 
 
@@ -227,7 +243,9 @@ async def feedback(feedback: Feedback) -> FeedbackResponse:
 async def history(input: ChatHistoryInput) -> HistoryResponse:
     """Get a thread's AG-UI messages, with each sub-agent run's messages and status."""
     agent: AgentGraph = get_agent(DEFAULT_AGENT)
-    state = await agent.aget_state(config=RunnableConfig(configurable={"thread_id": input.thread_id}))
+    state = await agent.aget_state(
+        config=RunnableConfig(configurable={"thread_id": input.thread_id})
+    )
     return build_history(_extract_messages_from_state(state.values))
 
 
@@ -263,29 +281,31 @@ async def title(input: TitleInput) -> TitleResponse:
 async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
     """
     Delete a thread and all its associated data.
-    
+
     This deletes the thread from the checkpointer (conversation memory)
     and store (long-term memory). Frontend should handle UI state cleanup.
     """
     try:
         # Get the default agent to access checkpointer and store
         agent: AgentGraph = get_agent(DEFAULT_AGENT)
-        
+
         checkpointer = agent.checkpointer
         if not checkpointer or checkpointer is True:
             raise HTTPException(status_code=500, detail="Checkpointer not available")
-        
+
         # Delete from checkpointer (conversation memory) using built-in method
         try:
-            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver) 
+            # All LangGraph checkpointers (AsyncPostgresSaver, AsyncSqliteSaver)
             # support the adelete_thread method for proper thread deletion
             await checkpointer.adelete_thread(input.thread_id)
             logger.info(f"Successfully deleted thread {input.thread_id} from checkpointer")
         except Exception as e:
             logger.error(f"Error deleting thread {input.thread_id} from checkpointer: {e}")
             # Fail the operation if checkpointer deletion fails since this is the primary data
-            raise HTTPException(status_code=500, detail=f"Failed to delete thread from checkpointer: {str(e)}")
-        
+            raise HTTPException(
+                status_code=500, detail=f"Failed to delete thread from checkpointer: {str(e)}"
+            )
+
         # Delete from store (long-term memory)
         try:
             if agent.store and hasattr(agent.store, "adelete"):
@@ -303,9 +323,9 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
             await delete_web_collection(input.thread_id)
         except Exception as e:
             logger.warning(f"Error deleting web search vectors for thread {input.thread_id}: {e}")
-        
+
         return DeleteThreadResponse()
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -328,6 +348,42 @@ async def health_check():
             health_status["langfuse"] = "disconnected"
 
     return health_status
+
+
+@router.get("/jobs/{job_id}")
+async def get_job(job_id: str, user_id: str) -> dict[str, Any]:
+    """A background job, if it belongs to the user."""
+    job = await jobs_store().get(job_id)
+    if job is None or job.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job.public()
+
+
+_RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
+
+
+@router.get("/jobs/{job_id}/files/{name}")
+async def get_job_file(job_id: str, name: str, user_id: str, request: Request) -> Response:
+    """A file a background job produced, such as a podcast's audio, with Range support."""
+    job = await jobs_store().get(job_id)
+    found = await jobs_store().get_file(job_id, name) if job and job.user_id == user_id else None
+    if found is None:
+        raise HTTPException(status_code=404, detail="File not found")
+    content_type, data = found
+    headers = {"Accept-Ranges": "bytes", "Cache-Control": "private, max-age=3600"}
+    match = _RANGE.match(request.headers.get("range", ""))
+    if match and (match[1] or match[2]):
+        size = len(data)
+        if match[1]:
+            start, end = int(match[1]), int(match[2]) if match[2] else size - 1
+        else:  # the last N bytes
+            start, end = max(0, size - int(match[2])), size - 1
+        end = min(end, size - 1)
+        if start > end:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        return Response(data[start : end + 1], 206, headers, media_type=content_type)
+    return Response(data, headers=headers, media_type=content_type)
 
 
 router.include_router(agui_router)

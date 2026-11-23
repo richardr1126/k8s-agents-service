@@ -2,7 +2,7 @@
 
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ServerCrashIcon } from "lucide-react";
 import { toast } from "sonner";
 import { RunLimitError, useAgentRuntime } from "@/components/runtime/use-agent-runtime";
@@ -28,6 +28,8 @@ type ChatContextValue = {
   booting: boolean;
   undo: (messageId: string) => Promise<void>;
   regenerate: (messageId: string) => Promise<void>;
+  /** Starts a run that answers an ended background job; false when that thread isn't open and idle. */
+  followUp: (threadId: string) => boolean;
 };
 
 const ChatContext = createContext<ChatContextValue | null>(null);
@@ -63,12 +65,17 @@ function RuntimeProvider({ serviceInfo, children }: { serviceInfo: ServiceInfo; 
     else toast.error(error.message);
   }, []);
 
+  const deprecatedAgents = useMemo(
+    () => serviceInfo.agents.filter((a) => a.deprecated).map((a) => a.key),
+    [serviceInfo.agents],
+  );
   const { runtime, ...selection } = useAgentRuntime({
     defaultAgentId: serviceInfo.default_agent,
     defaultModelId: serviceInfo.models.includes(serviceInfo.default_model)
       ? serviceInfo.default_model
       : (serviceInfo.models[0] ?? serviceInfo.default_model),
     models: serviceInfo.models,
+    deprecatedAgents,
     onError,
     onRunFinalized: () => void refreshUsage(),
   });

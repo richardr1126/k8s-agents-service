@@ -1,6 +1,9 @@
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage, messages_to_dict
 
-from agents.main_agent import _new_thread_id, _subagent_runs, _tag_threads, _thread_transcript
+from agents.delegation import new_thread_id as _new_thread_id
+from agents.delegation import subagent_runs as _subagent_runs
+from agents.delegation import tag_threads as _tag_threads
+from agents.delegation import thread_transcript as _thread_transcript
 from schema.subagent import SubagentArtifact
 
 

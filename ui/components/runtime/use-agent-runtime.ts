@@ -5,6 +5,7 @@ import { useAgUiRuntime, type AgUiAssistantRuntime, type UseAgUiThreadListAdapte
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { splitMode } from "@/lib/modes";
 import { historyQuery, threadsQuery } from "@/lib/queries";
 import type { ThreadRow } from "@/lib/types";
 import { HAD_THREADS_COOKIE } from "@/lib/utils";
@@ -41,12 +42,14 @@ type Options = {
   defaultModelId: string;
   /** Models the backend serves now; a thread saved with a retired model falls back to the default. */
   models: string[];
+  /** Agents kept only for old chats; a new chat started from one goes back to the default. */
+  deprecatedAgents: string[];
   onError: (error: Error) => void;
   onRunFinalized: () => void;
 };
 
 /** One AG-UI runtime for the app: the current thread's agent, plus the user's thread list. */
-export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onError, onRunFinalized }: Options) {
+export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprecatedAgents, onError, onRunFinalized }: Options) {
   const [threadId, setThreadId] = useState(() => crypto.randomUUID());
   const [agentId, setAgentId] = useState(defaultAgentId);
   const [modelId, setModelId] = useState(defaultModelId);
@@ -60,6 +63,8 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
   const [boot, setBoot] = useState<"waiting" | "opening" | "done">("waiting");
   if (boot === "waiting" && threads !== null) setBoot(threads.length > 0 ? "opening" : "done");
   const runtimeRef = useRef<AgUiAssistantRuntime | null>(null);
+  /** A follow-up run is streaming: reload the thread when it ends so its job notice shows. */
+  const followingUpRef = useRef(false);
 
   const refreshThreads = useCallback(
     () => queryClient.invalidateQueries({ queryKey: threadsQuery.queryKey }),
@@ -101,7 +106,9 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
         // Without a MESSAGES_SNAPSHOT (the backend sends none), the runtime streams
         // a resumed run into a new assistant message, away from the interrupted
         // sub-agent card. Reload the thread from /history to put the result back.
-        if (input.resume?.length) {
+        const followedUp = followingUpRef.current;
+        followingUpRef.current = false;
+        if (input.resume?.length || followedUp) {
           void loadHistory(input.threadId)
             .then((messages) => runtimeRef.current?.thread.reset(messages))
             .catch(onError);
@@ -119,6 +126,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
       onSwitchToNewThread: () => {
         setOpening(null);
         setThreadId(crypto.randomUUID());
+        setAgentId((current) => (deprecatedAgents.includes(splitMode(current).agentId) ? defaultAgentId : current));
       },
       onSwitchToThread: async (id) => {
         const row = threads?.find((t) => t.id === id);
@@ -150,7 +158,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
         if (id === threadId) await runtimeRef.current?.threads.switchToNewThread();
       },
     }),
-    [threadId, threads, refreshThreads, models, defaultModelId, queryClient],
+    [threadId, threads, refreshThreads, models, defaultModelId, defaultAgentId, deprecatedAgents, queryClient],
   );
 
   const runtime = useAgUiRuntime({
@@ -233,7 +241,22 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, onErro
     [revert],
   );
 
+  /**
+   * Lets the agent answer a background job that just ended, when its conversation is
+   * open and idle. The backend hands the run the job's notice. False when it can't now.
+   */
+  const followUp = useCallback((jobThreadId: string) => {
+    const thread = runtimeRef.current?.thread;
+    if (!thread || threadIdRef.current !== jobThreadId) return false;
+    const state = thread.getState();
+    const last = state.messages.at(-1);
+    if (state.isRunning || state.isLoading || last?.role !== "assistant") return false;
+    followingUpRef.current = true;
+    thread.startRun({ parentId: last.id });
+    return true;
+  }, []);
+
   const booting = boot !== "done";
   const loadingThread = booting || opening !== null;
-  return { runtime, agentId, setAgentId, modelId, setModelId, threads, loadingThread, booting, undo, regenerate };
+  return { runtime, agentId, setAgentId, modelId, setModelId, threads, loadingThread, booting, undo, regenerate, followUp };
 }

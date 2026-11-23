@@ -54,3 +54,24 @@ export const userOnboarding = pgTable("user_onboarding", {
   privacyAcceptedAt: timestamp("privacy_accepted_at"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * A user's link to an OpenReader instance, which speaks for read-aloud and podcasts
+ * (see lib/openreader.ts). Tokens are sealed with BETTER_AUTH_SECRET.
+ */
+export const openreaderConnections = pgTable("openreader_connections", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** The instance origin the tokens belong to; a different configured instance means reconnecting. */
+  origin: text("origin").notNull(),
+  clientId: text("client_id").notNull(),
+  accessToken: text("access_token").notNull(),
+  accessExpiresAt: timestamp("access_expires_at").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  scope: text("scope").notNull(),
+  /** Voice IDs for podcast hosts 1 and 2; host 1 also reads replies aloud. Empty uses the saved voice. */
+  hostVoices: jsonb("host_voices").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

@@ -21,7 +21,7 @@ import pytest_asyncio
 from agui_fakes import WEB_ANSWER, build_internal_call_graph, build_router
 from langgraph.checkpoint.memory import InMemorySaver
 
-import agents.main_agent as main_agent
+import agents.deprecated.main_agent as main_agent
 from agents.agents import DEFAULT_AGENT, Agent
 from core import settings
 from service import app
@@ -293,7 +293,7 @@ async def test_uncaught_task_error_ends_run(
     def broken(_: Any) -> str:
         raise RuntimeError("bug in task")
 
-    monkeypatch.setattr(main_agent, "_normalize_tool_result_content", broken)
+    monkeypatch.setattr(main_agent, "normalize_content", broken)
     events = await run(client, [user("resume:alpha")])
     run_id = subagent_runs(events)["call_alpha_1"]["subagentRunId"]
     assert types(events)[-2:] == ["SUBAGENT_ERROR", "RUN_ERROR"]

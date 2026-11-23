@@ -52,6 +52,12 @@ export const SETTINGS = {
     label: "Title model",
     description: "Any OpenRouter model id that supports structured outputs. Pick a small, cheap one.",
   },
+  openreaderUrl: {
+    schema: z.url({ protocol: /^https?$/ }).nullable(),
+    default: null as string | null,
+    label: "OpenReader instance",
+    description: "The OpenReader people connect for read-aloud and podcasts, such as https://openreader.richardr.dev. Unset uses OPENREADER_URL. Changing it asks everyone to reconnect.",
+  },
 };
 
 export type SettingKey = keyof typeof SETTINGS;

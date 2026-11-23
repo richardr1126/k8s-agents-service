@@ -43,6 +43,21 @@ const extractSearchQuery = (argsText?: string): string | null => {
   return null;
 };
 
+/** The one argument that says what a non-search tool is doing: the workflow, skill or page. */
+const extractDetail = (argsText?: string): string | null => {
+  if (!argsText) return null;
+  try {
+    const parsed = JSON.parse(argsText) as Record<string, unknown>;
+    for (const key of ["workflow", "name", "url"]) {
+      const value = parsed[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
+  } catch {
+    return null;
+  }
+  return null;
+};
+
 const formatResult = (result: unknown) => (typeof result === "string" ? result : JSON.stringify(result, null, 2));
 
 /** One tool call as a slim outlined row; opens to show its arguments and result. */
@@ -50,7 +65,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText,
   const [open, setOpen] = useState(false);
   const isLoading = result === undefined;
   const hasDetails = Boolean(argsText || !isLoading);
-  const searchQuery = isSearchTool(toolName) ? extractSearchQuery(argsText) : null;
+  const searchQuery = isSearchTool(toolName) ? extractSearchQuery(argsText) : extractDetail(argsText);
 
   return (
     <div

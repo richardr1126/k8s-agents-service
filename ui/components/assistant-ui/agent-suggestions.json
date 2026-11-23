@@ -1,4 +1,70 @@
 {
+  "assistant": [
+    {
+      "title": "What is Richard's most technical project?",
+      "label": "Richard's projects",
+      "action": "What is Richard's most technical project?"
+    },
+    {
+      "title": "Are Richard's skills in demand?",
+      "label": "Resume + web",
+      "action": "Which of Richard's skills are most in demand right now? Link a few recent job postings that match."
+    },
+    {
+      "title": "What changed lately in OpenReader?",
+      "label": "GitHub",
+      "action": "What has changed recently in Richard's OpenReader repository?"
+    },
+    {
+      "title": "Latest Brandon Sanderson news",
+      "label": "Web",
+      "action": "What's the latest news about Brandon Sanderson and his upcoming books?"
+    }
+  ],
+  "assistant:github": [
+    {
+      "title": "Which repos are most active?",
+      "label": "Repositories",
+      "action": "Which of Richard's public repositories have been most active lately, and what are they?"
+    },
+    {
+      "title": "Compare two projects",
+      "label": "Repositories",
+      "action": "Compare OpenReader and k8s-agents-service: purpose, stack and recent activity."
+    },
+    {
+      "title": "How is this site built?",
+      "label": "Code",
+      "action": "How is the k8s-agents-service repository structured?"
+    },
+    {
+      "title": "Recent commits",
+      "label": "Commits",
+      "action": "Summarize the latest commits on OpenReader."
+    }
+  ],
+  "assistant:research": [
+    {
+      "title": "State of open-weight TTS",
+      "label": "Research",
+      "action": "What are the best open-weight text-to-speech models right now, and how do they compare?"
+    },
+    {
+      "title": "Kubernetes on a home lab",
+      "label": "Research",
+      "action": "What are the current best practices for running k3s on a small home lab?"
+    },
+    {
+      "title": "Latest in AI agents",
+      "label": "News",
+      "action": "What happened in AI agent frameworks this month?"
+    },
+    {
+      "title": "Explain a paper",
+      "label": "Papers",
+      "action": "Find and explain the key ideas of a recent paper on speculative decoding."
+    }
+  ],
   "auto-router": [
     {
       "title": "Overview of Richard's Cloud Computing Skills",
@@ -85,6 +151,28 @@
       "title": "General conversation",
       "label": "Chat",
       "action": "What's interesting about artificial intelligence?"
+    }
+  ],
+  "assistant:papers": [
+    {
+      "title": "Podcast a classic",
+      "label": "Podcast",
+      "action": "Make a short podcast episode about \"Attention Is All You Need\"."
+    },
+    {
+      "title": "New this week",
+      "label": "Search",
+      "action": "Find the newest arXiv papers on speculative decoding and summarize what each one adds."
+    },
+    {
+      "title": "Explain a paper",
+      "label": "Explain",
+      "action": "Explain the main idea of the LoRA paper and its key results."
+    },
+    {
+      "title": "Compare approaches",
+      "label": "Compare",
+      "action": "Compare FlashAttention and FlashAttention-2: what changed and how much faster is it?"
     }
   ]
 }
