@@ -12,7 +12,7 @@ from langchain_core.tools import tool
 from agents.assistant import web
 from agents.assistant.background import describe_job, is_subagent
 from agents.tools import _filtered_search, build_keyword_filter
-from skills import call_workflow, get_registry
+from skills import CommandError, call_workflow, get_registry
 
 
 @tool(response_format="content_and_artifact")
@@ -114,37 +114,28 @@ def read_skill(
 
 @tool
 async def run_workflow(
-    workflow: Annotated[str, "The workflow id, '<skill>.<workflow>', e.g. 'github.readme'."],
+    command: Annotated[
+        str,
+        "The workflow and its options as a command line, e.g. "
+        "'github.commits --repo openreader --limit 5'. Quote values with spaces.",
+    ],
     config: RunnableConfig,
-    arguments: Annotated[
-        dict[str, Any] | None, "The workflow's arguments, as named in its skill doc."
-    ] = None,
     background: Annotated[
         bool,
         "Run it as a background job and return at once. Workflows marked 'always' run in "
         "the background anyway.",
     ] = False,
 ) -> str:
-    """Run a skill's workflow. Read the skill first to learn its workflows' arguments.
+    """Run a skill's workflow. Read the skill first to learn its workflows' options;
+    `<workflow> --help` shows one workflow's.
 
     Inline runs that take longer than a minute carry on as background jobs.
     """
     # Background runs and long inline runs are handled by the ToolNode's job wrapper;
     # this body runs a workflow inline (always so for sub-agents) and explains bad calls.
-    registry = get_registry()
-    wf = registry.workflows.get(workflow.strip())
-    if wf is None:
-        return (
-            f"No workflow named {workflow!r}. Workflows: {', '.join(registry.workflows) or 'none'}."
-        )
-    if isinstance(arguments, str):  # some models send the arguments as a JSON string
-        try:
-            arguments = json.loads(arguments)
-        except json.JSONDecodeError:
-            return "`arguments` must be an object of the workflow's arguments."
     try:
-        validated = wf.validate(arguments or {})
-    except ValueError as e:
+        wf, validated = get_registry().parse_command(command)
+    except CommandError as e:
         return str(e)
     if wf.background == "always" and is_subagent(config):
         return f"`{wf.id}` runs in the background; only the main assistant can start it."

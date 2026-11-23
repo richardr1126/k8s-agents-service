@@ -10,7 +10,6 @@ how it went; the backend starts that run itself (see follow_ups).
 
 from __future__ import annotations
 
-import json
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
@@ -22,7 +21,7 @@ from langgraph.prebuilt.tool_node import ToolCallRequest
 
 import jobs
 from core import settings
-from skills import Background, call_workflow, get_registry
+from skills import Background, CommandError, call_workflow, get_registry
 
 JOB_MARKER = "Started background job"
 EVENT_TAG = "job-event"
@@ -51,20 +50,12 @@ Planner = Callable[[ToolCallRequest], "Plan | str | None"]
 
 
 def _plan_workflow(request: ToolCallRequest) -> Plan | str | None:
-    args = request.tool_call["args"]
-    wf = get_registry().workflows.get(str(args.get("workflow") or "").strip())
-    arguments = args.get("arguments")
-    if isinstance(arguments, str):  # some models send the arguments as a JSON string
-        try:
-            arguments = json.loads(arguments)
-        except json.JSONDecodeError:
-            return None
-    if wf is None or not isinstance(arguments, dict | None):
-        return None  # the tool explains the problem
     try:
-        validated = wf.validate(arguments or {})
-    except ValueError:
-        return None
+        wf, validated = get_registry().parse_command(
+            str(request.tool_call["args"].get("command") or "")
+        )
+    except CommandError:
+        return None  # the tool explains the problem
     fn = wf.resolve()
     return Plan(
         policy=wf.background,

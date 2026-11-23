@@ -24,9 +24,15 @@ const WORKFLOWS: Record<string, string> = {
   "github.search_code": "Searching code",
 };
 
+/** The workflow id of a `run_workflow` call: the command's first word, or `workflow` in older chats. */
+export function workflowOf(args: Record<string, unknown> = {}): string {
+  if (typeof args.command === "string") return args.command.trim().split(/\s+/, 1)[0] ?? "";
+  return typeof args.workflow === "string" ? args.workflow : "";
+}
+
 function toolLabel(name: string, args: Record<string, unknown> = {}): string {
   const n = name.toLowerCase();
-  if (n === "run_workflow" && typeof args.workflow === "string" && WORKFLOWS[args.workflow]) return WORKFLOWS[args.workflow];
+  if (n === "run_workflow" && WORKFLOWS[workflowOf(args)]) return WORKFLOWS[workflowOf(args)];
   if (n === "web_search" || n === "web_vector_search") return "Searching the web";
   if (n === "fetch_page") return "Reading a page";
   if (n === "search_richard") return "Searching Richard's documents";

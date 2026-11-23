@@ -16,19 +16,23 @@ A skill is a folder `src/skills/<name>/` with a `SKILL.md`:
     ---
     Markdown body: when and how to use the skill.
 
-Workflow ids are `<skill>.<workflow>`. The registry is read from disk at
+Workflow ids are `<skill>.<workflow>`, and the agent runs one as a command line,
+`github.commits --repo openreader --limit 5`. The registry is read from disk at
 startup, so adding or editing a folder is all it takes to change what the
 agent sees.
 """
 
 from __future__ import annotations
 
+import argparse
+import difflib
 import importlib
 import inspect
+import shlex
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, NoReturn
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, create_model
@@ -52,6 +56,27 @@ class SkillError(ValueError):
     """A SKILL.md is invalid."""
 
 
+class CommandError(ValueError):
+    """A workflow command that can't run, with a message that says how to fix it."""
+
+
+class _Parser(argparse.ArgumentParser):
+    """Raises CommandError instead of printing and exiting."""
+
+    def error(self, message: str) -> NoReturn:
+        raise CommandError(f"{message}\n{self.format_usage().strip()}")
+
+
+def _flag(name: str) -> str:
+    return "--" + name.replace("_", "-")
+
+
+def _metavar(name: str, spec: dict[str, Any]) -> str:
+    if spec.get("enum"):
+        return "{" + ",".join(str(v) for v in spec["enum"]) + "}"
+    return {"integer": "N", "number": "X"}.get(spec.get("type", "string"), name.upper())
+
+
 @dataclass(frozen=True)
 class Workflow:
     id: str  # "<skill>.<name>"
@@ -64,6 +89,53 @@ class Workflow:
     def resolve(self) -> Callable[..., Any]:
         module_name, _, attr = self.impl.partition(":")
         return getattr(importlib.import_module(module_name), attr)
+
+    def parser(self) -> argparse.ArgumentParser:
+        """The workflow's command-line options, one `--name` per argument."""
+        parser = _Parser(prog=self.id, add_help=False, allow_abbrev=False, exit_on_error=False)
+        for name, spec in self.args.items():
+            kind = spec.get("type", "string")
+            flags = list(dict.fromkeys([_flag(name), f"--{name}"]))
+            options: dict[str, Any] = {"dest": name, "help": spec.get("description")}
+            if kind == "boolean":
+                options["action"] = argparse.BooleanOptionalAction
+            else:
+                options["type"] = {"integer": int, "number": float}.get(kind, str)
+                options["metavar"] = _metavar(name, spec)
+                if kind == "array":
+                    options["nargs"] = "+"
+            if spec.get("enum"):
+                options["choices"] = spec["enum"]
+                options.pop("metavar")
+            options["required"] = bool(spec.get("required"))
+            parser.add_argument(*flags, **options)
+        return parser
+
+    def parse(self, argv: list[str]) -> dict[str, Any]:
+        """Validated arguments from command-line words; raises CommandError."""
+        parser = self.parser()
+        try:
+            parsed = vars(parser.parse_args(argv))
+        except argparse.ArgumentError as e:  # raised as-is with exit_on_error=False
+            raise CommandError(f"{e}\n{parser.format_usage().strip()}") from e
+        try:
+            return self.validate({k: v for k, v in parsed.items() if v is not None})
+        except ValueError as e:
+            raise CommandError(f"{e}\n{parser.format_usage().strip()}") from e
+
+    def command(self) -> str:
+        """The command's usage line, e.g. `github.commits --repo REPO [--limit N]`."""
+        words = [self.id]
+        for name, spec in self.args.items():
+            flag = _flag(name)
+            if spec.get("type") == "boolean":
+                word = f"--[no-]{name.replace('_', '-')}"
+            else:
+                word = f"{flag} {_metavar(name, spec)}"
+                if spec.get("type") == "array":
+                    word += " ..."
+            words.append(word if spec.get("required") else f"[{word}]")
+        return " ".join(words)
 
     def validate(self, args: dict[str, Any]) -> dict[str, Any]:
         """Validated arguments with defaults; raises ValueError with a readable message."""
@@ -82,9 +154,7 @@ class Workflow:
             "optional": "",
             "never": " (can't run in the background)",
         }[self.background]
-        lines = [f"### `{self.id}`{note}", self.description]
-        if not self.args:
-            lines.append("- No arguments.")
+        lines = [f"### `{self.id}`{note}", self.description, f"`{self.command()}`"]
         for name, spec in self.args.items():
             bits = [spec.get("type", "string")]
             if spec.get("required"):
@@ -94,7 +164,7 @@ class Workflow:
             if spec.get("enum"):
                 bits.append("one of " + ", ".join(repr(v) for v in spec["enum"]))
             desc = spec.get("description", "")
-            lines.append(f"- `{name}` ({', '.join(bits)}){': ' + desc if desc else ''}")
+            lines.append(f"- `{_flag(name)}` ({', '.join(bits)}){': ' + desc if desc else ''}")
         return "\n".join(lines)
 
 
@@ -115,7 +185,8 @@ class Skill:
             parts += [
                 "",
                 "## Workflows",
-                "Run one with `run_workflow(workflow=..., arguments={...})`."
+                'Run one with `run_workflow(command="<workflow> --option value ...")`; quote values'
+                " with spaces."
                 + (" Add `background=true` to run it as a job." if include_background else ""),
                 "",
             ]
@@ -219,6 +290,31 @@ class SkillRegistry:
                 raise SkillError(f"{wf.id}: cannot import `{wf.impl}`: {e}") from e
             if not callable(fn):
                 raise SkillError(f"{wf.id}: `{wf.impl}` is not callable")
+
+    def parse_command(self, command: str) -> tuple[Workflow, dict[str, Any]]:
+        """The workflow a command names and its validated arguments; raises CommandError.
+
+        `<workflow> --help` raises one too, carrying the workflow's usage.
+        """
+        try:
+            words = shlex.split(command)
+        except ValueError as e:
+            raise CommandError(f"Can't read the command ({e}); check its quotes.") from e
+        if not words:
+            raise CommandError(
+                "The command is empty. Start it with a workflow id, e.g. `github.repos`."
+            )
+        name, argv = words[0], words[1:]
+        wf = self.workflows.get(name)
+        if wf is None:
+            close = difflib.get_close_matches(name, self.workflows, n=3, cutoff=0.5)
+            hint = f" Did you mean {', '.join(f'`{c}`' for c in close)}?" if close else ""
+            raise CommandError(
+                f"No workflow named `{name}`.{hint} Workflows: {', '.join(self.workflows) or 'none'}."
+            )
+        if any(word in ("-h", "--help") for word in argv):
+            raise CommandError(wf.usage())
+        return wf, wf.parse(argv)
 
     def index(self, names: list[str] | None = None) -> str:
         """One line per skill, for the system prompt."""

@@ -40,4 +40,10 @@ describe("workflow labels", () => {
     expect(activityOf(call("papers.search"))).toBe("Searching arXiv");
     expect(activityOf(call("something.else"))).toBe("Running a workflow");
   });
+
+  it("reads the workflow from a command", () => {
+    const call = (command: string) => [{ type: "tool-call", toolName: "run_workflow", args: { command } }];
+    expect(activityOf(call("papers.search --query 'speculative decoding'"))).toBe("Searching arXiv");
+    expect(activityOf(call("  github.commits --repo openreader"))).toBe("Reading commits");
+  });
 });

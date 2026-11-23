@@ -1,5 +1,6 @@
 from skills.registry import (
     Background,
+    CommandError,
     Skill,
     SkillError,
     SkillRegistry,
@@ -10,6 +11,7 @@ from skills.registry import (
 
 __all__ = [
     "Background",
+    "CommandError",
     "Skill",
     "SkillError",
     "SkillRegistry",

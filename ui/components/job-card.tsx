@@ -11,6 +11,7 @@ import { ToolRow, toolSpacing } from "@/components/assistant-ui/tool-fallback";
 import { Fold } from "@/components/ui/fold";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+import { workflowOf } from "@/lib/working-activity";
 
 export type Job = {
   id: string;
@@ -150,10 +151,10 @@ const TITLES: Record<string, string> = {
 };
 
 /** `run_workflow`: a job card when the workflow started a background job, else a plain tool row. */
-export const WorkflowTool: ToolCallMessagePartComponent<{ workflow?: string }> = (props) => {
+export const WorkflowTool: ToolCallMessagePartComponent<{ command?: string; workflow?: string }> = (props) => {
   const id = jobIdOf(props.result);
   if (!id) return <ToolRow {...props} />;
-  const workflow = props.args.workflow ?? "";
+  const workflow = workflowOf(props.args);
   return (
     <div data-tool className={cn(toolSpacing, "mb-2")}>
       <JobCard id={id} title={TITLES[workflow] ?? workflow} />
