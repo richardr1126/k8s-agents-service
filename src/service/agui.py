@@ -26,6 +26,7 @@ from langfuse.langchain import CallbackHandler
 
 from agents import get_agent
 from agents.agents import agents
+from agents.assistant import follow_ups
 from agents.configurable_model_graph import ConfigurableModelGraph
 from core import settings
 
@@ -231,16 +232,36 @@ async def ag_ui(agent_id: str, input: RunAgentInput) -> StreamingResponse:
             "focus": forwarded.get("focus") or None,
         },
     }
-    state = await agent.graph.aget_state({"configurable": {"thread_id": input.thread_id}})
-    held = _held_tool_calls(input.messages)
-    input = input.model_copy(
-        update={
-            # The adapter merges forwardedProps into the graph input; they are
-            # already in the config.
-            "forwarded_props": None,
-            "messages": _guard_inbound(input.messages, state.values.get("messages", [])),
-        }
-    )
+    if follow_ups.busy(input.thread_id):
+        # The client's copy of the thread is missing the follow-up's reply.
+        raise HTTPException(
+            status_code=409,
+            detail="The assistant is answering a background job in this chat. Try again when it's done.",
+        )
     # Starlette cancels this generator, and with it the graph run, when the
     # client disconnects.
-    return StreamingResponse(_events(agent, input, held), media_type="text/event-stream")
+    return StreamingResponse(_run(agent, input), media_type="text/event-stream")
+
+
+async def _run(agent: _Agent, input: RunAgentInput) -> AsyncIterator[str]:
+    """One run on the thread, which it holds throughout; then any jobs that ended meanwhile."""
+    configurable = agent.config.get("configurable") or {}
+    thread_id = input.thread_id
+    try:
+        async with follow_ups.thread_run(thread_id):
+            state = await agent.graph.aget_state({"configurable": {"thread_id": thread_id}})
+            held = _held_tool_calls(input.messages)
+            input = input.model_copy(
+                update={
+                    # The adapter merges forwardedProps into the graph input; they
+                    # are already in the config.
+                    "forwarded_props": None,
+                    "messages": _guard_inbound(input.messages, state.values.get("messages", [])),
+                }
+            )
+            async for event in _events(agent, input, held):
+                yield event
+    finally:
+        # Also when the client went away mid-run: a job may have ended meanwhile.
+        if agent.name == follow_ups.AGENT_ID:
+            follow_ups.schedule(configurable.get("user_id"), thread_id, configurable)

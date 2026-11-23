@@ -5,7 +5,7 @@ aren't `never` take a `background` argument. One ToolNode wrapper decides how a
 call runs: as a job when the policy is `always` or the call asks for it, else
 inline. Inline workflows that run long carry on as jobs. When a job ends, the
 next run on its thread starts with a `<job-event>` message telling the agent
-how it went; the chat starts that run itself while the conversation is open.
+how it went; the backend starts that run itself (see follow_ups).
 """
 
 from __future__ import annotations

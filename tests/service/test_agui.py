@@ -430,3 +430,20 @@ async def _delete_thread_check(monkeypatch: pytest.MonkeyPatch, saver: Any) -> N
         assert response.status_code == 200
         assert await _checkpoint_namespaces(saver, "doomed") == set()
         assert await _checkpoint_namespaces(saver, "kept")
+
+
+async def test_messages_wait_while_a_follow_up_holds_the_thread(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agents.assistant.follow_ups._following", {"thread-1"})
+    body = {
+        "threadId": "thread-1",
+        "runId": "run-busy",
+        "messages": [user("hello")],
+        "forwardedProps": {"model": "fake", "user_id": "user-1"},
+    }
+    assert (await client.post(f"/{DEFAULT_AGENT}/ag-ui", json=body)).status_code == 409
+    revert = {"thread_id": "thread-1", "message_id": "user-1"}
+    assert (await client.post("/thread/revert", json=revert)).status_code == 409
+    deleted = await client.request("DELETE", "/thread", json={"thread_id": "thread-1"})
+    assert deleted.status_code == 409

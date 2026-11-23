@@ -22,6 +22,18 @@ logger = logging.getLogger(__name__)
 _store: JobStore = MemoryJobStore()
 _tasks: set[asyncio.Task[Any]] = set()
 
+# Called with each job's id as soon as its outcome is recorded, and the configurable
+# of the run that started it (model, focus, user and thread). Synchronous, so nothing
+# runs between the outcome being stored and the callbacks.
+Ended = Callable[[str, dict[str, Any]], None]
+_on_end: list[Ended] = []
+
+
+def on_job_end(callback: Ended) -> None:
+    """Registers a callback for ended jobs. A failing callback never affects the job."""
+    if callback not in _on_end:
+        _on_end.append(callback)
+
 
 class JobError(RuntimeError):
     pass
@@ -71,7 +83,7 @@ def _job_config(config: RunnableConfig, job_id: str, progress: Any) -> RunnableC
     }
 
 
-def _detached(coro: Coroutine[Any, Any, Any], name: str) -> asyncio.Task[Any]:
+def detached(coro: Coroutine[Any, Any, Any], name: str) -> asyncio.Task[Any]:
     """A task outside the chat run's context. LangChain merges the context's config,
     callbacks included, into every config it's given, so a job started in it would
     stream into the chat."""
@@ -121,8 +133,10 @@ def _job(
     )
 
 
-def _finish(job_id: str, label: str, task: asyncio.Future[Any]) -> None:
-    """Records the job's outcome when its task ends."""
+def _finish(
+    job_id: str, label: str, task: asyncio.Future[Any], configurable: dict[str, Any]
+) -> None:
+    """Records the job's outcome when its task ends, then tells the end callbacks."""
 
     async def record() -> None:
         try:
@@ -134,6 +148,11 @@ def _finish(job_id: str, label: str, task: asyncio.Future[Any]) -> None:
             await _store.update(job_id, status="error", error=str(e)[:1000] or type(e).__name__)
         else:
             await _store.update(job_id, status="done", progress="Done", **_outcome(result))
+        for callback in list(_on_end):
+            try:
+                callback(job_id, configurable)
+            except Exception:
+                logger.exception("Job %s end callback failed", job_id)
 
     _keep(asyncio.create_task(record(), name=f"{job_id}:record"))
 
@@ -155,9 +174,9 @@ async def start(label: str, args: dict[str, Any], config: RunnableConfig, run: R
             fields["data"] = data
         await _store.update(job.id, **fields)
 
-    task = _detached(run(_job_config(config, job.id, progress)), job.id)
+    task = detached(run(_job_config(config, job.id, progress)), job.id)
     _keep(task)
-    _finish(job.id, label, task)
+    _finish(job.id, label, task, dict(config.get("configurable") or {}))
     return job
 
 
@@ -179,7 +198,7 @@ async def run_or_promote(
         if latest["job"]:
             await _store.update(job_id, **{k: v for k, v in latest.items() if k != "job"})
 
-    task = _detached(run(_job_config(config, job_id, progress)), job_id)
+    task = detached(run(_job_config(config, job_id, progress)), job_id)
     try:
         done, _ = await asyncio.wait({task}, timeout=after)
         if task in done:
@@ -197,7 +216,7 @@ async def run_or_promote(
     await _store.create(job)
     latest["job"] = True
     _keep(task)
-    _finish(job_id, label, task)
+    _finish(job_id, label, task, dict(config.get("configurable") or {}))
     return None, job
 
 

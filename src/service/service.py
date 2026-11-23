@@ -16,6 +16,7 @@ from langgraph.types import Command
 from langsmith import Client as LangsmithClient
 
 from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
+from agents.assistant import follow_ups
 from agents.assistant.focus import get_focuses
 from agents.tools import delete_web_collection
 from core import settings
@@ -92,6 +93,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 await store.setup()
 
             await setup_jobs(saver)
+            follow_ups.install()
 
             # Configure agents with both memory components
             for a in get_all_agent_info():
@@ -249,6 +251,14 @@ async def history(input: ChatHistoryInput) -> HistoryResponse:
     return build_history(_extract_messages_from_state(state.values))
 
 
+def _refuse_while_following(thread_id: str) -> None:
+    # The follow-up's reply would land on the reverted or deleted thread.
+    if follow_ups.busy(thread_id):
+        raise HTTPException(
+            status_code=409, detail="The assistant is answering a background job in this chat."
+        )
+
+
 @router.post("/thread/revert")
 async def revert(input: RevertThreadInput) -> RevertThreadResponse:
     """Revert a thread to just before a user message and return that message's text.
@@ -256,6 +266,7 @@ async def revert(input: RevertThreadInput) -> RevertThreadResponse:
     Forks the newest checkpoint from before the message, so the next run
     continues from there. Earlier checkpoints stay in the database.
     """
+    _refuse_while_following(input.thread_id)
     try:
         agent: AgentGraph = get_agent(input.agent_id or DEFAULT_AGENT)
     except KeyError:
@@ -285,6 +296,7 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
     This deletes the thread from the checkpointer (conversation memory)
     and store (long-term memory). Frontend should handle UI state cleanup.
     """
+    _refuse_while_following(input.thread_id)
     try:
         # Get the default agent to access checkpointer and store
         agent: AgentGraph = get_agent(DEFAULT_AGENT)
@@ -356,7 +368,9 @@ async def get_job(job_id: str, user_id: str) -> dict[str, Any]:
     job = await jobs_store().get(job_id)
     if job is None or job.user_id != user_id:
         raise HTTPException(status_code=404, detail="Job not found")
-    return job.public()
+    # While true, the assistant is replying to this job (or about to) on its thread.
+    answering = job.status != "running" and follow_ups.busy(job.thread_id or "")
+    return {**job.public(), "answering": answering}
 
 
 _RANGE = re.compile(r"^bytes=(\d*)-(\d*)$")
