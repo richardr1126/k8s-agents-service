@@ -5,21 +5,29 @@
 3. Read each chosen paper's full text and boil it down to notes for this topic, in parallel,
    so the script writer sees every paper without holding all their full texts at once.
 4. Optionally add web passages (the research skill's search) for context beyond the papers.
-5. Write one two-host script from the notes and record it like a single-paper episode.
+5. Check the picks cover the topic; once, search again for what's missing.
+6. Write one two-host script from the notes and record it like a single-paper episode.
+
+The steps run as a LangGraph graph (`EPISODE`), checkpointed per job so a restart resumes it.
 """
 
 from __future__ import annotations
 
 import asyncio
+import operator
 import re
-from typing import Any
+from dataclasses import asdict
+from typing import Annotated, Any, TypedDict
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.graph import END, START, StateGraph
+from langgraph.types import Send
 from pydantic import BaseModel, Field
 
 from agents.utils import internal_llm_config
 from jobs import report_progress
+from jobs.graphs import run_graph
 from skills.papers import podcast, sources
 from skills.papers.sources import Paper, PaperError
 
@@ -224,6 +232,206 @@ async def web_context(topic: str, ctx: RunnableConfig | None) -> str:
     return "\n\n".join(parts)[:WEB_CHARS]
 
 
+# The episode as a graph: each node's output is checkpointed, so a job cut off by a restart
+# resumes where it stopped, and the coverage check can send it back to search for more.
+#
+#   plan -> find -> pick -> check --(gaps, first time only)--> find
+#                             \--> note (one per paper, in parallel) + web --> write -> record
+
+
+def _plain(paper: Paper) -> dict[str, Any]:
+    """A paper for the graph's state: without its full text, which notes read themselves."""
+    return {**asdict(paper), "text": ""}
+
+
+def _paper(data: dict[str, Any]) -> Paper:
+    return Paper(**data)
+
+
+class Episode(TypedDict, total=False):
+    topic: str
+    papers: int
+    length: str
+    focus: str | None
+    web: bool
+    queries: list[str]
+    landmarks: list[str]
+    rounds: int
+    found: list[dict[str, Any]]
+    marked: list[str]
+    chosen: list[dict[str, Any]]
+    # (published date, notes), one per paper, gathered from the parallel note tasks.
+    notes: Annotated[list[tuple[str, str]], operator.add]
+    web_text: str
+    script: dict[str, Any]
+    result: dict[str, Any]
+
+
+class Coverage(BaseModel):
+    covered: bool = Field(description="True if these papers together cover the topic well")
+    searches: list[str] = Field(
+        default_factory=list,
+        description="If not: short arXiv searches (2-5 words) for what's missing",
+    )
+
+
+CHECK = """These papers were chosen for a podcast episode about the topic below. Do they cover it together: the
+founding idea, the main approaches, and recent work? If an important part is missing, give up to
+{n} short arXiv searches (two to five words) that would find it. If they cover it, say so."""
+
+
+async def _plan(state: Episode, config: RunnableConfig) -> Episode:
+    await report_progress(config, "Planning arXiv searches…")
+    queries, landmarks = await plan_searches(state["topic"], config)
+    return {"queries": queries, "landmarks": landmarks, "rounds": 0}
+
+
+async def _find(state: Episode, config: RunnableConfig) -> Episode:
+    queries, landmarks = state.get("queries") or [], state.get("landmarks") or []
+    await report_progress(config, f"Searching arXiv ({len(queries) + len(landmarks)} searches)…")
+    found, marked = await candidates(queries, landmarks)
+    # Later rounds add to what earlier rounds found.
+    known = {_base_id(_paper(p)): p for p in state.get("found") or []}
+    for p in found:
+        known.setdefault(_base_id(p), _plain(p))
+    if not known:
+        raise PaperError(f"arXiv has no papers on {state['topic']!r}; try other words.")
+    return {
+        "found": list(known.values()),
+        "marked": sorted({*(state.get("marked") or []), *marked}),
+        "rounds": (state.get("rounds") or 0) + 1,
+    }
+
+
+async def _pick(state: Episode, config: RunnableConfig) -> Episode:
+    found = [_paper(p) for p in state["found"]]
+    n = state["papers"]
+    await report_progress(config, f"Choosing {min(n, len(found))} of {len(found)} papers…")
+    chosen = await pick(state["topic"], found, n, config, set(state.get("marked") or []))
+    return {"chosen": [_plain(p) for p in chosen]}
+
+
+async def _check(state: Episode, config: RunnableConfig) -> Episode:
+    """Looks for gaps once; a second search round only adds what's missing."""
+    if (state.get("rounds") or 0) >= 2:
+        return {"queries": []}
+    listing = "\n".join(
+        f"- {p['title']} ({p['published'][:4]}): {p['abstract'][:300]}" for p in state["chosen"]
+    )
+    await report_progress(config, "Checking the papers cover the topic…")
+    try:
+        result = (
+            await _model(config)
+            .with_structured_output(Coverage)
+            .ainvoke(
+                [
+                    SystemMessage(content=CHECK.format(n=SEARCHES // 2)),
+                    HumanMessage(content=f"Topic: {state['topic']}\n\nPapers:\n{listing}"),
+                ],
+                internal_llm_config(config),
+            )
+        )
+    except Exception:
+        return {"queries": []}
+    if not isinstance(result, Coverage) or result.covered:
+        return {"queries": []}
+    more = [q.strip() for q in result.searches if q.strip()][: SEARCHES // 2]
+    return {"queries": more, "landmarks": []}
+
+
+def _after_check(state: Episode) -> list[Send] | str:
+    if state.get("queries"):
+        return "find"
+    chosen = state["chosen"]
+    sends = [
+        Send("note", {"topic": state["topic"], "focus": state.get("focus"), "paper": p})
+        for p in chosen
+    ]
+    if state.get("web"):
+        sends.append(Send("web", {"topic": state["topic"]}))
+    return sends
+
+
+class NoteTask(TypedDict):
+    topic: str
+    focus: str | None
+    paper: dict[str, Any]
+
+
+async def _note(task: NoteTask, config: RunnableConfig) -> Episode:
+    paper = await _read(_paper(task["paper"]))
+    text = await notes(task["topic"], paper, task.get("focus"), config)
+    return {"notes": [(paper.published, text)]}
+
+
+async def _web(task: dict[str, Any], config: RunnableConfig) -> Episode:
+    return {"web_text": await web_context(task["topic"], config)}
+
+
+async def _write(state: Episode, config: RunnableConfig) -> Episode:
+    topic = state["topic"]
+    # Oldest first, so the script can tell the topic's story in order.
+    ordered = [text for _, text in sorted(state.get("notes") or [])]
+    material = f"Topic: {topic}\n\n" + "\n\n".join(
+        f"## Paper {i}\n{n}" for i, n in enumerate(ordered, 1)
+    )
+    if state.get("web_text"):
+        material += (
+            f"\n\n## From the web (background only; the papers come first)\n{state['web_text']}"
+        )
+    cards = [_paper(p).card() for p in state["chosen"]]
+    await report_progress(config, f"Writing a script about {topic}…", papers=cards)
+    script = await podcast.write_script(
+        material,
+        state["length"],  # type: ignore[arg-type]
+        state.get("focus"),
+        config,
+        subject=f"about a research topic, {topic}, drawing on {len(ordered)} papers",
+        read="the papers",
+        outline=OUTLINE,
+    )
+    return {"script": script.model_dump()}
+
+
+async def _record(state: Episode, config: RunnableConfig) -> Episode:
+    chosen = sorted((_paper(p) for p in state["chosen"]), key=lambda p: p.published)
+    listing = "\n".join(
+        f"- [{p.title}]({p.url}){' · ' + p.byline() if p.byline() else ''}" for p in chosen
+    )
+    result = await podcast.record(
+        podcast.Script.model_validate(state["script"]),
+        f"Papers discussed:\n{listing}\n\n",
+        chosen,
+        config,
+    )
+    return {"result": result}
+
+
+def _graph() -> StateGraph:
+    g = StateGraph(Episode)
+    g.add_node("plan", _plan)
+    g.add_node("find", _find)
+    g.add_node("pick", _pick)
+    g.add_node("check", _check)
+    g.add_node("note", _note)  # type: ignore[arg-type]
+    g.add_node("web", _web)  # type: ignore[arg-type]
+    g.add_node("write", _write)
+    g.add_node("record", _record)
+    g.add_edge(START, "plan")
+    g.add_edge("plan", "find")
+    g.add_edge("find", "pick")
+    g.add_edge("pick", "check")
+    g.add_conditional_edges("check", _after_check, ["find", "note", "web"])
+    g.add_edge("note", "write")
+    g.add_edge("web", "write")
+    g.add_edge("write", "record")
+    g.add_edge("record", END)
+    return g
+
+
+EPISODE = _graph()
+
+
 async def make(
     topic: str,
     papers: int,
@@ -232,39 +440,12 @@ async def make(
     web: bool,
     ctx: RunnableConfig | None,
 ) -> dict[str, Any]:
-    await report_progress(ctx, "Planning arXiv searches…")
-    queries, landmarks = await plan_searches(topic, ctx)
-    await report_progress(ctx, f"Searching arXiv ({len(queries) + len(landmarks)} searches)…")
-    found, marked = await candidates(queries, landmarks)
-    if not found:
-        raise PaperError(f"arXiv has no papers on {topic!r}; try other words.")
-    await report_progress(ctx, f"Choosing {min(papers, len(found))} of {len(found)} papers…")
-    chosen = await pick(topic, found, papers, ctx, marked)
-    cards = [p.card() for p in chosen]
-    await report_progress(ctx, f"Reading {len(chosen)} papers…", papers=cards)
-    # Oldest first, so the script can tell the topic's story in order.
-    read = sorted(await asyncio.gather(*(_read(p) for p in chosen)), key=lambda p: p.published)
-    web_task = asyncio.create_task(web_context(topic, ctx)) if web else None
-    await report_progress(ctx, f"Taking notes on {len(read)} papers…", papers=cards)
-    paper_notes = await asyncio.gather(*(notes(topic, p, focus, ctx) for p in read))
-    web_text = await web_task if web_task else ""
-
-    material = f"Topic: {topic}\n\n" + "\n\n".join(
-        f"## Paper {i}\n{n}" for i, n in enumerate(paper_notes, 1)
-    )
-    if web_text:
-        material += f"\n\n## From the web (background only; the papers come first)\n{web_text}"
-    await report_progress(ctx, f"Writing a script about {topic}…", papers=cards)
-    script = await podcast.write_script(
-        material,
-        length,
-        focus,
-        ctx,
-        subject=f"about a research topic, {topic}, drawing on {len(read)} papers",
-        read="the papers",
-        outline=OUTLINE,
-    )
-    listing = "\n".join(
-        f"- [{p.title}]({p.url}){' · ' + p.byline() if p.byline() else ''}" for p in read
-    )
-    return await podcast.record(script, f"Papers discussed:\n{listing}\n\n", list(read), ctx)
+    inputs: Episode = {
+        "topic": topic,
+        "papers": papers,
+        "length": length,
+        "focus": focus,
+        "web": web,
+    }
+    state = await run_graph(EPISODE, dict(inputs), ctx)
+    return state["result"]

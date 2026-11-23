@@ -149,11 +149,13 @@ def rank_passages(sources: list[Source], queries: list[str], keep: int, per_sour
 
 
 async def gather(
-    question: str, depth: Depth, config: RunnableConfig | None
+    question: str, depth: Depth, config: RunnableConfig | None, the_plan: Plan | None = None
 ) -> tuple[Plan, list[Source]]:
+    """Searches the plan's queries (planning them first if no plan is given) and reads the best pages."""
     limits = LIMITS[depth]
-    await report_progress(config, "Planning searches")
-    the_plan = await plan(question, depth, config)
+    if the_plan is None:
+        await report_progress(config, "Planning searches")
+        the_plan = await plan(question, depth, config)
     await report_progress(config, f"Searching {len(the_plan.queries)} angles")
     results = await asyncio.gather(
         *(
@@ -229,10 +231,10 @@ def evidence(question: str, the_plan: Plan, sources: list[Source]) -> str:
         for p in body:
             lines.append(f"[{i}] {' '.join(p.split())}")
             lines.append("")
-    body = web.clip("\n".join(lines), 22_000)
+    pack = web.clip("\n".join(lines), 22_000)
     cite = ", ".join(f"[{i}]({s.url})" for i, s in enumerate(sources[:2], 1))
     return (
-        f"{body}\n\n## How to cite\nCite each claim with a separate markdown link per source "
+        f"{pack}\n\n## How to cite\nCite each claim with a separate markdown link per source "
         f"right after it, e.g. {cite}. Never write bare [1] or [1, 2]. End with a numbered "
         '"Sources" list of `[title](url)` links, one per line, then 2-3 follow-up questions.'
     )
@@ -249,8 +251,19 @@ Using only the numbered passages below, answer the question.
 """
 
 
-async def report(question: str, depth: Depth, config: RunnableConfig | None) -> str:
-    the_plan, sources = await gather(question, depth, config)
+def _text(content: Any) -> str:
+    return (
+        content
+        if isinstance(content, str)
+        else "".join(
+            part.get("text", "") if isinstance(part, dict) else str(part) for part in content
+        )
+    )
+
+
+async def write_report(
+    question: str, the_plan: Plan, sources: list[Source], config: RunnableConfig | None
+) -> str:
     urls = "\n".join(f"[{i}] {s.url}" for i, s in enumerate(sources, 1))
     await report_progress(config, f"Writing the report from {len(sources)} sources")
     msg = await _model(config).ainvoke(
@@ -262,11 +275,4 @@ async def report(question: str, depth: Depth, config: RunnableConfig | None) -> 
         ],
         internal_llm_config(config or {}),
     )
-    content = msg.content
-    return (
-        content
-        if isinstance(content, str)
-        else "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part) for part in content
-        )
-    )
+    return _text(msg.content)

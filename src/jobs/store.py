@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, Protocol
 
 Status = Literal["running", "done", "error"]
@@ -46,6 +46,8 @@ class JobStore(Protocol):
     async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None: ...
     async def unnotified(self, user_id: str, thread_id: str) -> list[Job]: ...
     async def mark_notified(self, job_ids: list[str]) -> None: ...
+    async def touch(self, job_ids: list[str]) -> None: ...
+    async def claim_stale(self, stale_seconds: float) -> list[Job]: ...
 
 
 class MemoryJobStore:
@@ -94,6 +96,17 @@ class MemoryJobStore:
         for job_id in job_ids:
             if job := self.jobs.get(job_id):
                 job.notified = True
+
+    async def touch(self, job_ids: list[str]) -> None:
+        for job_id in job_ids:
+            if job := self.jobs.get(job_id):
+                job.updated_at = datetime.now(UTC)
+
+    async def claim_stale(self, stale_seconds: float) -> list[Job]:
+        cutoff = datetime.now(UTC) - timedelta(seconds=stale_seconds)
+        claimed = [j for j in self.jobs.values() if j.status == "running" and j.updated_at < cutoff]
+        await self.touch([j.id for j in claimed])
+        return claimed
 
 
 _COLUMNS = (
@@ -156,12 +169,8 @@ class PostgresJobStore:
                 )
                 """
             )
-            # Jobs run in this process; any still marked running died with the last one.
-            # They stay unnotified, so their threads hear that they stopped.
-            await conn.execute(
-                "UPDATE assistant_jobs SET status = 'error', error = 'Stopped by a server restart.', "
-                "updated_at = now() WHERE status = 'running'"
-            )
+            # Running jobs whose process died are found by their stale heartbeat
+            # (`claim_stale`), resumed if they can be, and otherwise marked stopped.
 
     async def create(self, job: Job) -> None:
         values = job.public()
@@ -235,3 +244,31 @@ class PostgresJobStore:
             await conn.execute(
                 "UPDATE assistant_jobs SET notified = true WHERE id = ANY(%s)", [job_ids]
             )
+
+    async def touch(self, job_ids: list[str]) -> None:
+        """The heartbeat: marks these jobs as still owned by a live process."""
+        if not job_ids:
+            return
+        async with self.pool.connection() as conn:
+            await conn.execute(
+                "UPDATE assistant_jobs SET updated_at = now() "
+                "WHERE id = ANY(%s) AND status = 'running'",
+                [job_ids],
+            )
+
+    async def claim_stale(self, stale_seconds: float) -> list[Job]:
+        """Running jobs with no heartbeat for `stale_seconds`, claimed for this process.
+
+        The claim bumps their heartbeat in the same statement, so when several
+        processes sweep at once each job goes to exactly one of them.
+        """
+        async with self.pool.connection() as conn:
+            cur = await conn.execute(
+                f"UPDATE assistant_jobs SET updated_at = now() WHERE id IN ("
+                "SELECT id FROM assistant_jobs WHERE status = 'running' "
+                "AND updated_at < now() - make_interval(secs => %s) FOR UPDATE SKIP LOCKED"
+                f") RETURNING {_COLUMNS}",
+                [stale_seconds],
+            )
+            rows = await cur.fetchall()
+        return [Job(**row) for row in rows]

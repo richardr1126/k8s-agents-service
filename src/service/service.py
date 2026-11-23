@@ -20,7 +20,7 @@ from agents.assistant import follow_ups
 from agents.assistant.focus import get_focuses
 from agents.tools import delete_web_collection
 from core import settings
-from jobs import setup_jobs
+from jobs import setup_jobs, stop_jobs
 from jobs import store as jobs_store
 from memory import initialize_database, initialize_store
 from schema import (
@@ -102,7 +102,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 agent.checkpointer = saver
                 # Set store for long-term memory (cross-conversation knowledge)
                 agent.store = store
-            yield
+            try:
+                yield
+            finally:
+                await stop_jobs()
     except Exception as e:
         logger.error(f"Error during database/store initialization: {e}")
         raise

@@ -11,18 +11,21 @@ from __future__ import annotations
 
 import asyncio
 import re
-from typing import Any, Literal
+from dataclasses import asdict
+from typing import Any, Literal, TypedDict
 
 import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
+from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from agents.utils import internal_llm_config
 from core import get_model, settings
 from jobs import report_progress, save_job_file
+from jobs.graphs import run_graph
 from skills.papers import mp3
-from skills.papers.sources import Paper, PaperError
+from skills.papers.sources import Paper, PaperError, fetch
 
 Length = Literal["short", "standard", "long"]
 WORDS: dict[str, int] = {"short": 700, "standard": 1500, "long": 2600}
@@ -200,11 +203,55 @@ async def record(
     }
 
 
-async def make(
-    paper: Paper, length: Length, focus: str | None, ctx: RunnableConfig | None
-) -> dict[str, Any]:
-    """An episode about one paper, from its full text."""
-    await report_progress(ctx, f"Writing a script about “{paper.title}”…", paper=paper.card())
-    script = await write_script(paper_material(paper), length, focus, ctx)
+class OnePaper(TypedDict, total=False):
+    ref: str
+    length: str
+    focus: str | None
+    paper: dict[str, Any]
+    material: str
+    script: dict[str, Any]
+    result: dict[str, Any]
+
+
+async def _read_paper(state: OnePaper, config: RunnableConfig) -> OnePaper:
+    await report_progress(config, "Reading the paper…")
+    paper = await fetch(state["ref"])
+    return {"paper": {**asdict(paper), "text": ""}, "material": paper_material(paper)}
+
+
+async def _write_paper(state: OnePaper, config: RunnableConfig) -> OnePaper:
+    paper = Paper(**state["paper"])
+    await report_progress(config, f"Writing a script about “{paper.title}”…", paper=paper.card())
+    script = await write_script(state["material"], state["length"], state.get("focus"), config)  # type: ignore[arg-type]
+    return {"script": script.model_dump()}
+
+
+async def _record_paper(state: OnePaper, config: RunnableConfig) -> OnePaper:
+    paper = Paper(**state["paper"])
     about = f"About [{paper.title}]({paper.url}){' by ' + paper.byline() if paper.authors else ''}."
-    return await record(script, about, [paper], ctx)
+    script = Script.model_validate(state["script"])
+    return {"result": await record(script, about, [paper], config)}
+
+
+def _one_paper_graph() -> StateGraph:
+    g = StateGraph(OnePaper)
+    g.add_node("read", _read_paper)
+    g.add_node("write", _write_paper)
+    g.add_node("record", _record_paper)
+    g.add_edge(START, "read")
+    g.add_edge("read", "write")
+    g.add_edge("write", "record")
+    g.add_edge("record", END)
+    return g
+
+
+ONE_PAPER = _one_paper_graph()
+
+
+async def make(
+    ref: str, length: Length, focus: str | None, ctx: RunnableConfig | None
+) -> dict[str, Any]:
+    """An episode about one paper, from its full text; checkpointed per job like topic episodes."""
+    inputs: OnePaper = {"ref": ref, "length": length, "focus": focus}
+    state = await run_graph(ONE_PAPER, dict(inputs), ctx)
+    return state["result"]

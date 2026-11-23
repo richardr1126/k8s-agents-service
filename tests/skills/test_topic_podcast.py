@@ -65,19 +65,15 @@ async def test_podcast_covers_one_paper_or_a_topic(
 ) -> None:
     calls: list[str] = []
 
-    async def fetch(ref: str) -> Paper:
-        return paper("1706.03762")
-
-    async def one(p: Paper, *args: Any) -> dict[str, Any]:
-        calls.append("paper")
+    async def one(ref: str, *args: Any) -> dict[str, Any]:
+        calls.append(f"paper:{ref}")
         return {}
 
     async def many(t: str, n: int, *args: Any) -> dict[str, Any]:
         calls.append(f"topic:{t}:{n}")
         return {}
 
-    monkeypatch.setattr(workflows.sources, "fetch", fetch)
     monkeypatch.setattr(workflows.podcast_module, "make", one)
     monkeypatch.setattr(workflows.topic, "make", many)
     await workflows.podcast(subject, papers=5)
-    assert calls == (["paper"] if single else [f"topic:{subject}:5"])
+    assert calls == ([f"paper:{subject}"] if single else [f"topic:{subject}:5"])

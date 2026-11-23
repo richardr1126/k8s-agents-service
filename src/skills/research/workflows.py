@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from langchain_core.runnables import RunnableConfig
 
-from skills.research.pipeline import evidence, gather, report
+from skills.research.graph import deep_report
+from skills.research.pipeline import evidence, gather
 
 
 async def quick(question: str, ctx: RunnableConfig | None = None) -> str:
@@ -13,4 +14,4 @@ async def quick(question: str, ctx: RunnableConfig | None = None) -> str:
 
 
 async def deep(question: str, ctx: RunnableConfig | None = None) -> str:
-    return await report(question, "deep", ctx)
+    return await deep_report(question, ctx)

@@ -10,7 +10,9 @@ from jobs.runner import (
     save_job_file,
     setup_jobs,
     start,
+    stop_jobs,
     store,
+    sweep,
 )
 from jobs.store import Job
 
@@ -27,5 +29,7 @@ __all__ = [
     "save_job_file",
     "setup_jobs",
     "start",
+    "stop_jobs",
     "store",
+    "sweep",
 ]

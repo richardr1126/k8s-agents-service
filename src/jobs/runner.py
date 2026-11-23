@@ -1,4 +1,10 @@
-"""Runs tool calls as background jobs in this process and records their progress and outcome."""
+"""Runs tool calls as background jobs in this process and records their progress and outcome.
+
+Jobs survive restarts: each process heartbeats the jobs it runs, and sweeps for
+running jobs whose heartbeat stopped (their process died or was replaced by a
+deploy). A swept job whose workflow checkpointed a graph (`jobs.graphs`) is resumed
+from its last finished step; any other is marked stopped and its thread told.
+"""
 
 from __future__ import annotations
 
@@ -21,6 +27,15 @@ logger = logging.getLogger(__name__)
 
 _store: JobStore = MemoryJobStore()
 _tasks: set[asyncio.Task[Any]] = set()
+# Jobs this process runs, heartbeated so other processes leave them alone.
+_owned: set[str] = set()
+_sweeper: asyncio.Task[Any] | None = None
+_stopping = False
+
+HEARTBEAT_SECONDS = 30
+# Comfortably longer than a heartbeat and a pod's shutdown grace period.
+STALE_SECONDS = 120
+STOPPED = "Stopped by a server restart."
 
 # Called with each job's id as soon as its outcome is recorded, and the configurable
 # of the run that started it (model, focus, user and thread). Synchronous, so nothing
@@ -40,15 +55,85 @@ class JobError(RuntimeError):
 
 
 async def setup_jobs(saver: Any) -> None:
-    """Keeps jobs in Postgres when the checkpointer is Postgres, else in memory."""
-    global _store
+    """Keeps jobs in Postgres when the checkpointer is Postgres, else in memory, and job
+    graphs' checkpoints in the same checkpointer. With Postgres, also starts the
+    heartbeat-and-sweep loop that resumes jobs other processes left behind."""
+    global _store, _sweeper, _stopping
+    from jobs.graphs import use_saver
+
     pool = getattr(saver, "conn", None)
-    _store = (
-        PostgresJobStore(pool)
-        if pool is not None and hasattr(pool, "connection")
-        else MemoryJobStore()
-    )
+    shared = pool is not None and hasattr(pool, "connection")
+    _store = PostgresJobStore(pool) if shared else MemoryJobStore()
     await _store.setup()
+    use_saver(saver)
+    _stopping = False
+    if shared and _sweeper is None:
+        _sweeper = asyncio.create_task(_heartbeat_and_sweep(), name="jobs:sweeper")
+
+
+async def stop_jobs() -> None:
+    """At shutdown: stops this process's jobs without recording an outcome, so they stay
+    `running`, go stale, and are resumed by the next process to sweep."""
+    global _sweeper, _stopping
+    _stopping = True
+    if _sweeper is not None:
+        _sweeper.cancel()
+        _sweeper = None
+    pending = [t for t in _tasks if not t.done()]
+    for task in pending:
+        task.cancel()
+    await asyncio.gather(*pending, return_exceptions=True)
+    _owned.clear()
+
+
+async def _heartbeat_and_sweep() -> None:
+    while True:
+        try:
+            await _store.touch(sorted(_owned))
+            await sweep()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Job heartbeat or sweep failed")
+        await asyncio.sleep(HEARTBEAT_SECONDS)
+
+
+async def sweep() -> list[str]:
+    """Claims jobs left behind by a dead process; resumes those that can be. Returns their ids."""
+    resumed = []
+    for job in await _store.claim_stale(STALE_SECONDS):
+        if job.id in _owned:
+            continue
+        try:
+            ok = await _resume(job)
+        except Exception:
+            logger.exception("Resuming job %s failed", job.id)
+            ok = False
+        if ok:
+            resumed.append(job.id)
+            continue
+        await _store.update(job.id, status="error", error=STOPPED)
+        _tell_ended(job.id, {"user_id": job.user_id, "thread_id": job.thread_id})
+    return resumed
+
+
+async def _resume(job: Job) -> bool:
+    """Restarts a job whose workflow left a graph checkpoint; False if it can't be resumed."""
+    from jobs.graphs import saved_run
+    from skills import call_workflow, get_registry
+
+    wf = get_registry().workflows.get(job.workflow)
+    carried = await saved_run(job.id) if wf else None
+    if wf is None or carried is None:
+        return False
+    fn = wf.resolve()
+    config: RunnableConfig = {
+        "configurable": {**carried, "user_id": job.user_id, "thread_id": job.thread_id}
+    }
+    logger.info("Resuming job %s (%s)", job.id, job.workflow)
+    await _store.update(job.id, progress="Resuming after a server restart…")
+    _launch(job.id, job.workflow, config, lambda c: call_workflow(fn, job.args, c))
+    return True
 
 
 def store() -> JobStore:
@@ -142,19 +227,27 @@ def _finish(
         try:
             result = await task
         except asyncio.CancelledError:
+            if _stopping:
+                return  # left running for the next process to resume
             await _store.update(job_id, status="error", error="Cancelled.")
         except Exception as e:
             logger.exception("Job %s (%s) failed", job_id, label)
             await _store.update(job_id, status="error", error=str(e)[:1000] or type(e).__name__)
         else:
             await _store.update(job_id, status="done", progress="Done", **_outcome(result))
-        for callback in list(_on_end):
-            try:
-                callback(job_id, configurable)
-            except Exception:
-                logger.exception("Job %s end callback failed", job_id)
+        finally:
+            _owned.discard(job_id)
+        _tell_ended(job_id, configurable)
 
     _keep(asyncio.create_task(record(), name=f"{job_id}:record"))
+
+
+def _tell_ended(job_id: str, configurable: dict[str, Any]) -> None:
+    for callback in list(_on_end):
+        try:
+            callback(job_id, configurable)
+        except Exception:
+            logger.exception("Job %s end callback failed", job_id)
 
 
 def _keep(task: asyncio.Task[Any]) -> None:
@@ -167,17 +260,23 @@ async def start(label: str, args: dict[str, Any], config: RunnableConfig, run: R
     user_id = await _admit(config)
     job = _job(_new_id(), user_id, label, args, config)
     await _store.create(job)
+    _launch(job.id, label, config, run)
+    return job
+
+
+def _launch(job_id: str, label: str, config: RunnableConfig, run: Run) -> None:
+    """Runs a recorded job in this process."""
 
     async def progress(message: str, **data: Any) -> None:
         fields: dict[str, Any] = {"progress": message[:300]}
         if data:
             fields["data"] = data
-        await _store.update(job.id, **fields)
+        await _store.update(job_id, **fields)
 
-    task = detached(run(_job_config(config, job.id, progress)), job.id)
+    _owned.add(job_id)
+    task = detached(run(_job_config(config, job_id, progress)), job_id)
     _keep(task)
-    _finish(job.id, label, task, dict(config.get("configurable") or {}))
-    return job
+    _finish(job_id, label, task, dict(config.get("configurable") or {}))
 
 
 async def run_or_promote(
@@ -215,6 +314,7 @@ async def run_or_promote(
     job.data = latest.get("data") or {}
     await _store.create(job)
     latest["job"] = True
+    _owned.add(job_id)
     _keep(task)
     _finish(job_id, label, task, dict(config.get("configurable") or {}))
     return None, job
