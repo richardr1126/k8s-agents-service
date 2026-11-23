@@ -69,6 +69,7 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "ag-ui-langgraph", extra = ["fastapi"] },
+    { name = "beautifulsoup4" },
     { name = "fastapi" },
     { name = "httpx" },
     { name = "langchain-anthropic" },
@@ -97,7 +98,6 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
-    { name = "beautifulsoup4" },
     { name = "langgraph-cli", extra = ["inmem"] },
     { name = "mypy" },
     { name = "playwright" },
@@ -112,6 +112,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "ag-ui-langgraph", extras = ["fastapi"], specifier = "==0.0.47" },
+    { name = "beautifulsoup4", specifier = "~=4.15.0" },
     { name = "fastapi", specifier = "~=0.163.1" },
     { name = "httpx", specifier = "~=0.28.1" },
     { name = "langchain-anthropic", specifier = "~=1.7.10" },
@@ -140,7 +141,6 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "beautifulsoup4", specifier = "~=4.15.0" },
     { name = "langgraph-cli", extras = ["inmem"], specifier = "~=0.4.43" },
     { name = "mypy", specifier = "~=2.4.1" },
     { name = "playwright", specifier = "~=1.65.2" },
