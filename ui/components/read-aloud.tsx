@@ -9,6 +9,28 @@ import { TooltipIconButton } from "@/components/assistant-ui/tooltip-icon-button
 import { speechQuery } from "@/lib/queries";
 import { speakable, speechPieces } from "@/lib/speakable";
 
+/** A moment of silence as a WAV data URL, played during the click to unlock audio. */
+function silence(): string {
+  const samples = 800; // 0.1 s of 8-bit mono at 8 kHz
+  const bytes = new Uint8Array(44 + samples);
+  const view = new DataView(bytes.buffer);
+  const text = (at: number, value: string) => [...value].forEach((c, i) => view.setUint8(at + i, c.charCodeAt(0)));
+  text(0, "RIFF");
+  view.setUint32(4, 36 + samples, true);
+  text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, 1, true); // mono
+  view.setUint32(24, 8000, true);
+  view.setUint32(28, 8000, true);
+  view.setUint16(32, 1, true);
+  view.setUint16(34, 8, true);
+  text(36, "data");
+  view.setUint32(40, samples, true);
+  bytes.fill(128, 44); // 8-bit silence is the midpoint
+  return `data:audio/wav;base64,${btoa(String.fromCharCode(...bytes))}`;
+}
+
 type ReaderState = { messageId: string | null; status: "idle" | "loading" | "playing" };
 
 /**
@@ -21,6 +43,21 @@ class Reader {
   private listeners = new Set<() => void>();
   private abort: AbortController | null = null;
   private audio: HTMLAudioElement | null = null;
+  /**
+   * The one element every piece plays in. Safari only lets audio play from a tap,
+   * and the first piece arrives seconds after it, so the element is started during
+   * the click (on silence) and reused; once started that way it may play again.
+   */
+  private element: HTMLAudioElement | null = null;
+
+  /** Call synchronously in the click: unlocks the shared element for later playback. */
+  private unlock(): HTMLAudioElement {
+    this.element ??= new Audio();
+    const element = this.element;
+    element.src = silence();
+    element.play().catch(() => {});
+    return element;
+  }
 
   subscribe = (listener: () => void) => {
     this.listeners.add(listener);
@@ -44,6 +81,7 @@ class Reader {
     this.stop();
     const pieces = speechPieces(speakable(markdown));
     if (pieces.length === 0) return;
+    const element = this.unlock();
     const abort = new AbortController();
     this.abort = abort;
     this.set({ messageId, status: "loading" });
@@ -67,7 +105,7 @@ class Reader {
         if (i + 1 < pieces.length) next = fetchPiece(pieces[i + 1]);
         next?.catch(() => {}); // surfaced when awaited
         try {
-          await this.playUrl(url, abort.signal);
+          await this.playUrl(element, url, abort.signal);
         } finally {
           URL.revokeObjectURL(url);
         }
@@ -83,10 +121,11 @@ class Reader {
     }
   }
 
-  private playUrl(url: string, signal: AbortSignal) {
+  private playUrl(audio: HTMLAudioElement, url: string, signal: AbortSignal) {
     return new Promise<void>((resolve, reject) => {
       if (signal.aborted) return resolve();
-      const audio = new Audio(url);
+      audio.pause();
+      audio.src = url;
       this.audio = audio;
       audio.onended = () => resolve();
       audio.onerror = () => reject(new Error("The audio couldn't be played."));
