@@ -20,7 +20,7 @@ from agents.assistant import follow_ups
 from agents.assistant.focus import get_focuses
 from agents.tools import delete_web_collection
 from core import settings
-from jobs import setup_jobs, stop_jobs
+from jobs import delete_jobs, setup_jobs, stop_jobs
 from jobs import store as jobs_store
 from memory import initialize_database, initialize_store
 from schema import (
@@ -256,12 +256,16 @@ async def history(input: ChatHistoryInput) -> HistoryResponse:
     return build_history(_extract_messages_from_state(state.values))
 
 
-def _refuse_while_following(thread_id: str) -> None:
+def _refuse_while_answering_job(thread_id: str) -> None:
     # The follow-up's reply would land on the reverted or deleted thread.
     if follow_ups.busy(thread_id):
         raise HTTPException(
             status_code=409, detail="The assistant is answering a background job in this chat."
         )
+
+
+def _refuse_while_following(thread_id: str) -> None:
+    _refuse_while_answering_job(thread_id)
     # A reply still running would land on the reverted or deleted thread.
     if live_runs.running(thread_id):
         raise HTTPException(
@@ -303,11 +307,16 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
     """
     Delete a thread and all its associated data.
 
-    This deletes the thread from the checkpointer (conversation memory)
-    and store (long-term memory). Frontend should handle UI state cleanup.
+    Stops a reply still running, then deletes the thread from the checkpointer
+    (conversation memory) and store (long-term memory), its background jobs with
+    their files, and its web search vectors. Frontend should handle UI state cleanup.
     """
-    _refuse_while_following(input.thread_id)
+    _refuse_while_answering_job(input.thread_id)
+    await live_runs.stop(input.thread_id)
     try:
+        # Jobs first: a running one is stopped before its thread goes.
+        await delete_jobs(thread_id=input.thread_id)
+
         # Get the default agent to access checkpointer and store
         agent: AgentGraph = get_agent(DEFAULT_AGENT)
 
@@ -353,6 +362,17 @@ async def delete_thread(input: DeleteThreadInput) -> DeleteThreadResponse:
     except Exception as e:
         logger.error(f"Unexpected error deleting thread {input.thread_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete thread")
+
+
+@router.delete("/user/{user_id}/data")
+async def delete_user_data(user_id: str) -> dict[str, int]:
+    """Deletes what the user owns outside their conversations: their background jobs
+    and files, including any whose conversation is already gone."""
+    try:
+        return {"jobs": await delete_jobs(user_id=user_id)}
+    except Exception:
+        logger.exception("Deleting user %s's data failed", user_id)
+        raise HTTPException(status_code=500, detail="Failed to delete the user's data")
 
 
 @app.get("/health")

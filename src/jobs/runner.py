@@ -29,6 +29,9 @@ _store: JobStore = MemoryJobStore()
 _tasks: set[asyncio.Task[Any]] = set()
 # Jobs this process runs, heartbeated so other processes leave them alone.
 _owned: set[str] = set()
+# Each job's task in this process, and jobs deleted while running (no outcome to record).
+_running: dict[str, asyncio.Task[Any]] = {}
+_deleted: set[str] = set()
 _sweeper: asyncio.Task[Any] | None = None
 _stopping = False
 
@@ -229,6 +232,9 @@ def _finish(
         except asyncio.CancelledError:
             if _stopping:
                 return  # left running for the next process to resume
+            if job_id in _deleted:
+                _deleted.discard(job_id)
+                return
             await _store.update(job_id, status="error", error="Cancelled.")
         except Exception as e:
             logger.exception("Job %s (%s) failed", job_id, label)
@@ -237,6 +243,10 @@ def _finish(
             await _store.update(job_id, status="done", progress="Done", **_outcome(result))
         finally:
             _owned.discard(job_id)
+            _running.pop(job_id, None)
+        if job_id in _deleted:
+            _deleted.discard(job_id)  # finished just as it was deleted; nothing to tell
+            return
         _tell_ended(job_id, configurable)
 
     _keep(asyncio.create_task(record(), name=f"{job_id}:record"))
@@ -275,6 +285,7 @@ def _launch(job_id: str, label: str, config: RunnableConfig, run: Run) -> None:
 
     _owned.add(job_id)
     task = detached(run(_job_config(config, job_id, progress)), job_id)
+    _running[job_id] = task
     _keep(task)
     _finish(job_id, label, task, dict(config.get("configurable") or {}))
 
@@ -315,9 +326,36 @@ async def run_or_promote(
     await _store.create(job)
     latest["job"] = True
     _owned.add(job_id)
+    _running[job_id] = task
     _keep(task)
     _finish(job_id, label, task, dict(config.get("configurable") or {}))
     return None, job
+
+
+async def delete_jobs(*, thread_id: str | None = None, user_id: str | None = None) -> int:
+    """Deletes a conversation's or a user's jobs with their files and checkpoints,
+    stopping any still running. Returns how many there were."""
+    from jobs.graphs import saver, thread_of
+
+    ids = await _store.delete(thread_id=thread_id, user_id=user_id)
+    stopping = []
+    for job_id in ids:
+        task = _running.get(job_id)
+        if task is not None and not task.done():
+            _deleted.add(job_id)
+            task.cancel()
+            stopping.append(task)
+    if stopping:
+        # So a stopping graph doesn't write a checkpoint after they're deleted.
+        await asyncio.wait(stopping, timeout=10)
+    for job_id in ids:
+        try:
+            await saver().adelete_thread(thread_of(job_id))
+        except Exception:
+            logger.warning("Couldn't delete job %s's checkpoints", job_id, exc_info=True)
+    if ids:
+        logger.info("Deleted %d jobs", len(ids))
+    return len(ids)
 
 
 def job_id_of(ctx: RunnableConfig | None) -> str | None:

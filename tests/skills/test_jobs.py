@@ -204,3 +204,40 @@ async def test_failed_job_event_and_follow_up_detection() -> None:
     )
     assert bg.awaiting_input([HumanMessage(content="hi"), AIMessage(content="done")])
     assert not bg.awaiting_input([HumanMessage(content="hi")])
+
+
+async def test_deleting_a_thread_stops_and_removes_its_jobs(memory_store: MemoryJobStore) -> None:
+    ended: list[str] = []
+    jobs.on_job_end(lambda job_id, _: ended.append(job_id))
+    gate = asyncio.Event()
+
+    async def slow(config: Any) -> str:
+        await gate.wait()
+        return "never"
+
+    finished = await jobs.start("t.ok", {}, USER, ok)
+    other = await jobs.start("t.ok", {}, {"configurable": {"user_id": "u1", "thread_id": "t2"}}, ok)
+    await settle()
+    running = await jobs.start("t.slow", {}, USER, slow)
+    await asyncio.sleep(0.01)
+    await memory_store.save_file(finished.id, "episode.mp3", "audio/mpeg", b"x")
+    ended.clear()
+
+    assert await jobs.delete_jobs(thread_id="t1") == 2
+    await settle()
+    assert (
+        await jobs.store().get(running.id) is None and await jobs.store().get(finished.id) is None
+    )
+    assert await jobs.store().get_file(finished.id, "episode.mp3") is None
+    assert await jobs.store().get(other.id) is not None
+    assert ended == []  # a deleted job isn't announced to its (deleted) thread
+    assert not runner._running and not runner._deleted
+
+
+async def test_deleting_a_users_data_removes_all_their_jobs() -> None:
+    await jobs.start("t.ok", {}, USER, ok)
+    await jobs.start("t.ok", {}, {"configurable": {"user_id": "u1", "thread_id": None}}, ok)
+    keep = await jobs.start("t.ok", {}, {"configurable": {"user_id": "u2", "thread_id": "t9"}}, ok)
+    await settle()
+    assert await jobs.delete_jobs(user_id="u1") == 2
+    assert await jobs.store().get(keep.id) is not None

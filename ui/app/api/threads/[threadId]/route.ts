@@ -42,6 +42,10 @@ export async function DELETE(_req: Request, context: Context) {
   const owned = await ownedThread(threadId);
   if (owned.error) return owned.error;
   const upstream = await backendFetch("/thread", { method: "DELETE", body: JSON.stringify({ thread_id: threadId }) });
+  if (upstream.status === 409) {
+    const body = (await upstream.json().catch(() => null)) as { detail?: string } | null;
+    return NextResponse.json({ error: body?.detail ?? "This chat is busy; try again in a moment." }, { status: 409 });
+  }
   if (!upstream.ok) return NextResponse.json({ error: "Failed to delete thread" }, { status: 502 });
   await db.delete(threads).where(owned.where);
   return NextResponse.json({ ok: true });

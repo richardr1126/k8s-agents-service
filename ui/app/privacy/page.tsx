@@ -71,7 +71,9 @@ export default function PrivacyPage() {
 
         <Section title="Retention and deletion">
           <p>
-            Deleted chats are removed from our main databases. Copies may stay in LangSmith, our tracing service, for
+            Deleting a chat stops any reply or background job still running in it and removes the chat, with what its
+            jobs made (such as podcast audio), from our main databases. Deleting your account does the same for every
+            chat. Copies may stay in LangSmith, our tracing service, for
             up to 14 days. Chats from a guest session you can no longer reach stay stored, and you can&apos;t delete
             them yourself.
           </p>
@@ -86,7 +88,8 @@ export default function PrivacyPage() {
 
         <Section title="Your choices">
           <p>
-            You can rename or delete your chats and sign out at any time. For account deletion or questions, contact{" "}
+            You can rename or delete your chats, sign out, and delete your account in Settings at any time. For
+            questions, contact{" "}
             <a className="text-foreground font-medium underline-offset-4 hover:underline" href="mailto:me@richardr.dev">
               me@richardr.dev
             </a>

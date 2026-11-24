@@ -48,6 +48,9 @@ class JobStore(Protocol):
     async def mark_notified(self, job_ids: list[str]) -> None: ...
     async def touch(self, job_ids: list[str]) -> None: ...
     async def claim_stale(self, stale_seconds: float) -> list[Job]: ...
+    async def delete(
+        self, *, thread_id: str | None = None, user_id: str | None = None
+    ) -> list[str]: ...
 
 
 class MemoryJobStore:
@@ -107,6 +110,20 @@ class MemoryJobStore:
         claimed = [j for j in self.jobs.values() if j.status == "running" and j.updated_at < cutoff]
         await self.touch([j.id for j in claimed])
         return claimed
+
+    async def delete(
+        self, *, thread_id: str | None = None, user_id: str | None = None
+    ) -> list[str]:
+        gone = [
+            j.id
+            for j in self.jobs.values()
+            if (thread_id is not None and j.thread_id == thread_id)
+            or (user_id is not None and j.user_id == user_id)
+        ]
+        for job_id in gone:
+            del self.jobs[job_id]
+        self.files = {k: v for k, v in self.files.items() if k[0] not in gone}
+        return gone
 
 
 _COLUMNS = (
@@ -272,3 +289,17 @@ class PostgresJobStore:
             )
             rows = await cur.fetchall()
         return [Job(**row) for row in rows]
+
+    async def delete(
+        self, *, thread_id: str | None = None, user_id: str | None = None
+    ) -> list[str]:
+        """Deletes a conversation's or a user's jobs, their files with them; returns their ids."""
+        if thread_id is None and user_id is None:
+            return []
+        async with self.pool.connection() as conn:
+            cur = await conn.execute(
+                "DELETE FROM assistant_jobs WHERE thread_id = %s OR user_id = %s RETURNING id",
+                [thread_id, user_id],
+            )
+            rows = await cur.fetchall()
+        return [row["id"] for row in rows]

@@ -4,10 +4,11 @@ import { threads } from "@/db/schema";
 import { backendFetch } from "@/lib/server";
 
 /**
- * Deletes a user's conversations in the agent service. Their rows here go
- * with the user (ON DELETE CASCADE), but the checkpoints live in the backend.
+ * Deletes what a user has in the agent service: each conversation (with its
+ * background jobs and their files), then any jobs left over. Their rows here go
+ * with the user (ON DELETE CASCADE), but this data lives in the backend.
  */
-export async function deleteBackendThreads(userId: string): Promise<void> {
+export async function deleteBackendData(userId: string): Promise<void> {
   const rows = await db.select({ id: threads.id }).from(threads).where(eq(threads.userId, userId));
   const results = await Promise.allSettled(
     rows.map(async ({ id }) => {
@@ -19,4 +20,6 @@ export async function deleteBackendThreads(userId: string): Promise<void> {
   );
   const failed = results.filter((r) => r.status === "rejected");
   if (failed.length) throw new Error(`Couldn't delete ${failed.length} of ${rows.length} conversations in the agent service`);
+  const res = await backendFetch(`/user/${encodeURIComponent(userId)}/data`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Couldn't delete the account's background jobs in the agent service (${res.status})`);
 }

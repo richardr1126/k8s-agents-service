@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { session as sessionTable, user } from "@/db/schema";
 import { requireAdmin } from "@/lib/server";
-import { deleteBackendThreads } from "@/lib/user-data";
+import { deleteBackendData } from "@/lib/user-data";
 
 const patchSchema = z
   .object({
@@ -50,7 +50,7 @@ export async function DELETE(_req: NextRequest, context: { params: Promise<{ use
   if (!target) return NextResponse.json({ error: "User not found" }, { status: 404 });
   await db.delete(sessionTable).where(eq(sessionTable.userId, userId));
   try {
-    await deleteBackendThreads(userId);
+    await deleteBackendData(userId);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Couldn't delete conversations" }, { status: 502 });
   }
