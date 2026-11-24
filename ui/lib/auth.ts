@@ -11,7 +11,7 @@ import { baseUrl } from "@/lib/base-url";
 import { bootstrapPassword } from "@/lib/bootstrap-admin";
 import { actionEmail, sendMail } from "@/lib/email";
 import { getMailer, getSettings } from "@/lib/settings/store";
-import { deleteBackendData } from "@/lib/user-data";
+import { deleteBackendData, moveBackendData } from "@/lib/user-data";
 
 /** Whether GitHub sign-in is configured; the sign-in page shows the button only then. */
 export const githubSignIn = Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET);
@@ -159,6 +159,11 @@ function buildAuth({ email }: AuthConfig) {
             .update(schema.threads)
             .set({ userId: newUser.user.id })
             .where(eq(schema.threads.userId, anonymousUser.user.id));
+          // Their background jobs (podcast audio and the like) live in the agent service. Signing in
+          // shouldn't fail over them; the chats moved, and deleting a chat still deletes its jobs.
+          await moveBackendData(anonymousUser.user.id, newUser.user.id).catch((e) =>
+            console.error("Moving a guest's background jobs failed", e),
+          );
           // Keep the guest's privacy agreement unless the account has a newer one.
           const [guest] = await db
             .select()

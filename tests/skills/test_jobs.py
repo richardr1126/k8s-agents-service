@@ -241,3 +241,11 @@ async def test_deleting_a_users_data_removes_all_their_jobs() -> None:
     await settle()
     assert await jobs.delete_jobs(user_id="u1") == 2
     assert await jobs.store().get(keep.id) is not None
+
+
+async def test_a_guests_jobs_move_to_their_account() -> None:
+    job = await jobs.start("t.ok", {}, USER, ok)
+    await settle()
+    assert await jobs.store().move("u1", "u2") == 1
+    moved = await jobs.store().get(job.id)
+    assert moved and moved.user_id == "u2"

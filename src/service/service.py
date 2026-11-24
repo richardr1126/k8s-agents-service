@@ -14,6 +14,7 @@ from langchain_core.runnables import RunnableConfig
 from langfuse import Langfuse
 from langgraph.types import Command
 from langsmith import Client as LangsmithClient
+from pydantic import BaseModel
 
 from agents import DEFAULT_AGENT, AgentGraph, get_agent, get_all_agent_info
 from agents.assistant import follow_ups
@@ -373,6 +374,18 @@ async def delete_user_data(user_id: str) -> dict[str, int]:
     except Exception:
         logger.exception("Deleting user %s's data failed", user_id)
         raise HTTPException(status_code=500, detail="Failed to delete the user's data")
+
+
+class MoveUserDataInput(BaseModel):
+    to_user_id: str
+
+
+@router.post("/user/{user_id}/data/move")
+async def move_user_data(user_id: str, input: MoveUserDataInput) -> dict[str, int]:
+    """Gives a guest's background jobs and files to the account they signed up or in with."""
+    if not input.to_user_id or input.to_user_id == user_id:
+        raise HTTPException(status_code=400, detail="Give a different user to move to")
+    return {"jobs": await jobs_store().move(user_id, input.to_user_id)}
 
 
 @app.get("/health")

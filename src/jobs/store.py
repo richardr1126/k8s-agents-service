@@ -51,6 +51,7 @@ class JobStore(Protocol):
     async def delete(
         self, *, thread_id: str | None = None, user_id: str | None = None
     ) -> list[str]: ...
+    async def move(self, from_user: str, to_user: str) -> int: ...
 
 
 class MemoryJobStore:
@@ -124,6 +125,12 @@ class MemoryJobStore:
             del self.jobs[job_id]
         self.files = {k: v for k, v in self.files.items() if k[0] not in gone}
         return gone
+
+    async def move(self, from_user: str, to_user: str) -> int:
+        moved = [j for j in self.jobs.values() if j.user_id == from_user]
+        for job in moved:
+            job.user_id = to_user
+        return len(moved)
 
 
 _COLUMNS = (
@@ -303,3 +310,11 @@ class PostgresJobStore:
             )
             rows = await cur.fetchall()
         return [row["id"] for row in rows]
+
+    async def move(self, from_user: str, to_user: str) -> int:
+        """Gives one user's jobs to another, as when a guest signs up."""
+        async with self.pool.connection() as conn:
+            cur = await conn.execute(
+                "UPDATE assistant_jobs SET user_id = %s WHERE user_id = %s", [to_user, from_user]
+            )
+        return cur.rowcount

@@ -23,3 +23,12 @@ export async function deleteBackendData(userId: string): Promise<void> {
   const res = await backendFetch(`/user/${encodeURIComponent(userId)}/data`, { method: "DELETE" });
   if (!res.ok) throw new Error(`Couldn't delete the account's background jobs in the agent service (${res.status})`);
 }
+
+/** Gives a guest's background jobs to the account they signed up or in with. */
+export async function moveBackendData(fromUserId: string, toUserId: string): Promise<void> {
+  const res = await backendFetch(`/user/${encodeURIComponent(fromUserId)}/data/move`, {
+    method: "POST",
+    body: JSON.stringify({ to_user_id: toUserId }),
+  });
+  if (!res.ok) throw new Error(`Couldn't move the guest's background jobs in the agent service (${res.status})`);
+}
