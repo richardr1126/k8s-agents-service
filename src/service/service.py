@@ -39,6 +39,7 @@ from schema import (
 )
 from schema.schema import FocusInfo, SkillInfo
 from schema.subagent import HistoryResponse
+from service import live_runs
 from service.agui import langfuse_callbacks
 from service.agui import router as agui_router
 from service.history import build_history
@@ -105,6 +106,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             try:
                 yield
             finally:
+                await live_runs.stop_all()
                 await stop_jobs()
     except Exception as e:
         logger.error(f"Error during database/store initialization: {e}")
@@ -259,6 +261,11 @@ def _refuse_while_following(thread_id: str) -> None:
     if follow_ups.busy(thread_id):
         raise HTTPException(
             status_code=409, detail="The assistant is answering a background job in this chat."
+        )
+    # A reply still running would land on the reverted or deleted thread.
+    if live_runs.running(thread_id):
+        raise HTTPException(
+            status_code=409, detail="The assistant is still answering in this chat."
         )
 
 

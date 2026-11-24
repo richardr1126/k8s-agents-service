@@ -447,3 +447,16 @@ async def test_messages_wait_while_a_follow_up_holds_the_thread(
     assert (await client.post("/thread/revert", json=revert)).status_code == 409
     deleted = await client.request("DELETE", "/thread", json={"thread_id": "thread-1"})
     assert deleted.status_code == 409
+
+
+async def test_a_run_can_be_followed_again_from_any_event(client: httpx.AsyncClient) -> None:
+    events = await run(client, [user("web:rust", id="u-live")], thread_id="thread-live")
+    stream = await client.get(f"/{DEFAULT_AGENT}/ag-ui/thread-live/live", params={"since": 3})
+    assert stream.status_code == 200
+    again = [json.loads(x[6:]) for x in stream.text.splitlines() if x.startswith("data: ")]
+    # A client that had the first three events gets exactly the rest.
+    assert again == events[3:]
+    # It has ended, so it no longer counts as running.
+    status = await client.get("/ag-ui/thread-live/live")
+    assert status.json() == {"running": False}
+    assert (await client.get(f"/{DEFAULT_AGENT}/ag-ui/nothing-here/live")).status_code == 404

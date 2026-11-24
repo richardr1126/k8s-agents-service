@@ -7,6 +7,9 @@ import { backendFetch, getSession } from "@/lib/server";
 import { splitMode } from "@/lib/modes";
 import { getSettings } from "@/lib/settings/store";
 
+// Streams for as long as the reply runs; past this the client reconnects from where it was.
+export const maxDuration = 300;
+
 type RunInput = {
   threadId?: unknown;
   messages?: { role?: string; content?: unknown }[];

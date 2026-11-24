@@ -1,10 +1,10 @@
 "use client";
 
-import { HttpAgent } from "@ag-ui/client";
 import { useAgUiRuntime, type AgUiAssistantRuntime, type UseAgUiThreadListAdapter } from "@assistant-ui/react-ag-ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { LiveAgent } from "@/components/runtime/live-agent";
 import { splitMode } from "@/lib/modes";
 import { historyQuery, threadsQuery } from "@/lib/queries";
 import type { ThreadRow } from "@/lib/types";
@@ -28,6 +28,24 @@ async function revertThread(threadId: string, messageId: string): Promise<string
   });
   if (!res.ok) throw new Error(`Could not revert the conversation (HTTP ${res.status})`);
   return ((await res.json()) as { text: string }).text;
+}
+
+type RunStatus = { running: boolean; after?: string | null };
+
+/** Whether the conversation has a reply running on the server, and the message it started from. */
+async function runStatus(threadId: string): Promise<RunStatus> {
+  const res = await fetch(`/api/threads/${encodeURIComponent(threadId)}/run`, { cache: "no-store" }).catch(() => null);
+  return res?.ok ? ((await res.json()) as RunStatus) : { running: false };
+}
+
+/**
+ * The stored conversation up to the message the running reply started from: joining
+ * the reply streams the rest again, so the part already saved mustn't show twice.
+ */
+function beforeRun<T extends { id: string }>(messages: readonly T[], after: string | null | undefined): T[] | null {
+  if (!after) return null;
+  const end = messages.findIndex((m) => m.id === after);
+  return end === -1 ? null : messages.slice(0, end + 1);
 }
 
 /** Remembers whether the user has conversations, so the server renders the matching boot skeleton next time. */
@@ -82,7 +100,7 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
   // and the proxy sets forwardedProps itself.
   const agent = useMemo(
     () =>
-      new HttpAgent({
+      new LiveAgent({
         url: `/api/ag-ui/${encodeURIComponent(agentId)}?model=${encodeURIComponent(modelId)}`,
         threadId,
         fetch: proxyFetch,
@@ -140,7 +158,13 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
         }
         try {
           // Cached when the conversation was hovered, opened lately or is the newest.
-          return { messages: await queryClient.fetchQuery(historyQuery(id)) };
+          const [messages, run] = await Promise.all([queryClient.fetchQuery(historyQuery(id)), runStatus(id)]);
+          const before = run.running ? beforeRun(messages, run.after) : null;
+          if (!before) return { messages };
+          // A reply is still running (the page reloaded or the stream dropped): join it,
+          // then show the stored conversation once it ends.
+          reloadPendingRef.current = true;
+          return { messages: before, unstable_resume: true };
         } finally {
           // The runtime applies the messages after this resolves, so clear the flag a task
           // later or the welcome flashes in between. A later switch owns it by then; leave it.
@@ -276,6 +300,10 @@ export function useAgentRuntime({ defaultAgentId, defaultModelId, models, deprec
     },
     [queryClient, refreshThreads, loadHistory, onError],
   );
+  // A reply whose stream couldn't be followed again: show it as stored, once it is done.
+  useEffect(() => {
+    agent.whenLost(reloadThread);
+  }, [agent, reloadThread]);
 
   const booting = boot !== "done";
   const loadingThread = booting || opening !== null;

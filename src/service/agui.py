@@ -29,6 +29,7 @@ from agents.agents import agents
 from agents.assistant import follow_ups
 from agents.configurable_model_graph import ConfigurableModelGraph
 from core import settings
+from service import live_runs
 
 router = APIRouter()
 
@@ -238,9 +239,38 @@ async def ag_ui(agent_id: str, input: RunAgentInput) -> StreamingResponse:
             status_code=409,
             detail="The assistant is answering a background job in this chat. Try again when it's done.",
         )
-    # Starlette cancels this generator, and with it the graph run, when the
-    # client disconnects.
-    return StreamingResponse(_run(agent, input), media_type="text/event-stream")
+    if live_runs.running(input.thread_id):
+        raise HTTPException(
+            status_code=409, detail="The assistant is still answering in this chat."
+        )
+    # The run goes on if this request's connection drops; the client follows it again.
+    after = input.messages[-1].id if input.messages else None
+    run = live_runs.start(input.thread_id, agent_id, after, _run(agent, input))
+    return StreamingResponse(run.follow(0), media_type="text/event-stream")
+
+
+@router.get("/{agent_id}/ag-ui/{thread_id}/live")
+async def live(agent_id: str, thread_id: str, since: int = 0) -> StreamingResponse:
+    """The thread's current run from event `since` on, kept briefly after it ends; 404 with none."""
+    run = live_runs.get(thread_id)
+    if run is None or run.agent_id != agent_id:
+        raise HTTPException(status_code=404, detail="No run on this thread")
+    return StreamingResponse(run.follow(since), media_type="text/event-stream")
+
+
+@router.get("/ag-ui/{thread_id}/live")
+async def live_status(thread_id: str) -> dict[str, Any]:
+    """Whether the thread has a run going, and the message it started from."""
+    run = live_runs.running(thread_id)
+    if run is None:
+        return {"running": False}
+    return {"running": True, "agent": run.agent_id, "after": run.after}
+
+
+@router.post("/ag-ui/{thread_id}/stop")
+async def stop(thread_id: str) -> dict[str, bool]:
+    """Stops the thread's run (the client's stop button; a dropped connection no longer does)."""
+    return {"stopped": await live_runs.stop(thread_id)}
 
 
 async def _run(agent: _Agent, input: RunAgentInput) -> AsyncIterator[str]:
