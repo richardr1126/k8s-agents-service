@@ -2,7 +2,8 @@
 
 The chat's focus (picked by the user) comes in as `configurable.focus`. A
 `task` call runs a copy of the assistant, optionally with another focus, in
-its own context; copies can't start further copies or background jobs.
+its own context; copies can't start further copies. Background jobs work the
+same for both (see background and subagent_jobs).
 """
 
 from __future__ import annotations
@@ -44,7 +45,6 @@ from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.delegation import (
     SubagentError,
     errors_as_results,
-    new_thread_id,
     normalize_content,
     subagent_runs,
     tag_threads,
@@ -84,6 +84,101 @@ def _task_ordinal(messages: list[BaseMessage], tool_call_id: str) -> int:
     return ids.index(tool_call_id) + 1 if tool_call_id in ids else len(ids) + 1
 
 
+def prepare_task(
+    messages: list[BaseMessage],
+    *,
+    focus: str | None,
+    thread_id: str | None,
+    tool_call_id: str | None = None,
+    taken: set[str] | frozenset[str] = frozenset(),
+) -> tuple[str, str | None, str, list[BaseMessage]]:
+    """Checks a `task` call and returns its sub-agent's label, focus, thread id and the
+    thread's earlier turns. `taken` holds thread ids in use that the conversation doesn't
+    show yet (background sub-agents still running)."""
+    focus = (focus or "").strip() or None
+    if focus and focus not in get_focuses():
+        raise SubagentError(f"Unknown focus '{focus}'. Focuses: {', '.join(get_focuses())}.")
+    if tool_call_id is not None:
+        limit = settings.ASSISTANT_MAX_SUBAGENTS_PER_TURN
+        if _task_ordinal(messages, tool_call_id) > limit:
+            raise SubagentError(
+                f"At most {limit} sub-agents per turn. Continue with what you have."
+            )
+    label = focus or GENERAL
+
+    runs = subagent_runs(messages)
+    if thread_id:
+        thread = [r for r in runs if r.thread_id == thread_id]
+        if not thread:
+            known = ", ".join(
+                sorted({f"{r.thread_id} ({r.subagent_type})" for r in runs if r.thread_id})
+            )
+            raise SubagentError(
+                f"Unknown thread_id '{thread_id}'. Known threads: {known or 'none'}. "
+                "Omit thread_id to start a new thread."
+            )
+        if thread[0].subagent_type != label:
+            raise SubagentError(
+                f"Thread '{thread_id}' has focus '{thread[0].subagent_type}', not '{label}'."
+            )
+        if thread_id in taken:
+            raise SubagentError(
+                f"Sub-agent '{thread_id}' is still working in the background; its answer "
+                "arrives on its own."
+            )
+        return label, focus, thread_id, thread_transcript(runs, thread_id)
+    # Calls made together each get their own thread, as do background sub-agents running.
+    used = {r.thread_id for r in runs if r.thread_id} | set(taken)
+    ahead = _new_threads_ahead(messages, tool_call_id, label)
+    n = 1
+    while f"{label}-{n}" in used or ahead > 0:
+        if f"{label}-{n}" not in used:
+            ahead -= 1
+        n += 1
+    return label, focus, f"{label}-{n}", []
+
+
+def _new_threads_ahead(messages: list[BaseMessage], tool_call_id: str | None, label: str) -> int:
+    """How many new `label` threads the same model turn starts before this call."""
+    if tool_call_id is None:
+        return 0
+    for message in reversed(messages):
+        if not isinstance(message, AIMessage):
+            continue
+        calls = [c for c in message.tool_calls if c["name"] == "task"]
+        if not any(c["id"] == tool_call_id for c in calls):
+            continue
+        ahead = 0
+        for call in calls:
+            if call["id"] == tool_call_id:
+                return ahead
+            args = call["args"]
+            if (
+                not args.get("thread_id")
+                and ((args.get("focus") or "").strip() or GENERAL) == label
+            ):
+                ahead += 1
+    return 0
+
+
+def subagent_config(
+    label: str, focus: str | None, thread_id: str, chat_focus: str | None
+) -> RunnableConfig:
+    """What a sub-agent's run adds to its parent's config."""
+    return {
+        "metadata": {"lc_agent_name": label},
+        "run_name": f"subagent:{label}",
+        "configurable": {
+            "focus": focus,
+            "assistant_subagent": True,
+            # Marks the jobs it starts as its own, so their ends come back to it.
+            "subagent_thread": thread_id,
+            # The chat's own focus, for the main assistant's run when those jobs end.
+            "chat_focus": chat_focus,
+        },
+    }
+
+
 @tool
 async def task(
     description: Annotated[
@@ -105,45 +200,16 @@ async def task(
     ] = False,
 ) -> ToolMessage:
     """Start a copy of yourself with a fresh context, and return its final answer."""
-    focus = (focus or "").strip() or None
-    if focus and focus not in get_focuses():
-        raise SubagentError(f"Unknown focus '{focus}'. Focuses: {', '.join(get_focuses())}.")
-    limit = settings.ASSISTANT_MAX_SUBAGENTS_PER_TURN
-    if _task_ordinal(state.get("messages", []), tool_call_id) > limit:
-        raise SubagentError(f"At most {limit} sub-agents per turn. Continue with what you have.")
-    label = focus or GENERAL
-
-    runs = subagent_runs(state.get("messages", []))
-    if thread_id:
-        thread = [r for r in runs if r.thread_id == thread_id]
-        if not thread:
-            known = ", ".join(
-                sorted({f"{r.thread_id} ({r.subagent_type})" for r in runs if r.thread_id})
-            )
-            raise SubagentError(
-                f"Unknown thread_id '{thread_id}'. Known threads: {known or 'none'}. "
-                "Omit thread_id to start a new thread."
-            )
-        if thread[0].subagent_type != label:
-            raise SubagentError(
-                f"Thread '{thread_id}' has focus '{thread[0].subagent_type}', not '{label}'."
-            )
-        prior = thread_transcript(runs, thread_id)
-    else:
-        thread_id = new_thread_id(runs, label)
-        prior = []
+    label, focus, thread_id, prior = prepare_task(
+        state.get("messages", []), focus=focus, thread_id=thread_id, tool_call_id=tool_call_id
+    )
     for message in prior:  # ids let this run's own messages be told apart afterwards
         message.id = message.id or str(uuid4())
 
     # The copy runs in this tool's checkpoint namespace with the parent's config,
     # so its events stream through the parent run, attributed by `lc_agent_name`.
     sub_config = merge_configs(
-        config,
-        {
-            "metadata": {"lc_agent_name": label},
-            "run_name": f"subagent:{label}",
-            "configurable": {"focus": focus, "assistant_subagent": True},
-        },
+        config, subagent_config(label, focus, thread_id, _configurable(config).get("focus"))
     )
     try:
         result = await assistant_subagent.ainvoke(

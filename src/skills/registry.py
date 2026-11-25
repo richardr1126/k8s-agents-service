@@ -227,18 +227,16 @@ class Skill:
     workflows: dict[str, Workflow]
     path: Path
 
-    def doc(self, *, include_background: bool = True) -> str:
+    def doc(self) -> str:
         parts = [f"# Skill: {self.name}", self.description, "", self.body.strip()]
-        shown = [
-            w for w in self.workflows.values() if include_background or w.background != "always"
-        ]
+        shown = list(self.workflows.values())
         if shown:
             parts += [
                 "",
                 "## Workflows",
                 'Run one with `run_workflow(command="<workflow> ARG --option value ...")`, as'
                 " in the usage lines; quote values with spaces."
-                + (" Add `background=true` to run it as a job." if include_background else ""),
+                " Add `background=true` to run it as a job.",
                 "",
             ]
             parts += [w.usage() + "\n" for w in shown]

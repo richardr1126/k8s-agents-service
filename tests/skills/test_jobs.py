@@ -97,7 +97,8 @@ async def test_slow_inline_run_becomes_a_job() -> None:
 
 
 def request(name: str, args: dict[str, Any], *, subagent: bool = False) -> Any:
-    config = {"configurable": {**USER["configurable"], "assistant_subagent": subagent}}
+    sub = {"assistant_subagent": True, "subagent_thread": "general-1"} if subagent else {}
+    config = {"configurable": {**USER["configurable"], **sub}}
     return ToolCallRequest(
         tool_call={"name": name, "args": args, "id": "call-1"},
         tool=None,
@@ -135,9 +136,15 @@ async def test_always_runs_as_a_job_and_never_refuses_background() -> None:
     await settle()
 
 
-async def test_subagents_cannot_start_jobs() -> None:
-    refused = await bg.background_jobs(planners("always"))(request("t", {}, subagent=True), inline)
-    assert refused.status == "error" and "only the main assistant" in refused.content
+async def test_a_subagents_jobs_are_its_own() -> None:
+    reply = await bg.background_jobs(planners("always"))(request("t", {}, subagent=True), inline)
+    assert reply.status == "success" and bg.JOB_MARKER in reply.content
+    assert "continued" in reply.content
+    job_id = reply.content.split("`")[1]
+    await settle()
+    job = await jobs.store().get(job_id)
+    assert job and job.agent == "general-1" and job.thread_id == "t1"
+    assert not bg.for_main(job)
 
 
 async def test_promoted_inline_run_reports_the_job() -> None:

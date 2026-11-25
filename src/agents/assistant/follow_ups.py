@@ -1,7 +1,9 @@
 """The assistant answers its ended background jobs on its own.
 
 When a job ends, the backend runs the assistant on the job's thread, the same way
-a reply starts: the run begins with the job's <job-event> notice, and its reply
+a reply starts: first any sub-agent work is recorded (a finished background
+sub-agent, or a sub-agent continued with the jobs it started; see subagent_jobs),
+then the run begins with the job's <job-event> notice, and its reply
 is saved to the thread whether or not anyone has the chat open. A job that ends
 while a reply is in progress is answered once that reply ends.
 
@@ -127,7 +129,8 @@ async def _run(user_id: str, thread_id: str, configurable: dict[str, Any]) -> bo
             "thread_id": thread_id,
             "user_id": user_id,
             "model": model,
-            "focus": configurable.get("focus") or None,
+            # A sub-agent's job carries the chat's focus apart from the sub-agent's own.
+            "focus": configurable.get("chat_focus", configurable.get("focus")) or None,
         },
         "metadata": {"follow_up": True},
     }
@@ -136,7 +139,13 @@ async def _run(user_id: str, thread_id: str, configurable: dict[str, Any]) -> bo
         return False  # the conversation was deleted
     if state.next:
         return False  # a run is paused for the user; it hears about the job when it resumes
-    await graph.ainvoke({"messages": []}, config)
+    from agents.assistant import subagent_jobs
+
+    # Sub-agent work lands as `task` results; the assistant then answers from there.
+    if await subagent_jobs.deliver(graph, cast(Any, config), user_id, thread_id):
+        await graph.ainvoke(None, config)
+    else:
+        await graph.ainvoke({"messages": []}, config)
     return True
 
 

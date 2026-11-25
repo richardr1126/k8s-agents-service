@@ -12,6 +12,7 @@ import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ReasoningPart } from "@/components/assistant-ui/reasoning";
 import { ToolRow } from "@/components/assistant-ui/tool-fallback";
+import { WorkflowTool } from "@/components/job-card";
 import { Fold } from "@/components/ui/fold";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -41,7 +42,7 @@ function phaseOf(run: ThreadMessage | undefined, hasResult: boolean, isError: bo
 const SubagentMessage: FC = () => (
   <MessagePrimitive.Root className="text-sm leading-6">
     <MessagePrimitive.Content
-      components={{ Text: MarkdownText, Reasoning: ReasoningPart, tools: { Fallback: ToolRow } }}
+      components={{ Text: MarkdownText, Reasoning: ReasoningPart, tools: { by_name: { run_workflow: WorkflowTool }, Fallback: ToolRow } }}
     />
   </MessagePrimitive.Root>
 );

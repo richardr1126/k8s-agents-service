@@ -26,6 +26,9 @@ class Job:
     data: dict[str, Any] = field(default_factory=dict)
     # Set once the job's end has been told to the agent in its thread.
     notified: bool = False
+    # The sub-agent that started it (its thread id in the chat, e.g. "research-1");
+    # None for the main assistant. The job's end goes to whichever agent started it.
+    agent: str | None = None
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -42,6 +45,7 @@ class JobStore(Protocol):
     async def update(self, job_id: str, **fields: Any) -> None: ...
     async def get(self, job_id: str) -> Job | None: ...
     async def running_for(self, user_id: str) -> int: ...
+    async def running_on(self, user_id: str, thread_id: str) -> list[Job]: ...
     async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None: ...
     async def get_file(self, job_id: str, name: str) -> tuple[str, bytes] | None: ...
     async def unnotified(self, user_id: str, thread_id: str) -> list[Job]: ...
@@ -76,6 +80,13 @@ class MemoryJobStore:
 
     async def running_for(self, user_id: str) -> int:
         return sum(1 for j in self.jobs.values() if j.user_id == user_id and j.status == "running")
+
+    async def running_on(self, user_id: str, thread_id: str) -> list[Job]:
+        return [
+            j
+            for j in self.jobs.values()
+            if j.user_id == user_id and j.thread_id == thread_id and j.status == "running"
+        ]
 
     async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None:
         self.files[(job_id, name)] = (content_type, data)
@@ -135,7 +146,7 @@ class MemoryJobStore:
 
 _COLUMNS = (
     "id, user_id, thread_id, workflow, args, status, progress, result, error, data, "
-    "notified, created_at, updated_at"
+    "notified, agent, created_at, updated_at"
 )
 _JSON = {"args", "data"}
 
@@ -173,6 +184,7 @@ class PostgresJobStore:
                 "notified boolean NOT NULL DEFAULT true"
             )
             await conn.execute("ALTER TABLE assistant_jobs ALTER COLUMN notified SET DEFAULT false")
+            await conn.execute("ALTER TABLE assistant_jobs ADD COLUMN IF NOT EXISTS agent text")
             await conn.execute(
                 "CREATE INDEX IF NOT EXISTS assistant_jobs_user ON assistant_jobs (user_id, status)"
             )
@@ -201,7 +213,7 @@ class PostgresJobStore:
         async with self.pool.connection() as conn:
             await conn.execute(
                 f"INSERT INTO assistant_jobs ({_COLUMNS}) VALUES "
-                "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                "(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 [json.dumps(values[c]) if c in _JSON else values[c] for c in _COLUMNS.split(", ")],
             )
 
@@ -232,6 +244,16 @@ class PostgresJobStore:
             )
             row = await cur.fetchone()
         return int(row["n"]) if row else 0
+
+    async def running_on(self, user_id: str, thread_id: str) -> list[Job]:
+        async with self.pool.connection() as conn:
+            cur = await conn.execute(
+                f"SELECT {_COLUMNS} FROM assistant_jobs "
+                "WHERE user_id = %s AND thread_id = %s AND status = 'running'",
+                [user_id, thread_id],
+            )
+            rows = await cur.fetchall()
+        return [Job(**row) for row in rows]
 
     async def save_file(self, job_id: str, name: str, content_type: str, data: bytes) -> None:
         async with self.pool.connection() as conn:

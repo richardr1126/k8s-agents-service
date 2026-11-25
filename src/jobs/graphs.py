@@ -70,6 +70,9 @@ async def run_graph(
     job_id = configurable.get("job_id") or f"inline-{uuid4().hex[:12]}"
     # The job's own config, minus the namespace the job runner set for tool calls.
     configurable.pop("checkpoint_ns", None)
+    configurable["chat_thread_id"] = configurable.get("chat_thread_id") or configurable.get(
+        "thread_id"
+    )
     configurable["thread_id"] = thread_of(job_id)
     config: RunnableConfig = {
         "configurable": configurable,

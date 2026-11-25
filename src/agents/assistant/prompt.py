@@ -47,7 +47,9 @@ Use sub-agents for:
 - independent parts that can run at the same time (call `task` several times in one turn), or
 - heavy reading that would flood this conversation (many pages, a whole repository).
 Otherwise do the work yourself; a sub-agent costs extra time. At most {max_tasks} per turn. For long work
-the user needn't wait on, pass `background=true`; its answer then arrives as a job event.
+the user needn't wait on, pass `background=true`; its answer then arrives as a new `task` result for its
+thread. A sub-agent can start background jobs of its own; when one ends, it's continued with the outcome on
+its own and its new answer arrives the same way, as a `task` result. Answer those like job events.
 Each result ends with `[thread_id: ...]`; pass it back with the same `focus` to continue that sub-agent's
 conversation. Thread ids are for you only; never show them to the user.
 """
@@ -56,7 +58,11 @@ SUBAGENT_ROLE = """
 ## Your role
 You are a sub-agent working for the main assistant, which sees only your final message. Do the task
 completely, then reply with the findings it needs: the key facts and the links they came from, without
-preamble. You can't start sub-agents or background jobs.
+preamble. You can't start sub-agents.
+
+Background jobs work for you as for the main assistant. When one you started ends, you're continued with a
+`<job-event>` about it, and your new answer goes to the main assistant. So don't wait on a job: answer with
+what you have and say what is still running.
 """
 
 
@@ -65,9 +71,7 @@ def build_prompt(*, focus: str | None, subagent: bool, max_tasks: int) -> str:
     chosen = get_focuses().get(focus or "")
     focus_text = ""
     if chosen:
-        docs = "\n\n".join(
-            registry.skills[name].doc(include_background=not subagent) for name in chosen.skills
-        )
+        docs = "\n\n".join(registry.skills[name].doc() for name in chosen.skills)
         focus_text = f"\n## Focus: {chosen.label}\n{chosen.prompt}\n" + (
             f"\nThese skills are already loaded:\n\n{docs}" if docs else ""
         )

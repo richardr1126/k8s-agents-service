@@ -10,7 +10,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from agents.assistant import web
-from agents.assistant.background import describe_job, is_subagent
+from agents.assistant.background import describe_job
 from agents.tools import _filtered_search, build_keyword_filter
 from skills import CommandError, call_workflow, get_registry
 
@@ -109,7 +109,7 @@ def read_skill(
     skill = registry.skills.get(name.strip())
     if skill is None:
         return f"No skill named {name!r}. Skills: {', '.join(registry.skills) or 'none'}."
-    return skill.doc(include_background=not is_subagent(config))
+    return skill.doc()
 
 
 @tool
@@ -132,13 +132,11 @@ async def run_workflow(
     Inline runs that take longer than a minute carry on as background jobs.
     """
     # Background runs and long inline runs are handled by the ToolNode's job wrapper;
-    # this body runs a workflow inline (always so for sub-agents) and explains bad calls.
+    # this body runs a workflow inline and explains bad calls.
     try:
         wf, validated = get_registry().parse_command(command)
     except CommandError as e:
         return str(e)
-    if wf.background == "always" and is_subagent(config):
-        return f"`{wf.id}` runs in the background; only the main assistant can start it."
     try:
         result = await call_workflow(wf.resolve(), validated, config)
     except Exception as e:

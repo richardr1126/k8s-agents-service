@@ -57,6 +57,23 @@ class JobError(RuntimeError):
     pass
 
 
+# Rebuilds the run of a job that isn't a skill workflow (a background sub-agent), for
+# resuming it after a restart; None when it can't be. Keyed by the job's label prefix.
+Resumer = Callable[[Job], "Run | None"]
+_resumers: dict[str, Resumer] = {}
+
+
+def on_resume(prefix: str, resumer: Resumer) -> None:
+    """Registers how to resume jobs whose label starts with `prefix`."""
+    _resumers[prefix] = resumer
+
+
+def chat_thread(configurable: dict[str, Any]) -> str | None:
+    """The chat a run belongs to. A run checkpointing under its own thread (a job's graph)
+    keeps the chat's in `chat_thread_id`."""
+    return configurable.get("chat_thread_id") or configurable.get("thread_id")
+
+
 async def setup_jobs(saver: Any) -> None:
     """Keeps jobs in Postgres when the checkpointer is Postgres, else in memory, and job
     graphs' checkpoints in the same checkpointer. With Postgres, also starts the
@@ -87,6 +104,8 @@ async def stop_jobs() -> None:
         task.cancel()
     await asyncio.gather(*pending, return_exceptions=True)
     _owned.clear()
+    _running.clear()  # a cancelled job's record task may never have started
+    _deleted.clear()
 
 
 async def _heartbeat_and_sweep() -> None:
@@ -126,16 +145,27 @@ async def _resume(job: Job) -> bool:
     from skills import call_workflow, get_registry
 
     wf = get_registry().workflows.get(job.workflow)
-    carried = await saved_run(job.id) if wf else None
-    if wf is None or carried is None:
+    run: Run | None = None
+    if wf is not None:
+        fn = wf.resolve()
+        run = lambda c: call_workflow(fn, job.args, c)  # noqa: E731
+    else:
+        resumer = next((r for p, r in _resumers.items() if job.workflow.startswith(p)), None)
+        run = resumer(job) if resumer else None
+    carried = await saved_run(job.id) if run else None
+    if run is None or carried is None:
         return False
-    fn = wf.resolve()
     config: RunnableConfig = {
-        "configurable": {**carried, "user_id": job.user_id, "thread_id": job.thread_id}
+        "configurable": {
+            **carried,
+            "user_id": job.user_id,
+            "thread_id": job.thread_id,
+            "subagent_thread": job.agent,
+        }
     }
     logger.info("Resuming job %s (%s)", job.id, job.workflow)
     await _store.update(job.id, progress="Resuming after a server restart…")
-    _launch(job.id, job.workflow, config, lambda c: call_workflow(fn, job.args, c))
+    _launch(job.id, job.workflow, config, run)
     return True
 
 
@@ -161,8 +191,11 @@ def _job_config(config: RunnableConfig, job_id: str, progress: Any) -> RunnableC
         "configurable": {
             "model": configurable.get("model"),
             "user_id": configurable.get("user_id"),
-            "thread_id": configurable.get("thread_id"),
+            "thread_id": chat_thread(configurable),
             "focus": configurable.get("focus"),
+            # Who started it, so a sub-agent's job keeps its owner when it is resumed.
+            "subagent_thread": configurable.get("subagent_thread"),
+            "chat_focus": configurable.get("chat_focus"),
             "checkpoint_ns": f"job:{job_id}",
             "job_id": job_id,
             "job_progress": progress,
@@ -212,12 +245,14 @@ async def _admit(config: RunnableConfig) -> str:
 def _job(
     job_id: str, user_id: str, label: str, args: dict[str, Any], config: RunnableConfig
 ) -> Job:
+    configurable = config.get("configurable") or {}
     return Job(
         id=job_id,
         user_id=user_id,
-        thread_id=(config.get("configurable") or {}).get("thread_id"),
+        thread_id=chat_thread(configurable),
         workflow=label,
         args=args,
+        agent=configurable.get("subagent_thread"),
     )
 
 
@@ -250,6 +285,13 @@ def _finish(
         _tell_ended(job_id, configurable)
 
     _keep(asyncio.create_task(record(), name=f"{job_id}:record"))
+
+
+def _ended_with(config: RunnableConfig) -> dict[str, Any]:
+    """What the end callbacks get: the starting run's configurable, on the chat's thread."""
+    configurable = dict(config.get("configurable") or {})
+    configurable["thread_id"] = chat_thread(configurable)
+    return configurable
 
 
 def _tell_ended(job_id: str, configurable: dict[str, Any]) -> None:
@@ -287,7 +329,7 @@ def _launch(job_id: str, label: str, config: RunnableConfig, run: Run) -> None:
     task = detached(run(_job_config(config, job_id, progress)), job_id)
     _running[job_id] = task
     _keep(task)
-    _finish(job_id, label, task, dict(config.get("configurable") or {}))
+    _finish(job_id, label, task, _ended_with(config))
 
 
 async def run_or_promote(
@@ -328,7 +370,7 @@ async def run_or_promote(
     _owned.add(job_id)
     _running[job_id] = task
     _keep(task)
-    _finish(job_id, label, task, dict(config.get("configurable") or {}))
+    _finish(job_id, label, task, _ended_with(config))
     return None, job
 
 

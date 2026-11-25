@@ -2,14 +2,19 @@
 
 Every tool has a background policy: `never`, `optional` or `always`. Tools that
 aren't `never` take a `background` argument. One ToolNode wrapper decides how a
-call runs: as a job when the policy is `always` or the call asks for it, else
-inline. Inline workflows that run long carry on as jobs. When a job ends, the
-next run on its thread starts with a `<job-event>` message telling the agent
-how it went; the backend starts that run itself (see follow_ups).
+call runs, the same way for the main assistant and its sub-agents: as a job when
+the policy is `always` or the call asks for it, else inline. Inline workflows that
+run long carry on as jobs.
+
+A job's end goes to the agent that started it, as a `<job-event>` message. For the
+main assistant, the backend runs it on the chat with the event (see follow_ups).
+A sub-agent is continued with the event, and its new answer reaches the main
+assistant as a `task` result (see subagent_jobs).
 """
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Any, cast
@@ -24,14 +29,12 @@ from core import settings
 from skills import Background, CommandError, call_workflow, get_registry
 
 JOB_MARKER = "Started background job"
+# In a finished background sub-agent's job data: its thread id; its run is in a job file.
+SUBAGENT_DATA = "subagent"
 EVENT_TAG = "job-event"
 _EVENT_RESULT_CHARS = 6000
 
 Execute = Callable[[ToolCallRequest], Awaitable[Any]]
-
-
-def is_subagent(config: RunnableConfig | None) -> bool:
-    return bool(((config or {}).get("configurable") or {}).get("assistant_subagent"))
 
 
 @dataclass(frozen=True)
@@ -46,7 +49,7 @@ class Plan:
 
 
 # A planner returns a Plan, an error for the model, or None to let the tool handle the call.
-Planner = Callable[[ToolCallRequest], "Plan | str | None"]
+Planner = Callable[[ToolCallRequest], "Plan | str | None | Awaitable[Plan | str | None]"]
 
 
 def _plan_workflow(request: ToolCallRequest) -> Plan | str | None:
@@ -66,27 +69,15 @@ def _plan_workflow(request: ToolCallRequest) -> Plan | str | None:
     )
 
 
-def _plan_task(request: ToolCallRequest) -> Plan:
-    call = request.tool_call
-    tool = request.tool
-    assert tool is not None
-    args = {k: v for k, v in call["args"].items() if k != "background"}
+async def _plan_task(request: ToolCallRequest) -> Plan | str:
+    from agents.assistant import subagent_jobs
+
+    args = {k: v for k, v in request.tool_call["args"].items() if k != "background"}
     state = request.state
-
-    async def run(config: RunnableConfig) -> Any:
-        # The tool reads the conversation (for thread_id) from its injected state.
-        return await tool.ainvoke(
-            {
-                "type": "tool_call",
-                "id": call["id"],
-                "name": call["name"],
-                "args": {**args, "state": state},
-            },
-            config,
-        )
-
-    label = f"agent:{args.get('focus') or 'general'}"
-    return Plan(policy="optional", label=label, args=args, run=run)
+    messages = list(state.get("messages", [])) if isinstance(state, dict) else []
+    return await subagent_jobs.plan(
+        args, messages, cast(str, request.tool_call["id"]), request.runtime.config
+    )
 
 
 PLANNERS: dict[str, Planner] = {"run_workflow": _plan_workflow, "task": _plan_task}
@@ -99,6 +90,13 @@ def started(job: jobs.Job, *, promoted: bool = False) -> str:
         if promoted
         else ""
     )
+    if job.agent:
+        return (
+            f"{lead}{JOB_MARKER} `{job.id}` for `{job.workflow}`. It runs on its own, and the user "
+            "watches it in a card. When it ends you'll be continued with a <job-event> message "
+            "about it, and your answer then goes to the main assistant again. Don't wait for it: "
+            "finish your task with what you have, and say what is still running."
+        )
     return (
         f"{lead}{JOB_MARKER} `{job.id}` for `{job.workflow}`. It runs on its own; a card just above "
         "your reply shows its progress and then its result, and you'll get a <job-event> message "
@@ -144,6 +142,8 @@ def background_jobs(planners: dict[str, Planner] = PLANNERS) -> Callable[..., Aw
     async def wrapper(request: ToolCallRequest, execute: Execute) -> Any:
         planner = planners.get(request.tool_call["name"])
         plan = planner(request) if planner else None
+        if inspect.isawaitable(plan):
+            plan = await plan
         if plan is None:
             return await execute(request)
         if isinstance(plan, str):
@@ -158,20 +158,12 @@ def background_jobs(planners: dict[str, Planner] = PLANNERS) -> Callable[..., Aw
                 error=True,
             )
         if plan.policy == "always" or wants:
-            if is_subagent(config):
-                return await _reply(
-                    request,
-                    execute,
-                    f"`{plan.label}` would run in the background, and only the main assistant can "
-                    "start background jobs.",
-                    error=True,
-                )
             try:
                 new_job = await jobs.start(plan.label, plan.args, config, plan.run)
             except jobs.JobError as e:
                 return await _reply(request, execute, str(e), error=True)
             return await _reply(request, execute, started(new_job))
-        if plan.promote and not is_subagent(config):
+        if plan.promote:
             try:
                 result, job = await jobs.run_or_promote(
                     plan.label, plan.args, config, plan.run, after=settings.ASSISTANT_INLINE_SECONDS
@@ -232,11 +224,20 @@ def awaiting_input(messages: Sequence[BaseMessage]) -> bool:
 
 
 async def pending_events(messages: Sequence[BaseMessage], config: RunnableConfig) -> list[jobs.Job]:
-    """Ended jobs this thread hasn't heard about, when a run is starting (not mid-turn)."""
+    """Ended jobs the main assistant hasn't heard about, when a run is starting (not mid-turn).
+
+    Jobs a sub-agent started, and background sub-agents that finished, go to it through
+    `subagent_jobs.deliver` instead."""
     if messages and isinstance(messages[-1], ToolMessage):
         return []  # mid-turn: hold events until this run ends
     configurable = (config or {}).get("configurable") or {}
     user_id, thread_id = configurable.get("user_id"), configurable.get("thread_id")
     if not user_id or not thread_id:
         return []
-    return await jobs.store().unnotified(str(user_id), str(thread_id))
+    ended = await jobs.store().unnotified(str(user_id), str(thread_id))
+    return [job for job in ended if for_main(job)]
+
+
+def for_main(job: jobs.Job) -> bool:
+    """Whether the main assistant hears about this job's end as a job event."""
+    return not job.agent and not (job.status == "done" and job.data.get(SUBAGENT_DATA))
