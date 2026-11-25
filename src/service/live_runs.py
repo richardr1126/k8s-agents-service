@@ -23,6 +23,11 @@ logger = logging.getLogger(__name__)
 
 # How long a finished run stays joinable, so a client that dropped just before the end gets the rest.
 KEEP_SECONDS = 120.0
+# A comment line sent after this long without an event, so proxies (Cloudflare cuts a
+# response after 100s without a byte) don't take a quiet stretch for a dead stream.
+# SSE clients skip comments, so it doesn't count as an event for `since`.
+PING_SECONDS = 15.0
+PING = ": ping\n\n"
 
 
 @dataclass
@@ -51,9 +56,17 @@ class LiveRun:
         index = max(0, start)
         while True:
             async with self._changed:
-                await self._changed.wait_for(lambda: len(self.events) > index or self.done)
-                batch = self.events[index:]
-                finished = self.done
+                try:
+                    async with asyncio.timeout(PING_SECONDS):
+                        await self._changed.wait_for(lambda: len(self.events) > index or self.done)
+                except TimeoutError:
+                    batch, finished = [], False
+                else:
+                    batch = self.events[index:]
+                    finished = self.done
+            if not batch and not finished:
+                yield PING
+                continue
             index += len(batch)
             for event in batch:
                 yield event

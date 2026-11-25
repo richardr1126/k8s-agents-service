@@ -40,7 +40,7 @@ Use tools when the answer depends on Richard, on something current, or on a spec
 SUBAGENTS = """
 ## Sub-agents
 `task` starts a copy of you with a fresh context that sees only the `description` you write, so make it
-self-contained. Give it a `focus` when one fits:
+self-contained. Give it a `subagent_type` (its focus) when one fits:
 {focuses}
 
 Use sub-agents for:
@@ -50,7 +50,7 @@ Otherwise do the work yourself; a sub-agent costs extra time. At most {max_tasks
 the user needn't wait on, pass `background=true`; its answer then arrives as a new `task` result for its
 thread. A sub-agent can start background jobs of its own; when one ends, it's continued with the outcome on
 its own and its new answer arrives the same way, as a `task` result. Answer those like job events.
-Each result ends with `[thread_id: ...]`; pass it back with the same `focus` to continue that sub-agent's
+Each result ends with `[thread_id: ...]`; pass it back with the same `subagent_type` to continue that sub-agent's
 conversation. Thread ids are for you only; never show them to the user.
 """
 

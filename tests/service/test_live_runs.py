@@ -47,3 +47,18 @@ async def test_a_failure_ends_the_stream_with_a_run_error() -> None:
     run = live_runs.start("t-fail", "assistant", None, failing())
     events = [e async for e in run.follow(0)]
     assert events[0] == "a" and "RUN_ERROR" in events[1] and "model down" in events[1]
+
+
+async def test_a_quiet_run_sends_pings_that_are_not_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(live_runs, "PING_SECONDS", 0.01)
+    gate, out = asyncio.Event(), []
+    run = live_runs.start("t-ping", "assistant", "u1", ticking(gate, out))
+    follower = run.follow(0)
+    assert await anext(follower) == "a"
+    assert await anext(follower) == live_runs.PING  # nothing new for a while
+    gate.set()
+    rest = [e async for e in follower]
+    assert [e for e in rest if e != live_runs.PING] == ["b"]
+    assert run.events == ["a", "b"]  # pings aren't kept, so `since` still counts events

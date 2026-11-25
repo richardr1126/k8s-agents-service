@@ -59,6 +59,12 @@ from service.utils import normalize_messages_for_replay
 GENERAL = "general"
 
 
+def focus_of(args: dict[str, Any]) -> str | None:
+    """A `task` call's focus: its `subagent_type` (`focus` in calls made before the rename)."""
+    focus = str(args.get("subagent_type") or args.get("focus") or "").strip()
+    return None if focus in ("", GENERAL) else focus
+
+
 class AssistantState(ToolLoopState, total=False):
     pass
 
@@ -95,7 +101,7 @@ def prepare_task(
     """Checks a `task` call and returns its sub-agent's label, focus, thread id and the
     thread's earlier turns. `taken` holds thread ids in use that the conversation doesn't
     show yet (background sub-agents still running)."""
-    focus = (focus or "").strip() or None
+    focus = focus_of({"subagent_type": focus})
     if focus and focus not in get_focuses():
         raise SubagentError(f"Unknown focus '{focus}'. Focuses: {', '.join(get_focuses())}.")
     if tool_call_id is not None:
@@ -153,12 +159,23 @@ def _new_threads_ahead(messages: list[BaseMessage], tool_call_id: str | None, la
             if call["id"] == tool_call_id:
                 return ahead
             args = call["args"]
-            if (
-                not args.get("thread_id")
-                and ((args.get("focus") or "").strip() or GENERAL) == label
-            ):
+            if not args.get("thread_id") and (focus_of(args) or GENERAL) == label:
                 ahead += 1
     return 0
+
+
+def _type_tasks(messages: list[BaseMessage]) -> None:
+    """Gives each inline `task` call a `subagent_type`, even when the model left it out.
+
+    ag-ui-langgraph knows a `task` call starts a sub-agent by `subagent_type` in the
+    call; without it the sub-agent's stream isn't tied to its `task` card and isn't
+    finished when the call returns. Background calls start no sub-agent stream."""
+    for message in messages:
+        if not isinstance(message, AIMessage):
+            continue
+        for call in message.tool_calls:
+            if call["name"] == "task" and not call["args"].get("background"):
+                call["args"]["subagent_type"] = focus_of(call["args"]) or GENERAL
 
 
 def subagent_config(
@@ -188,8 +205,9 @@ async def task(
     tool_call_id: Annotated[str, InjectedToolCallId],
     state: Annotated[dict[str, Any], InjectedState],
     config: RunnableConfig,
-    focus: Annotated[
-        str | None, "A focus for the sub-agent, from the list in your instructions."
+    subagent_type: Annotated[
+        str | None,
+        "The sub-agent's focus, from the list in your instructions. Omit for a general one.",
     ] = None,
     thread_id: Annotated[
         str | None,
@@ -201,7 +219,10 @@ async def task(
 ) -> ToolMessage:
     """Start a copy of yourself with a fresh context, and return its final answer."""
     label, focus, thread_id, prior = prepare_task(
-        state.get("messages", []), focus=focus, thread_id=thread_id, tool_call_id=tool_call_id
+        state.get("messages", []),
+        focus=subagent_type,
+        thread_id=thread_id,
+        tool_call_id=tool_call_id,
     )
     for message in prior:  # ids let this run's own messages be told apart afterwards
         message.id = message.id or str(uuid4())
@@ -294,6 +315,7 @@ def _build(model_name: AllModelEnum, *, subagent: bool):
             model_runnable_without_tools=without_tools,
             compaction_manager=_COMPACTION_MANAGER,
         )
+        _type_tasks(update.get("messages", []))
         if ended:
             await jobs.store().mark_notified([job.id for job in ended])
             update = {**update, "messages": [*events, *update.get("messages", [])]}
@@ -303,7 +325,7 @@ def _build(model_name: AllModelEnum, *, subagent: bool):
     graph.add_node("model", acall_model)
     # Node name "tools" and one Send per tool call are what ag-ui-langgraph
     # relies on to attribute sub-agent events to their `task` call.
-    errors = errors_as_results(lambda args: args.get("focus") or GENERAL)
+    errors = errors_as_results(lambda args: focus_of(args) or GENERAL)
     run_in_background = bg.background_jobs()
 
     async def wrap_tool_call(request: Any, execute: Any) -> Any:

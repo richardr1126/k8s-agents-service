@@ -322,7 +322,8 @@ const MessageError: FC = () => (
 /** `task`: the sub-agent's card, or a job card when it was sent to run in the background. */
 const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (props) => {
   const jobId = jobIdOf(props.result);
-  const focus = (props.args as { focus?: string }).focus;
+  const { subagent_type, focus: oldFocus } = props.args as { subagent_type?: string; focus?: string };
+  const focus = subagent_type ?? oldFocus;
   return (
     <div data-tool className={cn(toolSpacing, "mb-2")}>
       {jobId ? (

@@ -460,3 +460,63 @@ async def test_a_run_can_be_followed_again_from_any_event(client: httpx.AsyncCli
     status = await client.get("/ag-ui/thread-live/live")
     assert status.json() == {"running": False}
     assert (await client.get(f"/{DEFAULT_AGENT}/ag-ui/nothing-here/live")).status_code == 404
+
+
+async def test_assistant_subagents_stream_into_their_task_cards(
+    monkeypatch: pytest.MonkeyPatch, saver: Any
+) -> None:
+    """The assistant's `task` calls, with and without a focus, open sub-agent runs tied to
+    their call, which finish when the call returns rather than at the end of the run."""
+    from agui_fakes import ScriptedChatModel
+    from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+
+    from agents.assistant import agent as assistant
+    from agents.configurable_model_graph import ConfigurableModelGraph
+
+    def respond(messages: list[BaseMessage]) -> AIMessage:
+        first = messages[0].content if isinstance(messages[0].content, str) else ""
+        if "You are a sub-agent" in first:
+            return AIMessage(content=f"found {messages[-1].content}")
+        if isinstance(messages[-1], HumanMessage):
+            calls = [
+                {"name": "task", "args": {"description": "python"}, "id": "call_py"},
+                {
+                    "name": "task",
+                    "args": {"description": "node", "subagent_type": "research"},
+                    "id": "call_node",
+                },
+            ]
+            return AIMessage(content="", tool_calls=calls)
+        assert isinstance(messages[-1], ToolMessage)
+        return AIMessage(content="both found")
+
+    model = ScriptedChatModel(responder=respond)
+    monkeypatch.setattr(assistant, "get_model", lambda name: model)
+    monkeypatch.setattr(
+        assistant,
+        "assistant_subagent",
+        ConfigurableModelGraph(lambda m: assistant._build(m, subagent=True)),
+    )
+    graph = ConfigurableModelGraph(lambda m: assistant._build(m, subagent=False))
+    graph.checkpointer = saver
+    async with serve(monkeypatch, saver) as client:
+        with patch.dict("agents.agents.agents", {"assistant": Agent(description="a", graph=graph)}):
+            events = await run(client, [user("go")], agent_id="assistant")
+
+    assert_wire_hygiene(events)
+    runs = subagent_runs(events)
+    assert set(runs) == {"call_py", "call_node"}
+    assert runs["call_py"]["name"] == "general" and runs["call_py"]["description"] == "python"
+    assert runs["call_node"]["name"] == "research"
+    for call_id, answer in (("call_py", "found python"), ("call_node", "found node")):
+        run_id = runs[call_id]["subagentRunId"]
+        assert_closed_before_result(events, run_id, call_id)
+        tagged = [e for e in events if e.get("subagentRunId") == run_id]
+        assert "".join(e["delta"] for e in tagged if e["type"] == "TEXT_MESSAGE_CONTENT") == answer
+    # Both are finished before the assistant starts its reply.
+    reply = next(
+        i
+        for i, e in enumerate(events)
+        if e["type"] == "TEXT_MESSAGE_START" and "subagentRunId" not in e
+    )
+    assert max(i for i, e in enumerate(events) if e["type"] == "SUBAGENT_FINISHED") < reply

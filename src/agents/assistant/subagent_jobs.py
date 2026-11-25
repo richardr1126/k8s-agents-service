@@ -79,7 +79,7 @@ async def plan(
     try:
         label, focus, thread_id, prior = assistant.prepare_task(
             messages,
-            focus=args.get("focus"),
+            focus=assistant.focus_of(args),
             thread_id=args.get("thread_id"),
             tool_call_id=tool_call_id,
             taken=await running_agents(config),
@@ -180,7 +180,6 @@ def _own(messages: list[BaseMessage]) -> list[BaseMessage]:
 def _recorded(artifact: SubagentArtifact, answer: str) -> list[BaseMessage]:
     """The run as a `task` call and result on the chat, as if the assistant had made it."""
     call_id = f"call_{uuid4().hex[:24]}"
-    focus = None if artifact.subagent_type == assistant.GENERAL else artifact.subagent_type
     call = AIMessage(
         content="",
         tool_calls=[
@@ -188,7 +187,7 @@ def _recorded(artifact: SubagentArtifact, answer: str) -> list[BaseMessage]:
                 "name": "task",
                 "args": {
                     "description": artifact.description,
-                    "focus": focus,
+                    "subagent_type": artifact.subagent_type,
                     "thread_id": artifact.thread_id,
                 },
                 "id": call_id,
