@@ -29,6 +29,8 @@ from service import app
 pytestmark = pytest.mark.asyncio
 
 FIXTURE = Path(__file__).parent.parent / "fixtures" / "history_web_subagent.json"
+# The assistant's live stream with two sub-agents, which the UI's tests replay.
+STREAM_FIXTURE = Path(__file__).parent.parent / "fixtures" / "stream_assistant_subagents.json"
 Events = list[dict[str, Any]]
 
 
@@ -313,6 +315,43 @@ def _normalize_ids(value: Any) -> Any:
     return json.loads(re.sub(pattern, placeholder, text))
 
 
+def stream_shape(events: Events) -> dict[str, Any]:
+    """Each stream's events in order: the main run's and each sub-agent's, by its `task` call.
+
+    Parallel sub-agents interleave differently from run to run and finish in either order,
+    so how their streams interleave, their results' order and snapshots aren't compared."""
+    parents = {
+        e["subagentRunId"]: e["parentToolCallId"] for e in events if e["type"] == "SUBAGENT_STARTED"
+    }
+    groups: dict[str, Events] = {}
+    for e in events:
+        if e["type"] == "STATE_SNAPSHOT":
+            continue
+        key = parents.get(e.get("subagentRunId"), "main")
+        groups.setdefault(key, []).append({k: v for k, v in e.items() if k != "subagentRunId"})
+    # Results come in the order their sub-agents finished: compared by call instead.
+    main = groups.get("main", [])
+    slots = [i for i, e in enumerate(main) if e["type"] == "TOOL_CALL_RESULT"]
+    for i, e in zip(slots, sorted((main[i] for i in slots), key=lambda e: e["toolCallId"])):
+        main[i] = e
+    ordered = {key: groups[key] for key in sorted(groups)}
+    # A recorded fixture's placeholders are renumbered like generated ids.
+    text = re.sub(
+        r"<id-(\d+)>",
+        lambda m: f"{int(m.group(1)):08x}-0000-0000-0000-000000000000",
+        json.dumps(ordered),
+    )
+    return _normalize_ids(json.loads(text))
+
+
+def check_fixture(path: Path, value: Any) -> None:
+    """`value` matches the fixture at `path`; with UPDATE_FIXTURES set, rewrites it."""
+    if os.environ.get("UPDATE_FIXTURES"):
+        path.parent.mkdir(exist_ok=True)
+        path.write_text(json.dumps(value, indent=2) + "\n")
+    assert value == json.loads(path.read_text())
+
+
 async def test_history_matches_live_stream_and_fixture(client: httpx.AsyncClient) -> None:
     events = await run(client, [user("web:rust")])
     history = (await client.post("/history", json={"thread_id": "thread-1"})).json()
@@ -355,11 +394,7 @@ async def test_history_matches_live_stream_and_fixture(client: httpx.AsyncClient
     ]
     assert all(m["role"] != "user" for m in history["messages"] if "subagentRunId" in m)
 
-    normalized = _normalize_ids(history)
-    if os.environ.get("UPDATE_FIXTURES"):
-        FIXTURE.parent.mkdir(exist_ok=True)
-        FIXTURE.write_text(json.dumps(normalized, indent=2) + "\n")
-    assert normalized == json.loads(FIXTURE.read_text())
+    check_fixture(FIXTURE, _normalize_ids(history))
 
 
 async def test_inbound_guard_keeps_echoed_subagent_messages_out(
@@ -520,3 +555,8 @@ async def test_assistant_subagents_stream_into_their_task_cards(
         if e["type"] == "TEXT_MESSAGE_START" and "subagentRunId" not in e
     )
     assert max(i for i, e in enumerate(events) if e["type"] == "SUBAGENT_FINISHED") < reply
+    # The UI's tests replay this stream; a change here that the UI doesn't expect fails there.
+    recorded = _normalize_ids([{k: v for k, v in e.items() if k != "timestamp"} for e in events])
+    if os.environ.get("UPDATE_FIXTURES"):
+        STREAM_FIXTURE.write_text(json.dumps(recorded, indent=2) + "\n")
+    assert stream_shape(recorded) == stream_shape(json.loads(STREAM_FIXTURE.read_text()))

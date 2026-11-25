@@ -1,0 +1,419 @@
+[
+  {
+    "type": "RUN_STARTED",
+    "threadId": "thread-1",
+    "runId": "run-1-False"
+  },
+  {
+    "type": "STEP_STARTED",
+    "stepName": "model"
+  },
+  {
+    "type": "TOOL_CALL_START",
+    "toolCallId": "call_py",
+    "toolCallName": "task",
+    "parentMessageId": "lc_run--<id-1>"
+  },
+  {
+    "type": "TOOL_CALL_ARGS",
+    "toolCallId": "call_py",
+    "delta": "{\"description\": \"python\"}"
+  },
+  {
+    "type": "TOOL_CALL_END",
+    "toolCallId": "call_py"
+  },
+  {
+    "type": "TOOL_CALL_START",
+    "toolCallId": "call_node",
+    "toolCallName": "task",
+    "parentMessageId": "lc_run--<id-1>"
+  },
+  {
+    "type": "TOOL_CALL_ARGS",
+    "toolCallId": "call_node",
+    "delta": "{\"description\": \"node\", \"subagent_type\": \"research\"}"
+  },
+  {
+    "type": "TOOL_CALL_END",
+    "toolCallId": "call_node"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "messages": [
+        {
+          "content": "",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--<id-1>",
+          "tool_calls": [
+            {
+              "name": "task",
+              "args": {
+                "description": "python",
+                "subagent_type": "general"
+              },
+              "id": "call_py",
+              "type": "tool_call"
+            },
+            {
+              "name": "task",
+              "args": {
+                "description": "node",
+                "subagent_type": "research"
+              },
+              "id": "call_node",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      ],
+      "tools": []
+    }
+  },
+  {
+    "type": "STEP_FINISHED",
+    "stepName": "model"
+  },
+  {
+    "type": "STEP_STARTED",
+    "stepName": "tools"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "messages": [
+        {
+          "content": "go",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": "user-1"
+        },
+        {
+          "content": "",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--<id-1>",
+          "tool_calls": [
+            {
+              "name": "task",
+              "args": {
+                "description": "python",
+                "subagent_type": "general"
+              },
+              "id": "call_py",
+              "type": "tool_call"
+            },
+            {
+              "name": "task",
+              "args": {
+                "description": "node",
+                "subagent_type": "research"
+              },
+              "id": "call_node",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      ]
+    }
+  },
+  {
+    "type": "SUBAGENT_STARTED",
+    "subagentRunId": "tools:<id-2>",
+    "name": "general",
+    "description": "python",
+    "parentToolCallId": "call_py",
+    "parentMessageId": "lc_run--<id-1>"
+  },
+  {
+    "type": "STEP_STARTED",
+    "subagentRunId": "tools:<id-2>",
+    "stepName": "model"
+  },
+  {
+    "type": "SUBAGENT_STARTED",
+    "subagentRunId": "tools:<id-3>",
+    "name": "research",
+    "description": "node",
+    "parentToolCallId": "call_node",
+    "parentMessageId": "lc_run--<id-1>"
+  },
+  {
+    "type": "STEP_STARTED",
+    "subagentRunId": "tools:<id-3>",
+    "stepName": "model"
+  },
+  {
+    "type": "TEXT_MESSAGE_START",
+    "subagentRunId": "tools:<id-2>",
+    "messageId": "lc_run--<id-4>",
+    "role": "assistant"
+  },
+  {
+    "type": "TEXT_MESSAGE_CONTENT",
+    "subagentRunId": "tools:<id-2>",
+    "messageId": "lc_run--<id-4>",
+    "delta": "found"
+  },
+  {
+    "type": "TEXT_MESSAGE_START",
+    "subagentRunId": "tools:<id-3>",
+    "messageId": "lc_run--<id-5>",
+    "role": "assistant"
+  },
+  {
+    "type": "TEXT_MESSAGE_CONTENT",
+    "subagentRunId": "tools:<id-3>",
+    "messageId": "lc_run--<id-5>",
+    "delta": "found"
+  },
+  {
+    "type": "TEXT_MESSAGE_CONTENT",
+    "subagentRunId": "tools:<id-2>",
+    "messageId": "lc_run--<id-4>",
+    "delta": " python"
+  },
+  {
+    "type": "TEXT_MESSAGE_CONTENT",
+    "subagentRunId": "tools:<id-3>",
+    "messageId": "lc_run--<id-5>",
+    "delta": " node"
+  },
+  {
+    "type": "TEXT_MESSAGE_END",
+    "subagentRunId": "tools:<id-2>",
+    "messageId": "lc_run--<id-4>"
+  },
+  {
+    "type": "TEXT_MESSAGE_END",
+    "subagentRunId": "tools:<id-3>",
+    "messageId": "lc_run--<id-5>"
+  },
+  {
+    "type": "STEP_FINISHED",
+    "subagentRunId": "tools:<id-2>",
+    "stepName": "model"
+  },
+  {
+    "type": "SUBAGENT_FINISHED",
+    "subagentRunId": "tools:<id-2>"
+  },
+  {
+    "type": "TOOL_CALL_RESULT",
+    "messageId": "call_py",
+    "toolCallId": "call_py",
+    "content": "found python",
+    "role": "tool"
+  },
+  {
+    "type": "STEP_FINISHED",
+    "subagentRunId": "tools:<id-3>",
+    "stepName": "model"
+  },
+  {
+    "type": "SUBAGENT_FINISHED",
+    "subagentRunId": "tools:<id-3>"
+  },
+  {
+    "type": "TOOL_CALL_RESULT",
+    "messageId": "call_node",
+    "toolCallId": "call_node",
+    "content": "found node",
+    "role": "tool"
+  },
+  {
+    "type": "STEP_FINISHED",
+    "stepName": "tools"
+  },
+  {
+    "type": "STEP_STARTED",
+    "stepName": "model"
+  },
+  {
+    "type": "TEXT_MESSAGE_START",
+    "messageId": "lc_run--<id-6>",
+    "role": "assistant"
+  },
+  {
+    "type": "TEXT_MESSAGE_CONTENT",
+    "messageId": "lc_run--<id-6>",
+    "delta": "both"
+  },
+  {
+    "type": "TEXT_MESSAGE_CONTENT",
+    "messageId": "lc_run--<id-6>",
+    "delta": " found"
+  },
+  {
+    "type": "TEXT_MESSAGE_END",
+    "messageId": "lc_run--<id-6>"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "messages": [
+        {
+          "content": "both found",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--<id-6>",
+          "tool_calls": [],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      ],
+      "tools": []
+    }
+  },
+  {
+    "type": "STEP_FINISHED",
+    "stepName": "model"
+  },
+  {
+    "type": "STATE_SNAPSHOT",
+    "snapshot": {
+      "messages": [
+        {
+          "content": "go",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "human",
+          "name": null,
+          "id": "user-1"
+        },
+        {
+          "content": "",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--<id-1>",
+          "tool_calls": [
+            {
+              "name": "task",
+              "args": {
+                "description": "python",
+                "subagent_type": "general"
+              },
+              "id": "call_py",
+              "type": "tool_call"
+            },
+            {
+              "name": "task",
+              "args": {
+                "description": "node",
+                "subagent_type": "research"
+              },
+              "id": "call_node",
+              "type": "tool_call"
+            }
+          ],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        },
+        {
+          "content": "found python",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "tool",
+          "name": "task",
+          "id": "call_py",
+          "tool_call_id": "call_py",
+          "artifact": {
+            "type": "subagent_run",
+            "v": 1,
+            "subagent_run_id": "tools:<id-2>",
+            "subagent_type": "general",
+            "description": "python",
+            "status": "success",
+            "error": null,
+            "thread_id": "general-1",
+            "messages": [
+              {
+                "type": "ai",
+                "data": {
+                  "content": "found python",
+                  "additional_kwargs": {},
+                  "response_metadata": {},
+                  "type": "ai",
+                  "name": null,
+                  "id": "lc_run--<id-4>",
+                  "tool_calls": [],
+                  "invalid_tool_calls": [],
+                  "usage_metadata": null
+                }
+              }
+            ]
+          },
+          "status": "success"
+        },
+        {
+          "content": "found node",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "tool",
+          "name": "task",
+          "id": "call_node",
+          "tool_call_id": "call_node",
+          "artifact": {
+            "type": "subagent_run",
+            "v": 1,
+            "subagent_run_id": "tools:<id-3>",
+            "subagent_type": "research",
+            "description": "node",
+            "status": "success",
+            "error": null,
+            "thread_id": "research-1",
+            "messages": [
+              {
+                "type": "ai",
+                "data": {
+                  "content": "found node",
+                  "additional_kwargs": {},
+                  "response_metadata": {},
+                  "type": "ai",
+                  "name": null,
+                  "id": "lc_run--<id-5>",
+                  "tool_calls": [],
+                  "invalid_tool_calls": [],
+                  "usage_metadata": null
+                }
+              }
+            ]
+          },
+          "status": "success"
+        },
+        {
+          "content": "both found",
+          "additional_kwargs": {},
+          "response_metadata": {},
+          "type": "ai",
+          "name": null,
+          "id": "lc_run--<id-6>",
+          "tool_calls": [],
+          "invalid_tool_calls": [],
+          "usage_metadata": null
+        }
+      ]
+    }
+  },
+  {
+    "type": "RUN_FINISHED",
+    "threadId": "thread-1",
+    "runId": "run-1-False"
+  }
+]
