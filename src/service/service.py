@@ -138,6 +138,12 @@ async def info() -> ServiceMetadata:
     )
 
 
+@router.get("/skills")
+async def skills_catalog() -> list[dict[str, Any]]:
+    """Every skill and its commands, with the icons and card types the chat draws them with."""
+    return get_registry().catalog()
+
+
 async def _handle_input(user_input: UserInput, agent: AgentGraph) -> tuple[dict[str, Any], UUID]:
     """
     Parse user input and handle any required interrupt resumption.

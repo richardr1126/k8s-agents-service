@@ -11,13 +11,13 @@
   {
     "type": "TOOL_CALL_START",
     "toolCallId": "call_py",
-    "toolCallName": "task",
+    "toolCallName": "run",
     "parentMessageId": "lc_run--<id-1>"
   },
   {
     "type": "TOOL_CALL_ARGS",
     "toolCallId": "call_py",
-    "delta": "{\"description\": \"python\"}"
+    "delta": "{\"command\": \"agent python\"}"
   },
   {
     "type": "TOOL_CALL_END",
@@ -26,13 +26,13 @@
   {
     "type": "TOOL_CALL_START",
     "toolCallId": "call_node",
-    "toolCallName": "task",
+    "toolCallName": "run",
     "parentMessageId": "lc_run--<id-1>"
   },
   {
     "type": "TOOL_CALL_ARGS",
     "toolCallId": "call_node",
-    "delta": "{\"description\": \"node\", \"subagent_type\": \"research\"}"
+    "delta": "{\"command\": \"agent --type research <<'EOF'\\nnode\\nEOF\"}"
   },
   {
     "type": "TOOL_CALL_END",
@@ -134,8 +134,7 @@
     "subagentRunId": "tools:<id-2>",
     "name": "general",
     "description": "python",
-    "parentToolCallId": "call_py",
-    "parentMessageId": "lc_run--<id-1>"
+    "parentToolCallId": "call_py"
   },
   {
     "type": "STEP_STARTED",
@@ -147,8 +146,7 @@
     "subagentRunId": "tools:<id-3>",
     "name": "research",
     "description": "node",
-    "parentToolCallId": "call_node",
-    "parentMessageId": "lc_run--<id-1>"
+    "parentToolCallId": "call_node"
   },
   {
     "type": "STEP_STARTED",

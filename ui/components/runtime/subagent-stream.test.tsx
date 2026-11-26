@@ -4,6 +4,7 @@ import type { ThreadMessage } from "@assistant-ui/react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it } from "vitest";
+import { describeCall } from "@/lib/commands";
 import type { LiveAgent } from "./live-agent";
 import { agent, events, frame, sseBody } from "./test-stream";
 
@@ -45,12 +46,13 @@ const text = (content: readonly { type: string; text?: string }[]) =>
 
 function check(messages: readonly ThreadMessage[]) {
   const parts = messages.flatMap((m) => (m.role === "assistant" ? m.content : []));
-  const tasks = parts.flatMap((p) => (p.type === "tool-call" && p.toolName === "task" ? [p] : []));
+  // Live, a sub-agent is the `run` call of an `agent` command.
+  const tasks = parts.flatMap((p) => (p.type === "tool-call" && describeCall(p.toolName, p.args)?.agent ? [p] : []));
   expect(tasks.map((t) => [t.toolCallId, t.result])).toEqual([
     ["call_py", "found python"],
     ["call_node", "found node"],
   ]);
-  // Each sub-agent's own messages sit on its task call, under its name...
+  // Each sub-agent's own messages sit on its call, under its name...
   for (const [task, name, answer] of [
     [tasks[0]!, "general", "found python"],
     [tasks[1]!, "research", "found node"],
@@ -66,7 +68,7 @@ function check(messages: readonly ThreadMessage[]) {
 }
 
 describe("a reply with sub-agents", () => {
-  it("shows each sub-agent's messages in its own task card", async () => {
+  it("shows each sub-agent's messages in its own card", async () => {
     const { agent: a } = agent(() => new Response(sseBody(events.map(frame))));
     check(await reply(a));
   });

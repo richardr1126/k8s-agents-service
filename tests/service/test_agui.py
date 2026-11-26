@@ -500,8 +500,8 @@ async def test_a_run_can_be_followed_again_from_any_event(client: httpx.AsyncCli
 async def test_assistant_subagents_stream_into_their_task_cards(
     monkeypatch: pytest.MonkeyPatch, saver: Any
 ) -> None:
-    """The assistant's `task` calls, with and without a focus, open sub-agent runs tied to
-    their call, which finish when the call returns rather than at the end of the run."""
+    """The assistant's `agent` commands, with and without a focus, open sub-agent runs tied
+    to their call, which finish when the call returns rather than at the end of the run."""
     from agui_fakes import ScriptedChatModel
     from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
@@ -513,11 +513,12 @@ async def test_assistant_subagents_stream_into_their_task_cards(
         if "You are a sub-agent" in first:
             return AIMessage(content=f"found {messages[-1].content}")
         if isinstance(messages[-1], HumanMessage):
+            # The model writes `agent` commands; they're stored and run as `task` calls.
             calls = [
-                {"name": "task", "args": {"description": "python"}, "id": "call_py"},
+                {"name": "run", "args": {"command": "agent python"}, "id": "call_py"},
                 {
-                    "name": "task",
-                    "args": {"description": "node", "subagent_type": "research"},
+                    "name": "run",
+                    "args": {"command": "agent --type research <<'EOF'\nnode\nEOF"},
                     "id": "call_node",
                 },
             ]

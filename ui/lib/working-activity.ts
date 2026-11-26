@@ -1,5 +1,7 @@
 /** Labels for what a run is doing, read from the newest assistant message. */
 
+import { describeCall, type Call, type Catalog } from "@/lib/commands";
+
 const AGENT_NAMES: Record<string, string> = { web: "web research", resume: "resume", richard: "about-Richard" };
 
 export type Part = {
@@ -11,60 +13,38 @@ export type Part = {
   messages?: readonly { content: readonly Part[] }[];
 };
 
-const WORKFLOWS: Record<string, string> = {
-  "research.quick": "Researching",
-  "research.deep": "Starting a research report",
-  "papers.search": "Searching arXiv",
-  "papers.read": "Reading the paper",
-  "papers.podcast": "Starting a podcast episode",
-  "github.repo.list": "Listing repositories",
-  "github.repo.view": "Reading a README",
-  "github.commits": "Reading commits",
-  "github.file": "Reading a file",
-  "github.search.code": "Searching code",
-  // Names used before the gh-style rename, for older chats.
-  "github.repos": "Listing repositories",
-  "github.readme": "Reading a README",
-  "github.search_code": "Searching code",
-};
-
-/** The workflow id of a `run_workflow` call: the command's first word, or `workflow` in older chats. */
-export function workflowOf(args: Record<string, unknown> = {}): string {
-  if (typeof args.command === "string") return args.command.trim().split(/\s+/, 1)[0] ?? "";
-  return typeof args.workflow === "string" ? args.workflow : "";
-}
-
-function toolLabel(name: string, args: Record<string, unknown> = {}): string {
+function toolLabel(name: string): string {
   const n = name.toLowerCase();
-  if (n === "run_workflow" && WORKFLOWS[workflowOf(args)]) return WORKFLOWS[workflowOf(args)];
-  if (n === "web_search" || n === "web_vector_search") return "Searching the web";
-  if (n === "fetch_page") return "Reading a page";
-  if (n === "search_richard") return "Searching Richard's documents";
-  if (n === "read_skill" || n === "list_skills") return "Reading a skill";
-  if (n === "run_workflow") return "Running a workflow";
+  if (n === "web_vector_search") return "Searching the web";
   if (n === "resume_search") return "Searching the resume";
   if (n === "projects_search") return "Searching projects";
   if (n.includes("search")) return "Searching";
   return `Running ${name.replace(/[_-]/g, " ")}`;
 }
 
+/** What a command is doing: its activity in the catalog, else its skill and command words. */
+function commandLabel(call: Call): string {
+  if (call.workflow?.ui.activity) return call.workflow.ui.activity;
+  const words = call.words.filter((w) => !w.startsWith("-")).slice(0, 2).join(" ");
+  return words ? `Running ${words}` : "Running a command";
+}
+
 /** What the run is doing now, from its newest unfinished tool call (sub-agents included), or null. */
-export function activityOf(content: readonly Part[]): string | null {
+export function activityOf(content: readonly Part[], catalog?: Catalog): string | null {
   for (let i = content.length - 1; i >= 0; i--) {
     const part = content[i];
     if (part.type !== "tool-call" || part.result !== undefined || !part.toolName) continue;
-    if (part.toolName === "task") {
+    const call = describeCall(part.toolName, part.args, catalog);
+    if (call?.agent) {
       const nested = part.messages?.at(-1)?.content;
-      const inner = nested ? activityOf(nested) : null;
+      const inner = nested ? activityOf(nested, catalog) : null;
       if (inner) return inner;
-      const args = part.args ?? {};
-      const type =
-        typeof args.subagent_type === "string" ? args.subagent_type : typeof args.focus === "string" ? args.focus : "";
+      const { type, brief } = call.agent;
       // The type arrives with the streamed arguments, a moment after the call itself.
-      if (!type) return typeof args.description === "string" ? "Asking a sub-agent" : "Starting a sub-agent";
-      return `Asking the ${AGENT_NAMES[type] ?? type} agent`;
+      if (!type) return brief ? "Asking a sub-agent" : "Starting a sub-agent";
+      return type === "general" ? "Asking a sub-agent" : `Asking the ${AGENT_NAMES[type] ?? type} agent`;
     }
-    return toolLabel(part.toolName, part.args);
+    return call ? commandLabel(call) : toolLabel(part.toolName);
   }
   return null;
 }

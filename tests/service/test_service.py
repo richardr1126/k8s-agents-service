@@ -208,3 +208,12 @@ def test_info(test_client, mock_settings) -> None:
 
     assert output.default_model == OpenAIModelName.GPT_4O_MINI
     assert output.models == [OpenAIModelName.GPT_4O, OpenAIModelName.GPT_4O_MINI]
+
+
+def test_skills_catalog(test_client, mock_settings) -> None:
+    mock_settings.AUTH_SECRET = None
+    response = test_client.get("/skills")
+    assert response.status_code == 200
+    skills = {s["name"]: s for s in response.json()}
+    assert skills["agent"]["workflows"][0]["ui"]["card"] == "subagent"
+    assert "web search" in [w["id"] for w in skills["web"]["workflows"]]

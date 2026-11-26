@@ -6,6 +6,7 @@ import { SparkleIcon } from "lucide-react";
 import { useEffect, useState, type FC } from "react";
 import { useRecentChange } from "@/lib/use-recent-change";
 import { activityOf, type Part } from "@/lib/working-activity";
+import { useCatalog } from "@/components/command-view";
 
 /** Filler while nothing more specific is known. The first one always leads. */
 const WORDS = ["Thinking", "Pondering", "Cooking", "Brewing", "Tinkering", "Mulling", "Noodling", "Percolating"];
@@ -44,7 +45,8 @@ function formatElapsed(s: number) {
  */
 export const WorkingIndicator: FC = () => {
   const written = useAuiState((s) => writtenLength(s.message.content as readonly Part[]));
-  const activity = useAuiState((s) => activityOf(s.message.content as readonly Part[]));
+  const catalog = useCatalog();
+  const activity = useAuiState((s) => activityOf(s.message.content as readonly Part[], catalog));
   const waiting = useAuiState((s) => s.message.status?.type === "requires-action");
   const writing = useRecentChange(written, true);
   const elapsed = useElapsedSeconds();

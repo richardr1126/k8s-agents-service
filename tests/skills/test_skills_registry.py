@@ -14,7 +14,7 @@ def test_repo_skills_load_and_import() -> None:
     registry = get_registry()
     registry.check_impls()
     assert "github" in registry.skills
-    assert "github.repo.view" in registry.workflows
+    assert "github repo view" in registry.workflows
 
 
 def test_focuses_reference_real_skills() -> None:
@@ -48,7 +48,7 @@ def test_workflow_args_are_validated(tmp_path: Path) -> None:
         "name: demo\ndescription: A demo.\nworkflows:\n  go:\n    description: Go.\n    impl: os:getcwd\n"
         "    args:\n      n: {type: integer, required: true, ge: 1}\n      mode: {type: string, default: a, enum: [a, b]}",
     )
-    wf = SkillRegistry(tmp_path).workflows["demo.go"]
+    wf = SkillRegistry(tmp_path).workflows["demo go"]
     assert wf.validate({"n": 2}) == {"n": 2, "mode": "a"}
     for bad in ({}, {"n": 0}, {"n": 1, "mode": "c"}, {"n": 1, "extra": True}):
         with pytest.raises(ValueError):
@@ -73,9 +73,9 @@ def demo(tmp_path: Path) -> SkillRegistry:
 
 def test_commands_parse_with_types_defaults_and_quotes(demo: SkillRegistry) -> None:
     wf, args = demo.parse_command(
-        "demo.go --query 'speculative decoding' --max-results 3 --mode b --loud --tags x y"
+        "demo go --query 'speculative decoding' --max-results 3 --mode b --loud --tags x y"
     )
-    assert wf.id == "demo.go"
+    assert wf.id == "demo go"
     assert args == {
         "query": "speculative decoding",
         "max_results": 3,
@@ -84,37 +84,39 @@ def test_commands_parse_with_types_defaults_and_quotes(demo: SkillRegistry) -> N
         "tags": ["x", "y"],
     }
     # Underscored flags work too, and unset options take their defaults.
-    _, args = demo.parse_command("demo.go --query=hi --max_results 2")
+    _, args = demo.parse_command("demo go --query=hi --max_results 2")
     assert args == {"query": "hi", "max_results": 2, "mode": "a", "loud": False, "tags": None}
 
 
 @pytest.mark.parametrize(
     ("command", "says"),
     [
-        ("demo.go", "the following arguments are required: --query"),
-        ("demo.go --query x --max-results lots", "invalid int value: 'lots'"),
-        ("demo.go --query x --max-results 50", "less than or equal to 10"),
-        ("demo.go --query x --mode c", "invalid choice: 'c'"),
-        ("demo.go --query x --colour red", "unrecognized arguments: --colour red"),
-        ("demo.goo --query x", "Did you mean `demo.go`?"),
-        ("demo.go --query 'unclosed", "check its quotes"),
+        ("demo go", "the following arguments are required: --query"),
+        ("demo go --query x --max-results lots", "invalid int value: 'lots'"),
+        ("demo go --query x --max-results 50", "less than or equal to 10"),
+        ("demo go --query x --mode c", "invalid choice: 'c'"),
+        ("demo go --query x --colour red", "unrecognized arguments: --colour red"),
+        ("demo goo --query x", "Did you mean `demo go`?"),
+        ("demo go --query 'unclosed", "check its quotes"),
         ("", "The command is empty"),
+        ("demo", "# Skill: demo"),
+        ("nope go", "No skill named `nope`"),
     ],
 )
 def test_bad_commands_say_what_to_fix(demo: SkillRegistry, command: str, says: str) -> None:
     with pytest.raises(CommandError) as e:
         demo.parse_command(command)
     assert says in str(e.value)
-    if command.split(" ", 1)[0] == "demo.go" and "quotes" not in says:
-        assert "usage: demo.go" in str(e.value)  # with the usage to retry from
+    if command.split(" ", 1)[0] == "demo go" and "quotes" not in says:
+        assert "usage: demo go" in str(e.value)  # with the usage to retry from
 
 
 def test_help_shows_the_usage(demo: SkillRegistry) -> None:
     with pytest.raises(CommandError) as e:
-        demo.parse_command("demo.go --help")
+        demo.parse_command("demo go --help")
     text = str(e.value)
     assert (
-        "`demo.go --query QUERY [--max-results N] [--mode {a,b}] [--[no-]loud] [--tags TAGS ...]`"
+        "`demo go --query QUERY [--max-results N] [--mode {a,b}] [--[no-]loud] [--tags TAGS ...]`"
         in text
     )
     assert "`--max-results`" in text
@@ -140,15 +142,15 @@ def gh(tmp_path: Path) -> SkillRegistry:
 @pytest.mark.parametrize(
     ("command", "expected"),
     [
-        ("gh.file openreader", {"repo": "openreader", "path": "", "limit": 5}),
-        ("gh.file -L 3 openreader src/app", {"repo": "openreader", "path": "src/app", "limit": 3}),
-        ("gh.file openreader src -L 3", {"repo": "openreader", "path": "src", "limit": 3}),
-        ("gh.file --repo openreader", {"repo": "openreader", "path": "", "limit": 5}),
+        ("gh file openreader", {"repo": "openreader", "path": "", "limit": 5}),
+        ("gh file -L 3 openreader src/app", {"repo": "openreader", "path": "src/app", "limit": 3}),
+        ("gh file openreader src -L 3", {"repo": "openreader", "path": "src", "limit": 3}),
+        ("gh file --repo openreader", {"repo": "openreader", "path": "", "limit": 5}),
         (
-            "gh.ask what is the state of rag --deep",
+            "gh ask what is the state of rag --deep",
             {"question": "what is the state of rag", "deep": True},
         ),
-        ("gh.ask 'a quoted question'", {"question": "a quoted question", "deep": False}),
+        ("gh ask 'a quoted question'", {"question": "a quoted question", "deep": False}),
     ],
 )
 def test_positional_and_short_options(gh: SkillRegistry, command: str, expected: dict) -> None:
@@ -158,25 +160,25 @@ def test_positional_and_short_options(gh: SkillRegistry, command: str, expected:
 @pytest.mark.parametrize(
     ("command", "says"),
     [
-        ("gh.file", "missing REPO (or --repo)"),
-        ("gh.file a --repo b", "REPO given twice"),
-        ("gh.file a b c", "unrecognized arguments: c"),
-        ("gh.file a -L 50", "less than or equal to 10"),
+        ("gh file", "missing REPO (or --repo)"),
+        ("gh file a --repo b", "REPO given twice"),
+        ("gh file a b c", "unrecognized arguments: c"),
+        ("gh file a -L 50", "less than or equal to 10"),
     ],
 )
 def test_positional_mistakes_say_what_to_fix(gh: SkillRegistry, command: str, says: str) -> None:
     with pytest.raises(CommandError) as e:
         gh.parse_command(command)
     assert says in str(e.value)
-    assert "usage: gh.file REPO [PATH] [-L N]" in str(e.value)
+    assert "usage: gh file REPO [PATH] [-L N]" in str(e.value)
 
 
 def test_usage_shows_positionals_and_short_flags(gh: SkillRegistry) -> None:
-    usage = gh.workflows["gh.file"].usage()
-    assert "`gh.file REPO [PATH] [-L N]`" in usage
+    usage = gh.workflows["gh file"].usage()
+    assert "`gh file REPO [PATH] [-L N]`" in usage
     assert "- `REPO`, `--repo` (string, required)" in usage
     assert "- `-L`, `--limit` (integer, default 5)" in usage
-    assert "`gh.ask QUESTION ... [--[no-]deep]`" in gh.workflows["gh.ask"].usage()
+    assert "`gh ask QUESTION ... [--[no-]deep]`" in gh.workflows["gh ask"].usage()
 
 
 @pytest.mark.parametrize(
@@ -203,11 +205,11 @@ def test_bad_command_line_specs_are_refused(tmp_path: Path, args: str) -> None:
 
 def test_real_workflows_take_gh_style_commands() -> None:
     registry = get_registry()
-    assert registry.parse_command("github.commits openreader -L 3")[1] == {
+    assert registry.parse_command("github commits openreader -L 3")[1] == {
         "repo": "openreader",
         "limit": 3,
     }
-    _, args = registry.parse_command("papers.podcast speculative decoding -n 5 --no-web")
+    _, args = registry.parse_command("papers podcast speculative decoding -n 5 --no-web")
     assert args["subject"] == "speculative decoding" and args["papers"] == 5 and not args["web"]
 
 

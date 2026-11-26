@@ -1,10 +1,10 @@
 """Background jobs for the assistant's tool calls.
 
-Every tool has a background policy: `never`, `optional` or `always`. Tools that
-aren't `never` take a `background` argument. One ToolNode wrapper decides how a
-call runs, the same way for the main assistant and its sub-agents: as a job when
-the policy is `always` or the call asks for it, else inline. Inline workflows that
-run long carry on as jobs.
+Every workflow has a background policy: `never`, `optional` or `always`, and a
+command asks for the background with `--bg` (a sub-agent's `task` call with
+`background`). One ToolNode wrapper decides how a call runs, the same way for the
+main assistant and its sub-agents: as a job when the policy is `always` or the call
+asks for it, else inline. Inline workflows that run long carry on as jobs.
 
 A job's end goes to the agent that started it, as a `<job-event>` message. For the
 main assistant, the backend runs it on the chat with the event (see follow_ups).
@@ -25,8 +25,10 @@ from langchain_core.tools import BaseTool
 from langgraph.prebuilt.tool_node import ToolCallRequest
 
 import jobs
+from agents.assistant.commands import result_parts
 from core import settings
 from skills import Background, CommandError, call_workflow, get_registry
+from skills.registry import hidden_skills
 
 JOB_MARKER = "Started background job"
 # In a finished background sub-agent's job data: its thread id; its run is in a job file.
@@ -46,19 +48,22 @@ class Plan:
     args: dict[str, Any]  # recorded with the job
     run: jobs.Run  # runs the call detached from the chat run, with a job's config
     promote: bool = False  # inline runs past ASSISTANT_INLINE_SECONDS become jobs
+    wants: bool = False  # the call asked for the background
 
 
 # A planner returns a Plan, an error for the model, or None to let the tool handle the call.
 Planner = Callable[[ToolCallRequest], "Plan | str | None | Awaitable[Plan | str | None]"]
 
 
-def _plan_workflow(request: ToolCallRequest) -> Plan | str | None:
+def _plan_command(request: ToolCallRequest) -> Plan | str | None:
     try:
-        wf, validated = get_registry().parse_command(
-            str(request.tool_call["args"].get("command") or "")
+        parsed = get_registry().parse(
+            str(request.tool_call["args"].get("command") or ""),
+            hidden=hidden_skills(request.runtime.config),
         )
     except CommandError:
-        return None  # the tool explains the problem
+        return None  # the tool explains the problem, or shows the help asked for
+    wf, validated = parsed.workflow, parsed.args
     fn = wf.resolve()
     return Plan(
         policy=wf.background,
@@ -66,6 +71,7 @@ def _plan_workflow(request: ToolCallRequest) -> Plan | str | None:
         args=validated,
         run=lambda config: call_workflow(fn, validated, config),
         promote=True,
+        wants=parsed.background,
     )
 
 
@@ -80,7 +86,7 @@ async def _plan_task(request: ToolCallRequest) -> Plan | str:
     )
 
 
-PLANNERS: dict[str, Planner] = {"run_workflow": _plan_workflow, "task": _plan_task}
+PLANNERS: dict[str, Planner] = {"run": _plan_command, "task": _plan_task}
 
 
 def started(job: jobs.Job, *, promoted: bool = False) -> str:
@@ -124,7 +130,12 @@ class _Prepared(BaseTool):
 
 
 async def _reply(
-    request: ToolCallRequest, execute: Execute, content: str, *, error: bool = False
+    request: ToolCallRequest,
+    execute: Execute,
+    content: str,
+    *,
+    error: bool = False,
+    artifact: Any = None,
 ) -> Any:
     call = request.tool_call
     message = ToolMessage(
@@ -132,6 +143,7 @@ async def _reply(
         tool_call_id=cast(str, call["id"]),
         name=call["name"],
         status="error" if error else "success",
+        artifact=artifact,
     )
     return await execute(request.override(tool=_Prepared(name=call["name"], reply=message)))
 
@@ -149,12 +161,12 @@ def background_jobs(planners: dict[str, Planner] = PLANNERS) -> Callable[..., Aw
         if isinstance(plan, str):
             return await _reply(request, execute, plan, error=True)
         config = request.runtime.config
-        wants = bool(request.tool_call["args"].get("background"))
+        wants = plan.wants or bool(request.tool_call["args"].get("background"))
         if wants and plan.policy == "never":
             return await _reply(
                 request,
                 execute,
-                f"`{plan.label}` can't run in the background; call it without `background`.",
+                f"`{plan.label}` can't run in the background; run it without `--bg`.",
                 error=True,
             )
         if plan.policy == "always" or wants:
@@ -172,7 +184,9 @@ def background_jobs(planners: dict[str, Planner] = PLANNERS) -> Callable[..., Aw
                 return await _reply(request, execute, f"`{plan.label}` failed: {e}", error=True)
             if job is not None:
                 return await _reply(request, execute, started(job, promoted=True))
-            return await _reply(request, execute, jobs.as_text(result))
+            text, data = result_parts(result)
+            artifact = {"workflow": plan.label, "data": data} if data is not None else None
+            return await _reply(request, execute, text, artifact=artifact)
         return await execute(request)
 
     return wrapper
@@ -199,7 +213,9 @@ def event_message(job: jobs.Job) -> HumanMessage:
         outcome = "finished. The user sees its result in the card above. Its result:"
         body = job.result or "(no text result)"
         if len(body) > _EVENT_RESULT_CHARS:
-            body = body[:_EVENT_RESULT_CHARS] + "\n[... cut; `check_job` shows all of it]"
+            body = (
+                body[:_EVENT_RESULT_CHARS] + f"\n[... cut; `jobs check {job.id}` shows all of it]"
+            )
     else:
         outcome = "failed:"
         body = job.error or "Unknown error."

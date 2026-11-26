@@ -1,17 +1,17 @@
 "use client";
 
-import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangleIcon, CheckCircle2Icon, ChevronDownIcon, HourglassIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { useChat } from "@/components/custom-runtime-provider";
 import { MarkdownString } from "@/components/assistant-ui/markdown-string";
 import { isPodcast, PodcastView } from "@/components/podcast-view";
-import { ToolRow, toolSpacing } from "@/components/assistant-ui/tool-fallback";
+import { ToolRow, toolSpacing, type ToolProps } from "@/components/assistant-ui/tool-fallback";
+import { commandView, useCall } from "@/components/command-view";
 import { Fold } from "@/components/ui/fold";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { workflowOf } from "@/lib/working-activity";
+import { callTitle } from "@/lib/commands";
 
 export type Job = {
   id: string;
@@ -146,19 +146,24 @@ export function JobCard({ id, title }: { id: string; title: string }) {
 }
 
 const TITLES: Record<string, string> = {
-  "research.deep": "Research report",
-  "papers.podcast": "Podcast episode",
+  "research deep": "Research report",
+  "papers podcast": "Podcast episode",
 };
 
-/** `run_workflow`: a job card when the workflow started a background job, else a plain tool row. */
-export const WorkflowTool: ToolCallMessagePartComponent<{ command?: string; workflow?: string }> = (props) => {
+/**
+ * A command (or an older tool call): a job card when it started a background job,
+ * else a row with its skill's icon and name. Tools that aren't commands get a plain row.
+ */
+export const CommandRow = (props: ToolProps) => {
+  const call = useCall(props.toolName, props.args);
   const id = jobIdOf(props.result);
-  if (!id) return <ToolRow {...props} />;
-  const workflow = workflowOf(props.args);
-  return (
-    <div data-tool className={cn(toolSpacing, "mb-2")}>
-      <JobCard id={id} title={TITLES[workflow] ?? workflow} />
-    </div>
-  );
+  if (call && id) {
+    const workflow = call.workflow?.id ?? call.words.slice(0, 2).join(" ");
+    return (
+      <div data-tool className={cn(toolSpacing, "mb-2")}>
+        <JobCard id={id} title={TITLES[workflow] ?? callTitle(call).label} />
+      </div>
+    );
+  }
+  return <ToolRow {...props} view={call ? commandView(call) : undefined} />;
 };
-

@@ -2,7 +2,7 @@
 
 Runs one assistant reply that should use sub-agents, follows its stream and reports:
 how long it took, the longest silence (keep-alive pings count as traffic), whether each
-sub-agent is tied to its `task` call and closed before the call's result, and how the
+sub-agent is tied to the `agent` command that started it and closed before the call's result, and how the
 run ended. With --rejoin it drops the stream partway and rejoins it from where it
 was, as the browser does, and checks nothing was lost or repeated. The probe's chat is
 deleted afterwards unless --keep is given.
@@ -83,7 +83,7 @@ def check(events: list[dict[str, Any]], follower: Follower) -> list[str]:
     for e in started:
         call = e.get("parentToolCallId")
         if not call:
-            problems.append(f"sub-agent {e.get('name')} isn't tied to a task call")
+            problems.append(f"sub-agent {e.get('name')} isn't tied to the call that started it")
             continue
         closed = next(
             (

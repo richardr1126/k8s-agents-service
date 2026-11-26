@@ -33,7 +33,9 @@ import { useDialogs } from "@/components/dialogs";
 import { InterruptBanner } from "@/components/interrupt-banner";
 import { ModelSelect } from "@/components/model-select";
 import { SubagentToolCard } from "@/components/subagent-tool-ui";
-import { JobCard, jobIdOf, WorkflowTool } from "@/components/job-card";
+import { CommandRow, JobCard, jobIdOf } from "@/components/job-card";
+import { commandView, useCall, useCatalog } from "@/components/command-view";
+import { describeCall } from "@/lib/commands";
 import { Alert } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -44,7 +46,7 @@ import { modesOf, splitMode } from "@/lib/modes";
 import { ConversationSkeleton } from "./loading-skeletons";
 import { MarkdownText } from "./markdown-text";
 import { ReasoningPart } from "./reasoning";
-import { getToolDisplayName, getToolIcon, toolSpacing, ToolRow } from "./tool-fallback";
+import { getToolDisplayName, getToolIcon, toolSpacing } from "./tool-fallback";
 import { WorkingIndicator } from "./working-indicator";
 
 const MAX_CHARACTERS = 560;
@@ -319,11 +321,10 @@ const MessageError: FC = () => (
   </MessagePrimitive.Error>
 );
 
-/** `task`: the sub-agent's card, or a job card when it was sent to run in the background. */
+/** A sub-agent (`agent ...`, stored as `task`): its card, or a job card when it runs in the background. */
 const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (props) => {
   const jobId = jobIdOf(props.result);
-  const { subagent_type, focus: oldFocus } = props.args as { subagent_type?: string; focus?: string };
-  const focus = subagent_type ?? oldFocus;
+  const focus = props.args.subagent_type;
   return (
     <div data-tool className={cn(toolSpacing, "mb-2")}>
       {jobId ? (
@@ -333,6 +334,15 @@ const SubagentWrapper: FC<React.ComponentProps<typeof SubagentToolCard>> = (prop
       )}
     </div>
   );
+};
+
+/** Every tool call: sub-agents get their own card, commands and other tools a row. */
+const CommandTool: FC<React.ComponentProps<typeof CommandRow>> = (props) => {
+  const call = useCall(props.toolName, props.args);
+  if (!call?.agent) return <CommandRow {...props} />;
+  const { brief, type, thread } = call.agent;
+  const args = { description: brief, ...(type && { subagent_type: type }), ...(thread && { thread_id: thread }) };
+  return <SubagentWrapper {...(props as React.ComponentProps<typeof SubagentToolCard>)} args={args} />;
 };
 
 /** A background job's notice to the agent, stored as a user turn: `<job-event job=… tool=… status=…>`. */
@@ -350,6 +360,7 @@ const ParallelToolGroup: FC<
 > = ({ startIndex, endIndex, children }) => {
   const message = useAuiState((s) => s.message);
 
+  const catalog = useCatalog();
   const toolParts = useMemo(() => {
     return message.content
       .slice(startIndex, endIndex + 1)
@@ -359,9 +370,9 @@ const ParallelToolGroup: FC<
   const shouldGroup = useMemo(() => {
     if (toolParts.length <= 1) return false;
     return toolParts.every(
-      (part) => part.toolName !== "task" && part.toolName !== "task_update",
+      (part) => part.toolName !== "task_update" && !describeCall(part.toolName, part.args, catalog)?.agent,
     );
-  }, [toolParts]);
+  }, [catalog, toolParts]);
 
   if (!shouldGroup) {
     return <>{children}</>;
@@ -369,10 +380,15 @@ const ParallelToolGroup: FC<
 
   const completedCount = toolParts.filter((part) => part.result !== undefined).length;
   const isRunning = completedCount < toolParts.length;
-  const groupTools = toolParts.map((part, index) => ({
-    key: `${part.toolCallId || part.toolName}-${index}`,
-    name: part.toolName,
-  }));
+  const groupTools = toolParts.map((part, index) => {
+    const call = describeCall(part.toolName, part.args, catalog);
+    const view = call ? commandView(call) : null;
+    return {
+      key: `${part.toolCallId || part.toolName}-${index}`,
+      icon: view?.icon ?? getToolIcon(part.toolName),
+      label: view?.label ?? getToolDisplayName(part.toolName),
+    };
+  });
 
   return (
     <details data-tool className={cn("group/tools rounded-md border border-border/60 text-sm open:border-border", toolSpacing)}>
@@ -380,8 +396,8 @@ const ParallelToolGroup: FC<
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5">
           {groupTools.map((tool) => (
             <span key={tool.key} className="inline-flex items-center gap-1.5 font-medium">
-              {getToolIcon(tool.name)}
-              {getToolDisplayName(tool.name)}
+              {tool.icon}
+              {tool.label}
             </span>
           ))}
         </div>
@@ -421,7 +437,7 @@ const AssistantMessage: FC = () => {
             components={{
               Text: MarkdownText,
               Reasoning: ReasoningPart,
-              tools: { by_name: { task: SubagentWrapper, run_workflow: WorkflowTool }, Fallback: ToolRow },
+              tools: { Fallback: CommandTool },
               ToolGroup: ParallelToolGroup,
             }}
           />

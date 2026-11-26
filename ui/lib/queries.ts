@@ -1,5 +1,6 @@
 import { QueryClient, queryOptions } from "@tanstack/react-query";
 import { historyToThreadMessages } from "@/lib/agui-history";
+import type { Catalog } from "@/lib/commands";
 import type { WindowUsage } from "@/lib/run-limits";
 import type { History, ServiceInfo, ThreadRow } from "@/lib/types";
 
@@ -33,6 +34,14 @@ export const serviceInfoQuery = queryOptions({
   queryFn: ({ signal }) => getJson<ServiceInfo>("/api/service-info", "the agent service", signal),
   retry: 2,
   staleTime: 5 * 60_000,
+});
+
+/** The skill catalog, which says how each command's card looks. */
+export const skillsQuery = queryOptions({
+  queryKey: ["skills"],
+  queryFn: ({ signal }) => getJson<Catalog>("/api/skills", "the skills", signal),
+  retry: 2,
+  staleTime: 10 * 60_000,
 });
 
 /** The user's conversations, newest first. */

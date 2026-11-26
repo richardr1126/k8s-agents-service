@@ -1,6 +1,7 @@
 import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { CalculatorIcon, ChevronDownIcon, CloudIcon, SearchIcon, WrenchIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, type ComponentProps } from "react";
+import type { ToolView } from "@/components/command-view";
 import { Fold } from "@/components/ui/fold";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -58,14 +59,19 @@ const extractDetail = (argsText?: string): string | null => {
   return null;
 };
 
+/** A tool call's props, with how to show it when it's a command. */
+export type ToolProps = ComponentProps<ToolCallMessagePartComponent> & { view?: ToolView };
+
 const formatResult = (result: unknown) => (typeof result === "string" ? result : JSON.stringify(result, null, 2));
 
 /** One tool call as a slim outlined row; opens to show its arguments and result. */
-export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText, result }) => {
+export const ToolFallback = ({ toolName, argsText: rawArgs, result, view }: ToolProps) => {
   const [open, setOpen] = useState(false);
   const isLoading = result === undefined;
+  const argsText = view?.argsText ?? rawArgs;
   const hasDetails = Boolean(argsText || !isLoading);
-  const searchQuery = isSearchTool(toolName) ? extractSearchQuery(argsText) : extractDetail(argsText);
+  const searchQuery =
+    view?.detail ?? (isSearchTool(toolName) ? extractSearchQuery(argsText) : extractDetail(argsText));
 
   return (
     <div
@@ -83,8 +89,8 @@ export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText,
         aria-expanded={open}
         className="flex w-full min-w-0 items-center gap-2 px-2 py-1 text-left transition-colors enabled:hover:bg-muted/40"
       >
-        {getToolIcon(toolName)}
-        <span className="shrink-0 font-medium">{getToolDisplayName(toolName)}</span>
+        {view?.icon ?? getToolIcon(toolName)}
+        <span className="shrink-0 font-medium">{view?.label ?? getToolDisplayName(toolName)}</span>
         {searchQuery && <span className="min-w-0 truncate text-xs text-muted-foreground">{searchQuery}</span>}
         <span className="ml-auto flex shrink-0 items-center pl-1 text-muted-foreground">
           {isLoading ? (
@@ -123,7 +129,7 @@ export const ToolFallback: ToolCallMessagePartComponent = ({ toolName, argsText,
 export const toolSpacing = "mb-1.5 [&:not(:has(+[data-tool]))]:mb-4";
 
 /** A tool row as a message part: joined to neighbouring rows, spaced from anything else. */
-export const ToolRow: ToolCallMessagePartComponent = (props) => (
+export const ToolRow = (props: ToolProps) => (
   <div
     data-tool
     data-tool-row

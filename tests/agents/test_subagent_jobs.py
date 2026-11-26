@@ -42,7 +42,7 @@ class World:
 
     def __init__(self) -> None:
         self.gate = asyncio.Event()
-        self.task_args: dict[str, Any] = {"description": "dig"}
+        self.agent_command = "agent <<'EOF'\ndig\nEOF"
         self.workflow_policy = "always"
         self.workflow_runs = 0
 
@@ -53,10 +53,10 @@ class World:
             if isinstance(last, HumanMessage) and text_of(last).startswith("<job-event"):
                 return AIMessage(content="sub got the job's result")
             if isinstance(last, HumanMessage):
-                return call("run_workflow", command="slow")
+                return call("run", command="slow")
             return AIMessage(content="sub started the job")
         if isinstance(last, HumanMessage) and not text_of(last).startswith("<job-event"):
-            return call("task", **self.task_args)
+            return call("run", command=self.agent_command)
         if isinstance(last, ToolMessage):
             return AIMessage(content=f"main heard: {text_of(last)}")
         return AIMessage(content="main heard a job event")
@@ -81,7 +81,7 @@ def world(monkeypatch: pytest.MonkeyPatch) -> World:
     w = World()
     model = ScriptedChatModel(responder=w.respond)
     monkeypatch.setattr(assistant, "get_model", lambda name: model)
-    monkeypatch.setitem(bg.PLANNERS, "run_workflow", w.planner)
+    monkeypatch.setitem(bg.PLANNERS, "run", w.planner)
     main = ConfigurableModelGraph(lambda m: assistant._build(m, subagent=False))
     main.checkpointer = InMemorySaver()
     monkeypatch.setattr(
@@ -144,7 +144,7 @@ async def test_a_subagents_job_continues_it_and_reaches_the_main_assistant(world
 
 
 async def test_a_background_subagent_lands_as_a_task_result(world: World) -> None:
-    world.task_args = {"description": "dig", "background": True}
+    world.agent_command = "agent --bg <<'EOF'\ndig\nEOF"
     world.workflow_policy = "optional"
     world.gate.set()  # its workflow finishes inline, well inside the minute
     await world.main.ainvoke({"messages": [HumanMessage(content="go")]}, CONFIG)  # type: ignore[attr-defined]
@@ -162,7 +162,7 @@ async def test_a_background_subagent_lands_as_a_task_result(world: World) -> Non
 async def test_a_background_subagent_resumes_after_a_restart(
     world: World, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    world.task_args = {"description": "dig", "background": True}
+    world.agent_command = "agent --bg <<'EOF'\ndig\nEOF"
     world.workflow_policy = "optional"  # inline in the sub-agent, held at the gate
     await world.main.ainvoke({"messages": [HumanMessage(content="go")]}, CONFIG)  # type: ignore[attr-defined]
     for _ in range(50):

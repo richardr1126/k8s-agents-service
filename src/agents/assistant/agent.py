@@ -1,9 +1,11 @@
-"""The assistant: one agent with a small tool set, on-demand skills and copies of itself as sub-agents.
+"""The assistant: one agent with one tool, `run`, that runs skills' commands, and copies
+of itself as sub-agents.
 
-The chat's focus (picked by the user) comes in as `configurable.focus`. A
-`task` call runs a copy of the assistant, optionally with another focus, in
-its own context; copies can't start further copies. Background jobs work the
-same for both (see background and subagent_jobs).
+The chat's focus (picked by the user) comes in as `configurable.focus`. An
+`agent ...` command runs a copy of the assistant, optionally with another focus,
+in its own context; copies can't start further copies. It is stored and run as
+a `task` call (see commands). Background jobs work the same for both (see
+background and subagent_jobs).
 """
 
 from __future__ import annotations
@@ -29,17 +31,9 @@ from langgraph.prebuilt import InjectedState, ToolNode
 
 import jobs
 from agents.assistant import background as bg
+from agents.assistant.commands import as_stored, for_model, run
 from agents.assistant.focus import get_focuses
 from agents.assistant.prompt import build_prompt
-from agents.assistant.tools import (
-    check_job,
-    fetch_page,
-    list_skills,
-    read_skill,
-    run_workflow,
-    search_richard,
-    web_search,
-)
 from agents.compaction import CompactionManager, prompt_with_compaction_summary
 from agents.configurable_model_graph import ConfigurableModelGraph
 from agents.delegation import (
@@ -255,15 +249,10 @@ async def task(
     )
 
 
-BASE_TOOLS: list[BaseTool] = [
-    web_search,
-    fetch_page,
-    search_richard,
-    list_skills,
-    read_skill,
-    run_workflow,
-]
-MAIN_TOOLS: list[BaseTool] = [*BASE_TOOLS, task, check_job]
+# The model only ever calls `run`. `task` runs the `agent` commands it is turned into.
+MODEL_TOOLS: list[BaseTool] = [run]
+SUBAGENT_TOOLS: list[BaseTool] = [run]
+MAIN_TOOLS: list[BaseTool] = [run, task]
 
 _COMPACTION_MANAGER = CompactionManager()
 
@@ -277,6 +266,7 @@ def _model_runnable(
         messages = normalize_messages_for_replay(list(state["messages"]))
         if not subagent:
             messages = tag_threads(messages)
+        messages = for_model(messages)
         prompt = build_prompt(
             focus=_configurable(config).get("focus"),
             subagent=subagent,
@@ -297,9 +287,9 @@ def _model_runnable(
 
 def _build(model_name: AllModelEnum, *, subagent: bool):
     model = get_model(model_name)
-    tools = BASE_TOOLS if subagent else MAIN_TOOLS
-    with_tools = _model_runnable(model, tools, subagent=subagent, bind_tools=True)
-    without_tools = _model_runnable(model, tools, subagent=subagent, bind_tools=False)
+    tools = SUBAGENT_TOOLS if subagent else MAIN_TOOLS
+    with_tools = _model_runnable(model, MODEL_TOOLS, subagent=subagent, bind_tools=True)
+    without_tools = _model_runnable(model, MODEL_TOOLS, subagent=subagent, bind_tools=False)
 
     async def acall_model(state: AssistantState, config: RunnableConfig) -> dict:
         messages = list(state["messages"])
@@ -315,6 +305,7 @@ def _build(model_name: AllModelEnum, *, subagent: bool):
             model_runnable_without_tools=without_tools,
             compaction_manager=_COMPACTION_MANAGER,
         )
+        as_stored(update.get("messages", []), sub_agents=not subagent)
         _type_tasks(update.get("messages", []))
         if ended:
             await jobs.store().mark_notified([job.id for job in ended])
